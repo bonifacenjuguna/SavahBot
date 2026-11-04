@@ -82,6 +82,13 @@ What is documented, and what is not. YouTube's documentation says a channel **ow
 
 If no target channel is set, SavahBot stops with a configuration error instead of guessing. If you own the channel, press **Moderate my own channel** on the Setup page, or set `YOUTUBE_TARGET_CHANNEL_ID` to your own channel ID.
 
+**Safety checks you can rely on.**
+- Signing in checks who signed in **before** the new login is saved. If `YOUTUBE_MODERATOR_ACCOUNT` is set and the account is wrong, or Google cannot say who it is, the sign-in is rejected and your previous connection stays exactly as it was. A sign-in that comes back without a refresh token is refused too, so two Google accounts are never mixed.
+- With `YOUTUBE_MODERATOR_ACCOUNT` set, SavahBot will not read chat or take any action until Google has confirmed the signed-in account.
+- If YouTube refuses an action because the account lacks permission, a delete batch stops at once and SavahBot does not ask again for `YOUTUBE_PERMISSION_RETRY_SECONDS` (default 300, five minutes).
+- When a stream ends (`chatEndedEvent`), monitoring stops straight away. Repeated errors back off from 30 seconds up to five minutes.
+- **Setup > Verify access** shows what the signed-in account has really been allowed to do. Reading is tested for real. Deleting and banning cannot be tested (YouTube has no dry run), so they show *Unverified* until a real action has been answered.
+
 **Upgrading an existing installation.** Nothing is lost: your saved Google login, settings and data are kept. After upgrading, set `YOUTUBE_TARGET_CHANNEL_ID` (or press **Moderate my own channel** once). The old `YOUTUBE_CHANNEL_ID` still works as the target if you had set it, but is deprecated. `YOUTUBE_VIDEO_ID` works as before, and is now also checked against the target channel.
 
 **Quota.** The default YouTube quota is 10,000 units a day. Reading chat is the expensive part, so the bot spreads a configurable share of the quota over the expected stream length (`YT_READ_BUDGET_FRACTION`, `YOUTUBE_EXPECTED_STREAM_HOURS`) and keeps a reserve for deletes, timeouts and bans. The sidebar shows how much is used. Sending or deleting a chat message costs 20 units and a ban or timeout 200 (all adjustable), and the bot checks it can afford a whole action before starting one.
@@ -122,7 +129,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env              # optional; everything has a default
 uvicorn app.main:create_app --factory --reload --port 8000
-python -m pytest                  # 158 tests
+python -m pytest                  # 190 tests
 
 cd ../frontend
 npm install
@@ -149,6 +156,6 @@ frontend/src/            main.ts (shell, login, router), pages/, events.ts (live
 
 ## What was and was not verified
 
-Verified here: 158 automated tests (moderation, commands, data layer, Telegram, YouTube including the moderator-vs-target scenarios, API) pass; the API was exercised over real HTTP; the dashboard was driven in a real browser (sign-in, live feed, approvals, command preview, mobile width, type-check).
+Verified here: 190 automated tests (moderation, commands, data layer, Telegram, YouTube including the moderator-vs-target scenarios, API) pass; the API was exercised over real HTTP; the dashboard was driven in a real browser (sign-in, live feed, approvals, command preview, mobile width, type-check).
 
 Not verified, because this build environment could not reach them: the PostgreSQL adapter against a real server (use `scripts/check_db.py`), the real Google and Telegram APIs (the integrations are tested against local fakes written from the API documentation), a production `vite build` (package installs were blocked, so the dashboard was type-checked with `tsc` and run as compiled modules), and the Railway and Vercel deploys themselves. Expect to fix small things on the first real run; the Setup page and the logs are designed to make them easy to find.

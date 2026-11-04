@@ -8,6 +8,8 @@ All costs are configurable because Google changes them; verify them in the YouTu
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import re
 import secrets
@@ -134,18 +136,34 @@ class GoogleAuth:
             "client_id": self.cfg.get("google_client_id"), "redirect_uri": self.redirect_uri(), "response_type": "code",
             "scope": self.cfg.get("google_oauth_scope"), "access_type": "offline", "prompt": "consent", "state": state})
 
-    async def exchange_code(self, code: str) -> None:
+    async def begin_sign_in(self, code: str) -> dict[str, Any]:
+        """Trades the Google sign-in code for tokens WITHOUT saving anything, so the caller can check which account signed in
+        before the new login replaces the old one. Refuses a sign-in that has no refresh token: pairing the new account's
+        access token with an older refresh token would mix two accounts."""
         status, data = await request_json("POST", self.cfg.get("google_oauth_token_url"), form={
             "code": code, "client_id": self.cfg.get("google_client_id"), "client_secret": self.cfg.get("google_client_secret"),
             "redirect_uri": self.redirect_uri(), "grant_type": "authorization_code"})
         if status != 200 or not isinstance(data, dict) or not data.get("access_token"):
             raise RuntimeError(f"Google rejected the authorisation code ({(data or {}).get('error_description') or (data or {}).get('error') or status})")
-        if data.get("refresh_token"):
-            await self.db.kv_set("youtube_refresh_token", data["refresh_token"])
-        elif not await self.refresh_token():
-            raise RuntimeError("Google did not return a refresh token. Remove SavahBot from your Google account's third-party access and connect again.")
-        self._access, self._expires = data["access_token"], self.now_fn() + float(data.get("expires_in", 3600)) - 60
+        if not data.get("refresh_token"):
+            raise RuntimeError("Google did not return a refresh token for this sign-in, so nothing was changed and any earlier connection is kept. "
+                               "Remove SavahBot from your Google account's third-party access, then connect again.")
+        return {"access": data["access_token"], "refresh": data["refresh_token"], "expires": self.now_fn() + float(data.get("expires_in", 3600)) - 60}
+
+    async def commit_sign_in(self, grant: dict[str, Any]) -> None:
+        """Makes an accepted sign-in the connection. The remembered account belongs to the old login, so it is dropped."""
+        await self.db.kv_set("youtube_refresh_token", grant["refresh"])
+        await self.db.kv_delete("youtube_account")
+        self._access, self._expires = grant["access"], grant["expires"]
         self.last_error = ""
+
+    async def exchange_code(self, code: str) -> None:
+        """Sign in without an account check (kept for scripts and tests). The dashboard flow uses begin_sign_in, check, commit_sign_in."""
+        await self.commit_sign_in(await self.begin_sign_in(code))
+
+    async def token_fingerprint(self) -> str:
+        """A short hash that ties a remembered account to the refresh token it was read with (the token itself is never logged)."""
+        return hashlib.sha256((await self.refresh_token()).encode()).hexdigest()[:16]
 
     async def access_token(self, force: bool = False) -> str:
         if not force and self._access and self.now_fn() < self._expires:
@@ -169,6 +187,7 @@ class GoogleAuth:
 
     async def disconnect(self) -> None:
         await self.db.kv_delete("youtube_refresh_token")
+        await self.db.kv_delete("youtube_account")
         self._access, self._expires = "", 0.0
 
 
@@ -230,11 +249,22 @@ class YouTubeSource:
         self._target_raw = ""
         self._detect_day = ""
         self._detect_spent = 0
+        self._identity_error = ""
+        self._errors = 0
+        self._denied: dict[str, tuple[float, str]] = {}   # action kind -> (retry not before, message): YouTube said no for lack of permission
+        self.perms: dict[str, bool | None] = {"read": None, "delete": None, "ban": None, "send": None}  # only ever set by a real YouTube answer
 
     def forget_identity(self) -> None:
-        """Called when the Google login changes, so the account is looked up again."""
-        self.account, self._identity_tried = None, 0.0
+        """Called when the Google login changes: the account is looked up again and nothing refused for the old login is remembered."""
+        self.account, self._identity_tried, self._identity_error = None, 0.0, ""
+        self._denied.clear()
+        self.perms = {"read": None, "delete": None, "ban": None, "send": None}
         self._detach()
+
+    def _backoff(self) -> float:
+        """30 s, 60 s, 120 s ... up to 5 min for repeated errors; reset by any successful answer."""
+        self._errors += 1
+        return min(300.0, 30.0 * 2 ** (self._errors - 1))
 
     def _detach(self) -> None:
         if self.chat_id:
@@ -261,7 +291,7 @@ class YouTubeSource:
                 "title": self.title, "last_error": self.last_error or self.auth.last_error, "last_poll": self.last_poll or None,
                 "polls": self.polls, "quota": self.quota.status(), "redirect_uri": self.auth.redirect_uri(),
                 "account": self.account, "target": self.target, "video_channel_id": self.video_channel_id,
-                "last_action_error": self.last_action_error}
+                "last_action_error": self.last_action_error, "permissions": dict(self.perms)}
 
     # ------------------------------------------------------------------ HTTP with auth
     async def _api(self, method: str, path: str, *, params: dict[str, Any] | None = None, body: Any = None) -> tuple[int, Any]:
@@ -288,12 +318,12 @@ class YouTubeSource:
             except RuntimeError as exc:
                 self.last_error = str(exc)
                 self.state = "error"
-                wait = 30.0
+                wait = self._backoff()
             except Exception:
                 logger.exception("YouTube loop error")
                 self.last_error = "Unexpected error, see server logs"
                 self.state = "error"
-                wait = 30.0
+                wait = self._backoff()
 
     async def _step(self) -> float:
         await self.quota.sync()
@@ -306,19 +336,63 @@ class YouTubeSource:
         return await self._poll()
 
     # ------------------------------------------------------------------ who is signed in, and which channel is the target
-    async def refresh_identity(self) -> dict[str, str] | None:
-        """Looks up the channel of the signed-in Google account. This is the moderator, NOT the channel being moderated."""
-        self._identity_tried = time.time()
-        await self.quota.spend(self.quota.cost("channel_list"))
-        status, data = await self._api("GET", "/channels", params={"part": "id,snippet", "mine": "true"})
-        if status in (401, 403) and _reason(data) not in ("quotaExceeded", "dailyLimitExceeded"):
-            raise RuntimeError(self._auth_message(status, data))
+    async def _whoami(self, token: str = "") -> tuple[dict[str, str] | None, str]:
+        """Asks Google which YouTube channel the login belongs to. Returns (account, "") or (None, why it could not be told).
+        With `token`, that access token is used as it is (a sign-in not yet saved); otherwise the saved login is used."""
+        params = {"part": "id,snippet", "mine": "true"}
+        try:
+            if token:
+                url = self.cfg.get("youtube_api_base").rstrip("/") + "/channels"
+                status, data = await request_json("GET", url, params=params, headers={"Authorization": f"Bearer {token}"}, timeout=15)
+            else:
+                status, data = await self._api("GET", "/channels", params=params)
+        except NetworkError as exc:
+            return None, f"network error ({exc})"
+        except RuntimeError as exc:
+            return None, str(exc)
+        if status in (401, 403) and _reason(data) not in ("quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"):
+            return None, self._auth_message(status, data)
         if status != 200 or not isinstance(data, dict):
-            return self.account
+            return None, f"YouTube answered {status} when asked who is signed in"
         items = data.get("items") or []
         sn = (items[0].get("snippet") or {}) if items else {}
-        self.account = {"channel_id": items[0].get("id", "") if items else "", "title": sn.get("title", ""), "handle": sn.get("customUrl", "")}
-        return self.account
+        return {"channel_id": items[0].get("id", "") if items else "", "title": sn.get("title", ""), "handle": sn.get("customUrl", "")}, ""
+
+    async def refresh_identity(self) -> dict[str, str] | None:
+        """Looks up the channel of the signed-in Google account. This is the moderator, NOT the channel being moderated.
+        Returns None (and sets identity_error) when Google could not say; a rejected login raises so it is shown as such."""
+        self._identity_tried = time.time()
+        if not self.quota.can_afford("channel_list"):
+            self._identity_error = "Not enough YouTube quota left today to look up the signed-in account."
+            return self.account
+        await self.quota.spend(self.quota.cost("channel_list"))
+        acct, err = await self._whoami()
+        self._identity_error = err
+        if acct is None:
+            if "Reconnect" in err or "refused the request" in err:
+                raise RuntimeError(err)
+            return self.account
+        self.account = acct
+        await self.remember_identity(acct)
+        return acct
+
+    async def remember_identity(self, acct: dict[str, str]) -> None:
+        """Keeps the account together with a fingerprint of the refresh token it was read with, so it can never outlive that login."""
+        self.account = acct
+        try:
+            await self.auth.db.kv_set("youtube_account", json.dumps({"fp": await self.auth.token_fingerprint(), "account": acct}))
+        except Exception:
+            logger.warning("Could not remember the signed-in account")
+
+    async def _load_identity(self) -> dict[str, str] | None:
+        try:
+            raw = await self.auth.db.kv_get("youtube_account")
+            saved = json.loads(raw) if raw else {}
+            if saved.get("fp") and saved["fp"] == await self.auth.token_fingerprint() and isinstance(saved.get("account"), dict):
+                return {k: str(v) for k, v in saved["account"].items()}
+        except (ValueError, TypeError, AttributeError):
+            pass
+        return None
 
     @staticmethod
     def _auth_message(status: int, data: Any) -> str:
@@ -327,16 +401,35 @@ class YouTubeSource:
             return "Google rejected the saved login (it may have been revoked). Press Reconnect Google account on the Setup page."
         return f"YouTube refused the request ({reason or status}). Check that YouTube Data API v3 is enabled and the sign-in has the YouTube permission."
 
-    def _moderator_mismatch(self) -> str:
+    def _mismatch_for(self, acct: dict[str, str] | None) -> str:
         want = (self.cfg.get("youtube_moderator_account") or "").strip()
         if not want:
             return ""
-        acct = self.account or {}
+        acct = acct or {}
         have = {acct.get("channel_id", ""), acct.get("handle", "").lower().lstrip("@"), acct.get("handle", "").lower()}
         if want in have or want.lower().lstrip("@") in have:
             return ""
         who = f"{acct.get('title') or 'an unknown account'} ({acct.get('channel_id') or 'no channel found'})"
         return f"Signed in as {who}, but YOUTUBE_MODERATOR_ACCOUNT expects {want}. Disconnect and connect with the right Google account."
+
+    def _moderator_mismatch(self) -> str:
+        return self._mismatch_for(self.account) if self.account is not None else ""
+
+    async def verify_sign_in(self, grant: dict[str, Any]) -> tuple[str, str, dict[str, str] | None]:
+        """Checks WHO just signed in, using the new access token, before the new login is saved.
+        Returns (verdict, message, account); verdict is "ok", "rejected" (must not be kept) or "unknown" (could not tell, and nothing says it is wrong)."""
+        await self.quota.spend(self.quota.cost("channel_list"))
+        acct, err = await self._whoami(grant["access"])
+        want = (self.cfg.get("youtube_moderator_account") or "").strip()
+        if acct is None:
+            if want:
+                return "rejected", (f"Google could not confirm which account signed in ({err}), and YOUTUBE_MODERATOR_ACCOUNT is set, "
+                                    "so this sign-in was not accepted."), None
+            return "unknown", err, None
+        bad = self._mismatch_for(acct)
+        if bad:
+            return "rejected", bad, acct
+        return "ok", "", acct
 
     async def _resolve_target(self) -> str:
         """Returns an error message, or '' once self.target holds the channel to moderate."""
@@ -367,13 +460,23 @@ class YouTubeSource:
         return f"YOUTUBE_TARGET_CHANNEL_ID must be a channel ID (starts with UC, 24 characters) or a @handle, not {raw!r}."
 
     async def _prepare(self) -> str:
-        """Identity and configuration checks that must pass before any stream is attached. Returns an error or ''."""
-        if self.account is None and time.time() - self._identity_tried > 600:
+        """Identity and configuration checks that must pass before any stream is attached. Returns an error or ''.
+        When YOUTUBE_MODERATOR_ACCOUNT is set, the signed-in account MUST be confirmed first: if Google cannot say, nothing is attached."""
+        want = (self.cfg.get("youtube_moderator_account") or "").strip()
+        if self.account is None:
+            self.account = await self._load_identity()
+        if self.account is None and (want or time.time() - self._identity_tried > 600):
             await self.refresh_identity()
+        if want and self.account is None:
+            return (f"Could not confirm which Google account is signed in ({self._identity_error or 'no answer from Google'}). "
+                    "YOUTUBE_MODERATOR_ACCOUNT is set, so SavahBot will not monitor or moderate until the account is confirmed. Trying again shortly.")
         err = self._moderator_mismatch() if self.account is not None else ""
         return err or await self._resolve_target()
 
     # ------------------------------------------------------------------ finding the target's live stream
+    def _mark_offline(self) -> None:
+        self.state, self.last_error, self._errors = "offline", "", 0
+
     def _detect_failure(self, status: int, data: Any, interval: float) -> float | None:
         reason = _reason(data)
         if status == 403 and reason in ("quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"):
@@ -384,7 +487,7 @@ class YouTubeSource:
             return 60.0
         if status != 200:
             self.last_error, self.state = f"YouTube answered {status} while looking for the stream.", "error"
-            return 30.0
+            return self._backoff()
         return None
 
     async def _videos(self, ids: list[str]) -> tuple[int, Any]:
@@ -398,6 +501,8 @@ class YouTubeSource:
         self.video_channel_id = sn.get("channelId", "")
         self._page_token, self._first_poll, self.last_error = "", True, ""
         self._stream_started = time.time()
+        self._denied.clear()
+        self._errors = 0
         self.state = "live"
         self.hub.stream_state(True, self.title or "YouTube live stream")
         return 0.0
@@ -430,12 +535,12 @@ class YouTubeSource:
                 self.last_error = f"Video {video} belongs to channel {actual or 'unknown'}, not the target channel {target}. SavahBot did not attach to it."
                 return 60.0
             if not (item.get("liveStreamingDetails") or {}).get("activeLiveChatId"):
-                self.state, self.last_error = "offline", ""
+                self._mark_offline()
                 return interval
             return self._attach(item)
 
         if not self.cfg.get("youtube_auto_detect_live"):
-            self.state, self.last_error = "offline", ""
+            self._mark_offline()
             return interval
 
         if own:  # cheap and documented: the account's own active broadcast
@@ -450,7 +555,7 @@ class YouTubeSource:
             bc = ((data.get("items") or [None])[0]) if isinstance(data, dict) else None
             chat = ((bc or {}).get("snippet") or {}).get("liveChatId")
             if not bc or not chat:
-                self.state, self.last_error = "offline", ""
+                self._mark_offline()
                 return interval
             if ((bc.get("snippet") or {}).get("channelId") or target) != target:
                 self.state, self.last_error = "config_error", "The active broadcast belongs to a different channel than the target. SavahBot did not attach."
@@ -459,6 +564,8 @@ class YouTubeSource:
             self.video_channel_id = target
             self._page_token, self._first_poll, self.last_error = "", True, ""
             self._stream_started, self.state = time.time(), "live"
+            self._denied.clear()
+            self._errors = 0
             self.hub.stream_state(True, self.title or "YouTube live stream")
             return 0.0
 
@@ -482,7 +589,7 @@ class YouTubeSource:
         ids = [((i.get("id") or {}).get("videoId")) for i in (data.get("items") or [])] if isinstance(data, dict) else []
         ids = [i for i in ids if i]
         if not ids:
-            self.state, self.last_error = "offline", ""
+            self._mark_offline()
             return wait
         status, data = await self._videos(ids)
         bad = self._detect_failure(status, data, wait)
@@ -491,7 +598,7 @@ class YouTubeSource:
         for item in (data.get("items") or []):
             if (item.get("snippet") or {}).get("channelId") == target and (item.get("liveStreamingDetails") or {}).get("activeLiveChatId"):
                 return self._attach(item)
-        self.state, self.last_error = "offline", ""
+        self._mark_offline()
         return wait
 
     async def _poll(self) -> float:
@@ -511,8 +618,13 @@ class YouTubeSource:
             self._page_token = data.get("nextPageToken", self._page_token)
             backfill = self._first_poll
             self._first_poll = False
-            self.state, self.last_error = "live", ""
+            self.state, self.last_error, self._errors = "live", "", 0
+            self.perms["read"] = True
+            ended = False
             for item in data.get("items", []):
+                if (item.get("snippet") or {}).get("type") == "chatEndedEvent":
+                    ended = True   # YouTube says the stream's chat is over: stop now instead of waiting for an error
+                    continue
                 msg = parse_item(item)
                 if msg is None:
                     continue
@@ -521,6 +633,10 @@ class YouTubeSource:
                         continue
                     msg.backfill = True
                 await self.hub.ingest(msg)
+            if ended:
+                self._detach()
+                self.state = "offline"
+                return 5.0
             api_wait = float(data.get("pollingIntervalMillis", 0)) / 1000.0
             return max(api_wait, interval)
         reason = _reason(data)
@@ -532,6 +648,7 @@ class YouTubeSource:
             self.state, self.last_error = "error", self._auth_message(401, data)
             return 60.0
         if status == 403 and reason in PERMISSION_REASONS:
+            self.perms["read"] = False
             self._detach()
             self.state = "no_permission"
             self.last_error = (f"YouTube will not let this account read that live chat ({reason}). If you are not the channel owner, ask them to "
@@ -545,21 +662,51 @@ class YouTubeSource:
             return max(interval * 2, 10.0)
         self.last_error = f"YouTube answered {status} ({reason or 'no detail'}) while reading chat."
         self.state = "error"
-        return 30.0 if status >= 500 or status == 0 else 60.0
+        return self._backoff()
 
     # ------------------------------------------------------------------ actions (the ChatSource interface)
+    _KIND_KEY = {"chat_delete": "delete", "ban": "ban", "chat_insert": "send"}
+
+    def refused(self, key: str) -> str:
+        """The message of a recent permission refusal for this kind of action ("delete", "ban", "send"), or '' when none is in force."""
+        denied = self._denied.get(key)
+        return denied[1] if denied and time.time() < denied[0] else ""
+
+    def _identity_gate(self) -> str:
+        """With YOUTUBE_MODERATOR_ACCOUNT set, nothing is done unless the signed-in account is known and matches it."""
+        if not (self.cfg.get("youtube_moderator_account") or "").strip():
+            return ""
+        if self.account is None:
+            return "The signed-in Google account has not been confirmed, and YOUTUBE_MODERATOR_ACCOUNT is set, so no moderation action was sent."
+        return self._moderator_mismatch()
+
     async def preflight(self, deletes: int, action: str) -> tuple[bool, str]:
-        """Check the whole approval is affordable BEFORE doing any of it, so an action is all-or-nothing."""
+        """Check the whole approval is allowed and affordable BEFORE doing any of it, so an action is all-or-nothing."""
         await self.quota.sync()
+        gate = self._identity_gate()
+        if gate:
+            return False, gate
+        for needed, key in ((deletes > 0, "delete"), (action in ("timeout", "ban"), "ban")):
+            msg = self.refused(key) if needed else ""
+            if msg:
+                return False, msg
         need = deletes * self.quota.cost("chat_delete") + (self.quota.cost("ban") if action in ("timeout", "ban") else 0)
         if self.quota.remaining < need:
             return False, f"YouTube quota too low: this needs {need} units but only {self.quota.remaining} are left today."
         return True, ""
 
     async def _action(self, kind: str, method: str, path: str, *, params: dict | None = None, body: Any = None) -> tuple[bool, str]:
+        """True only when YouTube itself confirmed the action (HTTP 200/204, or 404 for a message that is already gone)."""
         await self.quota.sync()
         if not self.chat_id:
             return False, "No live chat is attached right now."
+        gate = self._identity_gate()
+        if gate:
+            return False, gate
+        key = self._KIND_KEY.get(kind, kind)
+        blocked = self.refused(key)
+        if blocked:
+            return False, blocked   # YouTube already said no for lack of permission: ask nothing, spend nothing, until the cooldown ends
         if not self.quota.can_afford(kind):
             return False, "YouTube quota exhausted for today."
         await self.quota.spend(self.quota.cost(kind))
@@ -568,6 +715,7 @@ class YouTubeSource:
         except RuntimeError as exc:
             return False, str(exc)
         if status in (200, 204):
+            self.perms[key] = True
             return True, ""
         reason = _reason(data)
         if reason in ("quotaExceeded", "dailyLimitExceeded"):
@@ -576,15 +724,20 @@ class YouTubeSource:
         if kind == "chat_delete" and status == 404:
             return True, ""  # already gone
         label = {"chat_delete": "delete messages", "ban": "ban or time out people", "chat_insert": "post messages"}.get(kind, kind)
+        refusal = False   # a refusal that will repeat until something changes (permissions, login): do not ask again right away
         if status == 401:
-            msg = self._auth_message(401, data)
+            msg, refusal = self._auth_message(401, data), True
         elif reason in PROTECTED_USER_REASONS:
             msg = f"YouTube will not allow this on that person ({reason}). They may be a moderator or the channel owner."
         elif status == 403 or reason in PERMISSION_REASONS:
             msg = (f"YouTube says this account is not allowed to {label} in that chat ({reason or 403}). "
                    "It must be the channel owner or a moderator appointed in YouTube Studio.")
+            refusal = True
         else:
             msg = f"YouTube refused ({reason or status})"
+        if refusal:
+            self.perms[key] = False
+            self._denied[key] = (time.time() + float(self.cfg.get("youtube_permission_retry_seconds")), msg)
         self.last_action_error = msg
         return False, msg
 
@@ -605,3 +758,77 @@ class YouTubeSource:
     async def ban(self, author_id: str) -> tuple[bool, str]:
         return await self._action("ban", "POST", "/liveChat/bans", params={"part": "snippet"}, body={"snippet": {
             "liveChatId": self.chat_id, "type": "permanent", "bannedUserDetails": {"channelId": author_id}}})
+
+    # ------------------------------------------------------------------ on-demand access check
+    async def diagnose(self) -> dict[str, Any]:
+        """Report what the signed-in account can really do for the target channel, from real YouTube answers only.
+
+        Reading is probed for real. Deleting and banning cannot be probed (YouTube has no dry run), so they stay "unverified" until
+        a real action has been answered. This never searches for streams (that costs quota): it uses the chat already attached, or
+        the pinned YOUTUBE_VIDEO_ID."""
+        saved = (self.state, self.last_error)
+        checks: list[dict[str, Any]] = []
+
+        def add(ok: bool | None, label: str, detail: str) -> None:
+            checks.append({"ok": ok, "label": label, "detail": detail})
+
+        try:
+            if not await self.auth.connected():
+                add(False, "Google account", "Not connected. Press Connect Google account on the Setup page and sign in with the moderator account.")
+                return {"ok": False, "checks": checks}
+            try:
+                problem = await self._prepare()
+            except RuntimeError as exc:
+                problem = str(exc)
+            if self.account:
+                who = f"{self.account.get('title') or 'Unnamed account'} ({self.account.get('channel_id') or 'no channel'}), as reported by Google."
+                mism = self._moderator_mismatch()
+                add(not mism, "Signed-in account", who + (" " + mism if mism else ""))
+            else:
+                add(False, "Signed-in account", self._identity_error or problem or "Could not identify the signed-in account.")
+            add(bool(self.target) and not problem, "Target channel", problem or f"Moderating {self.target['channel_id']}." if self.target else problem)
+            if problem or not self.target:
+                return {"ok": False, "checks": checks}
+            target = self.target["channel_id"]
+            owner = bool(self.account and self.account.get("channel_id") == target)
+            add(True, "Role", "The account owns the target channel." if owner else
+                "The account is not the owner of the target channel, so it can act only as a moderator that the owner appointed in YouTube Studio.")
+            chat = self.chat_id
+            video = parse_video_id(self.cfg.get("youtube_video_id"))
+            if not chat and video:
+                status, data = await self._videos([video])
+                item = ((data.get("items") or [None])[0]) if status == 200 and isinstance(data, dict) else None
+                if status != 200 or not item:
+                    add(False, "Livestream", f"YouTube did not return video {video} (status {status}). The ID may be wrong or private.")
+                    return {"ok": False, "checks": checks}
+                actual = (item.get("snippet") or {}).get("channelId", "")
+                if actual != target:
+                    add(False, "Livestream", f"Video {video} belongs to channel {actual or 'unknown'}, not the target {target}. It will not be attached.")
+                    return {"ok": False, "checks": checks}
+                chat = (item.get("liveStreamingDetails") or {}).get("activeLiveChatId", "")
+            if not chat:
+                add(None, "Livestream", "No live stream is attached right now. Start one (or set YOUTUBE_VIDEO_ID) and check again. Checking does not search, because searching costs quota.")
+                return {"ok": True, "checks": checks}
+            add(True, "Livestream", "A live chat is available on the target channel.")
+            if not self.quota.can_afford("chat_list"):
+                add(None, "Read chat", "Skipped: not enough quota left to test it.")
+            else:
+                await self.quota.spend(self.quota.cost("chat_list"))
+                status, data = await self._api("GET", "/liveChat/messages", params={"liveChatId": chat, "part": "snippet", "maxResults": 200})
+                reason = _reason(data)
+                if status == 200:
+                    self.perms["read"] = True
+                    add(True, "Read chat", "YouTube let the signed-in account read this chat.")
+                elif status == 403 and reason in PERMISSION_REASONS:
+                    self.perms["read"] = False
+                    add(False, "Read chat", f"YouTube refused ({reason}). Ask the channel owner to appoint this account as a moderator.")
+                else:
+                    add(False, "Read chat", f"YouTube answered {status} ({reason or 'no detail'}).")
+            for key, label in (("delete", "Delete messages"), ("ban", "Ban or time out")):
+                known, refused = self.perms[key], self.refused(key)
+                add(known if not refused else False, label,
+                    refused or ("Confirmed by a real action." if known else
+                                "Not testable: YouTube has no dry run. The first real action will show whether this account may do it."))
+            return {"ok": all(c["ok"] is not False for c in checks), "checks": checks}
+        finally:
+            self.state, self.last_error = saved

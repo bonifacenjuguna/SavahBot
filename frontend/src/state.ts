@@ -31,6 +31,7 @@ export interface Status {
     target: { channel_id: string; title: string } | null;
     video_channel_id: string;
     last_action_error: string;
+    permissions?: Record<string, boolean | null>;
   };
   demo: { state: string; ambient: boolean; scenarios_running: string[]; channel: string };
   pending: number;

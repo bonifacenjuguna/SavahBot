@@ -202,6 +202,7 @@ def test_f_refused_delete_and_ban_are_reported_as_failures():
         ok, err = await c.youtube.ban("UC" + "s" * 22)
         assert not ok and "not allowed to ban" in err
         assert len(fake.calls("/liveChat/bans", "POST")) == 1 and c.youtube.status()["last_action_error"] == err
+        c.youtube._denied.clear()   # the refusal above starts a cooldown (tested separately); clear it to test the protected-user answer
         fake.action_status = {"bans": (403, {"error": {"errors": [{"reason": "liveChatBanInsertionNotAllowed"}]}})}
         ok, err = await c.youtube.ban("UC" + "t" * 22)
         assert not ok and "moderator or the channel owner" in err

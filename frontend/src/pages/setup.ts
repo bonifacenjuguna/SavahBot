@@ -14,6 +14,8 @@ interface Diag {
   checks: { ok: boolean; text: string }[]; note: string;
 }
 
+interface Verify { ok: boolean; checks: { ok: boolean | null; label: string; detail: string }[] }
+
 const AREA_NAMES: Record<string, string> = { dashboard: "Dashboard", database: "Database", telegram: "Telegram", youtube: "YouTube", app: "App" };
 
 export const setup: Page = {
@@ -31,6 +33,14 @@ export const setup: Page = {
         h("div", { class: "row between" }, h("span", null, h("div", { class: "muted small" }, "Redirect address the bot sends"), h("span", { class: "mono", style: "overflow-wrap:anywhere" }, d.redirect_uri || "(empty)")), d.redirect_uri ? copyButton(d.redirect_uri) : null),
         h("p", { class: "muted small" }, "Compare both with the SavahBot client in Google Cloud: they must match exactly. The client secret is never shown."),
         h("p", { class: "muted small" }, d.note));
+    };
+    const verifyBox = h("div", { class: "body stack" });
+    const runVerify = async () => {
+      const v = await post<Verify>("/api/youtube/verify");
+      mount(verifyBox,
+        h("ul", { class: "list", style: "margin:0" }, v.checks.map((c) => h("li", { class: "row", style: "padding:6px 0;border:0" },
+          h("span", { class: `chip ${c.ok === true ? "ok" : c.ok === false ? "bad" : "warn"}` }, c.ok === true ? "OK" : c.ok === false ? "Fix" : "Unverified"),
+          h("span", null, h("strong", null, c.label + ": "), c.detail)))));
     };
     const load = async () => {
       const [s, st] = await Promise.all([get<Setup>("/api/setup"), refreshStatus()]);
@@ -65,6 +75,8 @@ export const setup: Page = {
                 return sel;
               })()), h("button", { class: "btn ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/telegram/test"); }, "Test message sent") }, "Send test message")),
               h("p", { class: "muted small" }, tg?.mode === "webhook" ? `Webhook: ${tg.webhook_url || "not registered"}` : `Polling: ${tg?.polling ? "running" : "stopped"}`)))),
+        h("section", { class: "block flush" }, h("header", null, h("h2", null, "Verify moderator access"),
+          h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runVerify) }, "Verify access")), verifyBox),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Check the Google connection"),
           h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runDiag) }, "Run check")), diagBox),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Variables to set in Railway"), h("span", { class: "muted small" }, "Everything else already has a safe default")),

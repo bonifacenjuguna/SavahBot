@@ -149,11 +149,25 @@ async def youtube_callback(request: Request, c: Any) -> Any:
     if not c.google.check_state(q.get("state", "")):
         return done(False, "This sign-in link expired or is not valid. Start again from the dashboard.")
     try:
-        await c.google.exchange_code(q.get("code", ""))
-        c.youtube.forget_identity()
+        grant = await c.google.begin_sign_in(q.get("code", ""))   # nothing is saved yet
     except RuntimeError as exc:
         return done(False, str(exc))
-    return done(True, "YouTube is connected.")
+    # Ask Google WHO signed in, with the new token, before it replaces the old login.
+    previous = c.youtube.account
+    verdict, problem, acct = await c.youtube.verify_sign_in(grant)
+    if verdict == "rejected":
+        kept = " The previous connection (if any) was left unchanged." if await c.google.connected() else ""
+        return done(False, problem + kept)
+    await c.google.commit_sign_in(grant)
+    c.youtube.forget_identity()
+    if acct is None:
+        return done(True, "YouTube is connected, but Google could not say which account it is yet: " + problem)
+    await c.youtube.remember_identity(acct)
+    name = acct.get("title") or acct.get("channel_id") or "an account without a channel"
+    switched = ""
+    if previous and previous.get("channel_id") and previous.get("channel_id") != acct.get("channel_id"):
+        switched = f" The sign-in changed from {previous.get('title') or previous.get('channel_id')} to this account."
+    return done(True, f"YouTube is connected as {name}. That account's permissions are what SavahBot uses.{switched}")
 
 
 # ================================================================================= session + status
@@ -545,13 +559,24 @@ async def youtube_start(request: Request, c: Any) -> dict:
     return {"url": c.google.auth_url(c.google.new_state()), "redirect_uri": c.google.redirect_uri()}
 
 
+@R.add("/youtube/verify", ["POST"])
+async def youtube_verify(request: Request, c: Any) -> dict:
+    """Probe what the signed-in account can really do for the target channel (nothing is moderated or changed)."""
+    return await c.youtube.diagnose()
+
+
 @R.add("/youtube/use-own-channel", ["POST"])
 async def youtube_use_own_channel(request: Request, c: Any) -> dict:
     """An explicit choice by the owner: moderate the signed-in account's own channel. SavahBot never assumes this by itself."""
     if not await c.google.connected():
         raise ApiError("Connect your Google account first.", 409)
-    acct = c.youtube.account or await c.youtube.refresh_identity()
-    if not acct or not acct.get("channel_id"):
+    try:
+        acct = c.youtube.account or await c.youtube.refresh_identity()
+    except RuntimeError as exc:
+        raise ApiError(str(exc), 409)
+    if acct is None:
+        raise ApiError(f"Google could not say which account is signed in ({c.youtube._identity_error or 'no answer'}). Try again in a minute.", 409)
+    if not acct.get("channel_id"):
         raise ApiError("This Google account has no YouTube channel of its own. Enter the target channel ID instead.", 409)
     await c.cfg.set("youtube_target_channel_id", acct["channel_id"])
     return {"ok": True, "target": acct["channel_id"], "title": acct.get("title", "")}
