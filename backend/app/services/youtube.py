@@ -309,7 +309,7 @@ class YouTubeSource:
         return {"state": self.state, "connected": self._connected_cache, "chat_attached": bool(self.chat_id), "video_id": self.video_id,
                 "title": self.title, "last_error": self.last_error or self.auth.last_error, "last_poll": self.last_poll or None,
                 "polls": self.polls, "quota": self.quota.status(), "redirect_uri": self.auth.redirect_uri(),
-                "account": self.account, "target": self.target, "video_channel_id": self.video_channel_id,
+                "account": self.account, "target": self.target or self._configured_target(), "video_channel_id": self.video_channel_id,
                 "last_action_error": self.last_action_error, "permissions": dict(self.perms),
                 "denied_for": {k: max(0, round(until - time.time())) for k, (until, _m) in self._denied.items() if until > time.time()},
                 "expected_account": (self.cfg.get("youtube_moderator_account") or "").strip()}
@@ -393,6 +393,16 @@ class YouTubeSource:
         if status == 401:
             return "Google rejected the saved login (it may have been revoked). Press Reconnect Google account on the Setup page."
         return f"YouTube refused the request ({reason or status}). Check that YouTube Data API v3 is enabled and the sign-in has the YouTube permission."
+
+    def _configured_target(self) -> dict[str, str] | None:
+        """What YOUTUBE_TARGET_CHANNEL_ID says, shown on the dashboard even before (or without) a live lookup. Display only:
+        nothing is attached or moderated from this."""
+        raw = (self.cfg.get("youtube_target_channel_id") or self.cfg.get("youtube_channel_id") or "").strip()
+        if CHANNEL_ID_RE.match(raw):
+            return {"channel_id": raw, "title": ""}
+        if raw.startswith("@"):
+            return {"channel_id": raw, "title": "(handle: resolved when live)"}
+        return None
 
     def _expected_account(self) -> str:
         return (self.cfg.get("youtube_moderator_account") or "").strip()

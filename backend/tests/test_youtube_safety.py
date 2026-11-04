@@ -556,3 +556,17 @@ def test_status_never_contains_tokens_or_secrets():
             assert secret not in blob
         await c.stop()
     run(go())
+
+
+def test_dashboard_shows_the_configured_target_even_when_the_bot_is_not_live():
+    async def go():
+        c = await boot(SafetyFake(), BOT_MODE="demo")               # demo mode: the live loop never runs
+        assert c.youtube.state == "stopped" and c.youtube.status()["target"] == {"channel_id": OWNER_CH, "title": ""}
+        await c.stop()
+        c = await boot(SafetyFake(), BOT_MODE="demo", YOUTUBE_TARGET_CHANNEL_ID="@creatora")
+        assert c.youtube.status()["target"]["channel_id"] == "@creatora"
+        await c.stop()
+        c = await boot(SafetyFake(), BOT_MODE="demo", YOUTUBE_TARGET_CHANNEL_ID="")
+        assert c.youtube.status()["target"] is None                   # genuinely not set: still says so
+        await c.stop()
+    run(go())
