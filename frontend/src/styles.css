@@ -193,3 +193,139 @@ details.group[open] > summary { border-bottom: 1px solid var(--line); }
 
 .block > form.body.row { flex-wrap: wrap; }
 .block > form.body.row > .grow { flex: 1 1 200px; }
+
+
+/* ---------- responsive workspace: v1.1.0 ---------- */
+/* Preserve the existing theme tokens and component styling; only reflow the layout. */
+.shell,
+.main,
+.rail,
+.block,
+.block > header,
+.block > .body,
+.cols,
+.stack,
+.row,
+.form-grid,
+.table-wrap {
+  min-width: 0;
+}
+
+.shell { min-height: 100dvh; }
+.main { min-width: 0; overflow-wrap: anywhere; }
+.block img, .block video, .block iframe { max-width: 100%; }
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .main { padding: 22px clamp(16px, 2.4vw, 28px) 44px; }
+  .cols { grid-template-columns: minmax(0, 1.2fr) minmax(270px, 0.8fr); gap: 16px; }
+  .rail { padding-inline: 12px; }
+}
+
+@media (max-width: 900px) {
+  .shell { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .rail {
+    position: sticky;
+    z-index: 10;
+    top: 0;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand tally"
+      "segment segment"
+      "nav nav";
+    align-items: center;
+    gap: 8px 12px;
+    padding: 10px 14px;
+  }
+  .rail > .brand { grid-area: brand; min-width: 0; }
+  .rail > .tally { grid-area: tally; min-width: 0; }
+  .rail > .segment { grid-area: segment; justify-self: start; margin-left: 0; }
+  .rail > .nav {
+    grid-area: nav;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px 0 5px;
+    scrollbar-width: thin;
+  }
+  .rail .nav a { flex: 0 0 auto; white-space: nowrap; }
+  .rail-foot { display: none; }
+  .main { padding: 22px 18px 36px; }
+  .cols { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .setting { grid-template-columns: minmax(0, 1fr); }
+  .feed { height: min(56dvh, 560px); min-height: 260px; }
+}
+
+@media (max-width: 760px) {
+  .main { padding: 18px 14px 30px; }
+  .page-head { align-items: flex-start; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .page-head p { max-width: 100%; }
+  .block > header { align-items: flex-start; padding: 11px 13px; }
+  .block > .body { padding: 12px 13px; }
+  .block.flush > .body { padding: 0; }
+  .stack { gap: 14px; }
+  .cols { gap: 14px; }
+  .row { max-width: 100%; }
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .form-grid .wide { grid-column: auto; }
+  .line { grid-template-columns: 4.2em minmax(0, 1fr); gap: 6px; padding-inline: 12px; }
+  .line time { font-size: 0.76rem; }
+  .say { flex-wrap: wrap; padding: 10px 12px; }
+  .say input { flex: 1 1 180px; min-width: 0; }
+  .say button { flex: 0 0 auto; }
+  .facts { gap: 12px 22px; padding: 12px 13px; }
+  .hbar { grid-template-columns: minmax(68px, 110px) minmax(0, 1fr) auto; gap: 7px; padding-inline: 12px; }
+  .login { padding: 14px; }
+  .login form { padding: 20px; }
+  .setting { padding: 11px 13px; }
+  .toasts { right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 520px) {
+  .rail { padding: 9px 10px; gap: 7px 9px; }
+  .brand { font-size: 1.05rem; }
+  .tally { grid-template-columns: auto 1fr; gap: 1px 8px; padding: 6px 8px; border-radius: 8px; }
+  .tally .lamp { width: 16px; height: 16px; }
+  .tally strong { font-size: 0.9rem; }
+  .tally span { font-size: 0.72rem; }
+  .segment button { padding: 6px 10px; }
+  .nav a { padding: 8px 9px; font-size: 0.88rem; }
+  .main { padding: 15px 11px 26px; }
+  .block { border-radius: 9px; }
+  .block > header { padding: 10px 11px; }
+  .block > .body { padding: 11px; }
+  .block.flush > .body { padding: 0; }
+  .line { grid-template-columns: 3.8em minmax(0, 1fr); gap: 5px; padding-inline: 10px; }
+  .line time { font-size: 0.72rem; }
+  .feed { min-height: 230px; }
+  .facts { gap: 10px 16px; padding: 11px; }
+  .facts b { font-size: 1.2rem; }
+  .table-wrap { max-width: 100%; }
+  th, td { padding: 8px 10px; }
+  .btn { min-height: 40px; }
+  .btn.small { min-height: 36px; }
+  input[type="text"], input[type="password"], input[type="number"], input[type="url"], select, textarea {
+    min-height: 42px;
+  }
+  textarea { min-height: 84px; }
+}
+
+@media (max-width: 360px) {
+  .rail { grid-template-columns: minmax(0, 1fr); grid-template-areas: "brand" "tally" "segment" "nav"; }
+  .rail > .tally { justify-self: start; }
+  .rail > .segment { justify-self: stretch; }
+  .segment { width: 100%; }
+  .segment button { min-width: 0; }
+  .line { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+  .line time { padding-top: 0; }
+}
