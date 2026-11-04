@@ -17,7 +17,7 @@ There is no AI in this version. Moderation is a set of explainable algorithms, e
 
 1. Create a Railway project from this repository and set the service **Root Directory** to `backend`. `railway.json` already holds the start command and the `/api/health` health check.
 2. Add a **PostgreSQL** plugin. Railway sets `DATABASE_URL` for you.
-3. Under **Variables**, set the ones you have. Every variable is optional and has a default; the full list with descriptions is in `backend/.env.example` (about 200, grouped). The ones worth setting first:
+3. Under **Variables**, set the ones you have. Every variable is optional. `backend/.env.example` (about 200, grouped) already holds the default for each one, so you can paste it into Railway as it is; the few lines that say `edit-me` are the ones only you can fill in (the app ignores `edit-me`, so leaving it is harmless). The ones worth setting first:
 
    | Variable | Why |
    |---|---|

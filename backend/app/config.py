@@ -292,6 +292,38 @@ def _read_env_file(path: str) -> dict[str, str]:
     return out
 
 
+# Variables that cannot have a useful default: .env.example shows this marker so you can see what still needs your input.
+# The backend treats the marker exactly like a blank value, so leaving it in place is harmless.
+PLACEHOLDER = "edit-me"
+
+NEEDS_EDIT = frozenset({
+    "owner_password", "public_base_url", "frontend_url", "telegram_bot_token", "google_client_id", "google_client_secret", "youtube_api_key",
+    "twitch_client_id", "twitch_client_secret", "twitch_channel", "twitch_bot_token", "kick_client_id", "kick_client_secret",
+    "discord_bot_token", "discord_webhook_url", "redis_url", "sentry_dsn", "smtp_host", "smtp_user", "smtp_password", "smtp_from",
+    "outbound_webhook_url", "outbound_webhook_secret", "ntfy_url", "ntfy_topic", "weather_api_key", "giphy_api_key", "ai_api_key",
+})
+
+# Blank on purpose; the reason is printed next to the variable in .env.example.
+BLANK_BECAUSE = {
+    "railway_public_domain": "Railway sets this itself",
+    "cors_origins": "only needed for extra dashboard addresses; FRONTEND_URL is already allowed",
+    "jwt_secret": "generated and stored automatically on first start",
+    "database_url": "Railway sets this when you add PostgreSQL; blank means a local SQLite file",
+    "telegram_webhook_secret": "generated and stored automatically",
+    "google_redirect_uri": "built from PUBLIC_BASE_URL automatically",
+    "youtube_refresh_token": "filled in when you press Connect on the Setup page",
+    "youtube_channel_id": "detected from your Google account",
+    "youtube_video_id": "blank means find the live stream automatically",
+    "urlfetch_allowed_hosts": "blank means any public host is allowed (private networks are always blocked)",
+    "ai_provider": "AI is not used in this version",
+    "ai_model": "AI is not used in this version",
+}
+
+
+def _is_placeholder(raw: Any) -> bool:
+    return str(raw).strip().lower().startswith(PLACEHOLDER)
+
+
 class Settings:
     """Typed, read-only view of the environment. Access values as attributes: settings.mod_mode."""
 
@@ -304,7 +336,7 @@ class Settings:
         values: dict[str, Any] = {}
         for f in FIELDS:
             raw = source.get(f.name)
-            if raw is None or str(raw).strip() == "":
+            if raw is None or str(raw).strip() == "" or _is_placeholder(raw):
                 values[f.name] = f.default
                 continue
             try:
@@ -379,7 +411,10 @@ def render_env_example() -> str:
         "# SavahBot backend environment variables.",
         "# Generated from app/config.py by scripts/gen_env_example.py. Do not edit by hand.",
         "# Copy to .env for local use, or paste into Railway > Variables.",
-        "# Every variable is optional: leave blank to use the default shown in the comment.",
+        "#",
+        "# Every line already holds the default, so the file works as it is.",
+        f"# Lines that say {PLACEHOLDER} are the ones only you can fill in; the app ignores {PLACEHOLDER}, so leaving it is harmless.",
+        "# A few lines are blank on purpose; the comment above each says why.",
         "",
     ]
     group = None
@@ -388,9 +423,16 @@ def render_env_example() -> str:
             group = f.group
             lines += ["", "# " + "=" * 70, f"# {group}", "# " + "=" * 70]
         default = f.default
-        shown = "true" if default is True else "false" if default is False else str(default)
+        if f.name in NEEDS_EDIT:
+            value, note = PLACEHOLDER, "you must edit this" if f.group != "Reserved (future features, unused today)" else "unused today; edit only when that feature ships"
+        elif f.name in BLANK_BECAUSE:
+            value, note = "", f"blank on purpose: {BLANK_BECAUSE[f.name]}"
+        else:
+            value = "true" if default is True else "false" if default is False else str(default)
+            note = ""
         lines.append(f"# {f.description}")
-        lines.append(f"# default: {shown if shown != '' else '(empty)'}")
-        lines.append(f"{env_name(f.name)}=")
+        if note:
+            lines.append(f"# ({note})")
+        lines.append(f"{env_name(f.name)}={value}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

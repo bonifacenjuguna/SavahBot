@@ -55,7 +55,7 @@ def test_every_field_is_in_env_example_and_names_are_unique():
     assert len(names) == len(set(names))
     text = config.render_env_example()
     for n in names:
-        assert f"\n{n.upper()}=\n" in text
+        assert text.count(f"\n{n.upper()}=") == 1, n
     assert len(names) > 130  # "as many placeholders as possible"
 
 
@@ -81,3 +81,19 @@ def test_env_example_is_up_to_date():
     from app.config import render_env_example
     target = Path(__file__).resolve().parents[1] / ".env.example"
     assert target.read_text() == render_env_example(), "run: python scripts/gen_env_example.py"
+
+
+def test_env_example_works_as_is_and_edit_me_is_ignored():
+    """Loading the shipped file must change nothing: every value is the default, a blank, or the edit-me marker."""
+    from pathlib import Path
+    from app.config import FIELDS, PLACEHOLDER, Settings, _read_env_file
+    target = Path(__file__).resolve().parents[1] / ".env.example"
+    loaded = Settings(env={}, env_file=str(target))
+    plain = Settings(env={}, env_file="")
+    for f in FIELDS:
+        assert loaded.get(f.name) == plain.get(f.name) == f.default, f.name
+    values = _read_env_file(str(target))
+    assert len(values) == len(FIELDS)
+    assert sum(v == PLACEHOLDER for v in values.values()) >= 5
+    assert Settings(env={"OWNER_PASSWORD": "edit-me", "TELEGRAM_BOT_TOKEN": "Edit-Me"}, env_file="").owner_password == ""
+    assert Settings(env={"OWNER_PASSWORD": "real-pass"}, env_file="").owner_password == "real-pass"
