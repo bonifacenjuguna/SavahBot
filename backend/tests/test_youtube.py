@@ -6,9 +6,11 @@ from fakes import FakeServer, wait_for
 from app.config import Settings, StaticConfig
 from app.container import Container
 from app.db import Database
-from app.services.youtube import AuthError, QuotaTracker, account_matches, parse_item
+from app.services.youtube import QuotaTracker, parse_item
 from app.store import Store
 
+OWNER_CH = "UC" + "o" * 22      # the channel that owns the stream (Creator A)
+MOD_CH = "UC" + "m" * 22        # the signed-in moderator's own channel (Creator B)
 SPAM = "FREE ROBUX at robux-gift.xyz right now everybody"
 
 
@@ -22,42 +24,19 @@ def item(id_, author, text, name=None, **flags):
             "authorDetails": {"channelId": author, "displayName": name or author, **flags}}
 
 
-OWNER = "UC" + "A" * 22      # Creator A: owns the channel that is streaming
-MOD = "UC" + "B" * 22        # Creator B: the account SavahBot is signed in as when it only moderates
-OTHER = "UC" + "C" * 22      # an unrelated channel
-
-
 class FakeYouTube:
-    """A scriptable YouTube/Google. `account_id` is WHO the OAuth token belongs to; `stream_owner` is WHOSE stream is live.
-    By default they are the same (a channel owner). Set account_id = MOD for the appointed-moderator scenario.
-
-    Owner-only endpoints behave like the real API as documented: liveBroadcasts.list returns only the caller's own broadcasts."""
-
     def __init__(self):
         self.live = True
         self.pages = []            # scripted responses for liveChat/messages: (status, json)
         self.token_calls = 0
         self.reject_first_api_call = False
         self.action_status = {}    # e.g. {"bans": (403, {...})}
-        self.account_id = OWNER
-        self.account_title = "Creator"
-        self.account_handle = "@creator"
-        self.stream_owner = OWNER
-        self.video_id = "vidLive"
-        self.chat_forbidden = False
-        self.moderators = set()    # channel ids appointed as moderators of the stream owner's chat
-        self.extra_videos = {}     # video id -> item
-        self.upcoming_only = False # the stream is scheduled but has not started
+        self.account_channel = OWNER_CH   # which channel `channels?mine=true` reports: the signed-in account
+        self.broadcast_channel = OWNER_CH
+        self.videos = {}                  # id -> item for /videos
+        self.search_ids = []              # ids returned by /search
+        self.handles = {}                 # "@handle" -> channel id
         self.server = FakeServer(self._handle)
-
-    def _live_video(self):
-        sn = {"title": "Friday Night Stream", "channelId": self.stream_owner, "channelTitle": "Creator A",
-              "liveBroadcastContent": "live" if self.live else "none"}
-        lsd = {"activeLiveChatId": "chat1"} if self.live else {"actualEndTime": "2026-11-02T12:00:00Z"}
-        return {"id": self.video_id, "snippet": sn, "liveStreamingDetails": lsd}
-
-    def _may_moderate(self):
-        return self.account_id == self.stream_owner or self.account_id in self.moderators
 
     def _handle(self, method, path, query, body, headers):
         if path == "/token":
@@ -71,31 +50,29 @@ class FakeYouTube:
             self.reject_first_api_call = False
             return 401, {"error": {"errors": [{"reason": "authError"}]}}
         if path.endswith("/channels"):
-            return 200, {"items": [{"id": self.account_id, "snippet": {"title": self.account_title, "customUrl": self.account_handle}}]}
-        if path.endswith("/liveBroadcasts"):
-            if not self.live or self.account_id != self.stream_owner:      # owner-only endpoint
-                return 200, {"items": []}
-            return 200, {"items": [{"id": "bc1", "snippet": {"liveChatId": "chat1", "title": "Friday Night Stream", "channelId": self.stream_owner}}]}
-        if path.endswith("/playlistItems"):
-            return 200, {"items": [{"contentDetails": {"videoId": self.video_id}}]}
+            if query.get("forHandle"):
+                cid = self.handles.get(query["forHandle"])
+                return 200, {"items": [{"id": cid, "snippet": {"title": "Handle channel"}}] if cid else []}
+            if not self.account_channel:
+                return 200, {}
+            return 200, {"items": [{"id": self.account_channel, "snippet": {"title": "Signed-in account", "customUrl": "@signedin"}}]}
         if path.endswith("/search"):
-            return 200, {"items": [{"id": {"videoId": self.video_id}}] if self.live else []}
+            return 200, {"items": [{"id": {"videoId": v}} for v in self.search_ids]}
         if path.endswith("/videos"):
-            wanted = query.get("id", "").split(",")
-            items = [self._live_video()] if self.video_id in wanted else []
-            items += [v for k, v in self.extra_videos.items() if k in wanted]
-            return 200, {"items": items}
+            return 200, {"items": [self.videos[v] for v in query["id"].split(",") if v in self.videos]}
+        if path.endswith("/liveBroadcasts"):
+            if not self.live:
+                return 200, {"items": []}
+            return 200, {"items": [{"id": "bc1", "snippet": {"liveChatId": "chat1", "title": "Friday Night Stream", "channelId": self.broadcast_channel}}]}
         if path.endswith("/liveChat/messages") and method == "GET":
-            if self.chat_forbidden:
-                return 403, {"error": {"errors": [{"reason": "forbidden"}]}}
             return self.pages.pop(0) if self.pages else (200, {"items": [], "nextPageToken": "tok", "pollingIntervalMillis": 10})
         for key in ("bans", "messages"):
             if path.endswith("/liveChat/" + key) and method in ("POST", "DELETE") and key in self.action_status:
                 return self.action_status[key]
         if path.endswith("/liveChat/messages") and method == "DELETE":
-            return (204, None) if self._may_moderate() else (403, {"error": {"errors": [{"reason": "forbidden"}]}})
+            return 204, None
         if path.endswith("/liveChat/bans"):
-            return (200, {"kind": "youtube#liveChatBan", "id": "ban1"}) if self._may_moderate() else (403, {"error": {"errors": [{"reason": "insufficientPermissions"}]}})
+            return 200, {"kind": "youtube#liveChatBan", "id": "ban1"}
         if path.endswith("/liveChat/messages") and method == "POST":
             return 200, {"id": "sent1"}
         return 404, {"error": {"errors": [{"reason": "notFound"}]}}
@@ -109,7 +86,7 @@ def env(fake, **extra):
     return {"BOT_MODE": "live", "DEMO_AUTOSTART": "false", "PUBLIC_BASE_URL": "https://bot.example", "GOOGLE_CLIENT_ID": "cid.apps",
             "GOOGLE_CLIENT_SECRET": "csecret", "YOUTUBE_REFRESH_TOKEN": "rt-1", "YOUTUBE_API_BASE": base + "/youtube/v3",
             "GOOGLE_OAUTH_TOKEN_URL": base + "/token", "YT_MIN_POLL_SECONDS": "0.01", "YT_MAX_POLL_SECONDS": "0.05",
-            "YOUTUBE_DETECT_INTERVAL_SECONDS": "1", "OWNER_PASSWORD": "pw", "YOUTUBE_TARGET_CHANNEL_ID": OWNER, **extra}
+            "YOUTUBE_DETECT_INTERVAL_SECONDS": "1", "OWNER_PASSWORD": "pw", "YOUTUBE_TARGET_CHANNEL_ID": OWNER_CH, **extra}
 
 
 async def boot(fake, **extra):
@@ -376,7 +353,7 @@ def test_pinned_video_id_uses_the_videos_endpoint():
 
         def handler(method, path, query, body, headers):
             if path.endswith("/videos"):
-                return 200, {"items": [{"id": "vid123", "snippet": {"title": "Pinned stream", "channelId": OWNER}, "liveStreamingDetails": {"activeLiveChatId": "chatP"}}]}
+                return 200, {"items": [{"id": "vid123", "snippet": {"title": "Pinned stream", "channelId": OWNER_CH}, "liveStreamingDetails": {"activeLiveChatId": "chatP"}}]}
             return orig(method, path, query, body, headers)
 
         fake.server.close()
@@ -399,331 +376,5 @@ def test_switching_between_demo_and_live_modes_at_runtime():
         await c.cfg.set("bot_mode", "demo")
         assert await wait_for(lambda: c.hub.status()["source"] == "demo" and c.youtube.state == "stopped")
         assert c.hub.stream_title.endswith("(demo stream)")
-        await c.stop()
-    run(go())
-
-
-# ================================================================ moderator account vs target channel
-async def spam_pending(c, fake):
-    """Feed one spam message (after the history poll) and return the approval request it creates."""
-    assert await live_and_polled(c)
-    fake.pages = [(200, {"items": [item("bad1", "UCspam", SPAM, "Spammer")], "nextPageToken": "t2", "pollingIntervalMillis": 10})]
-    assert await wait_for(lambda: any(m["author_name"] == "Spammer" for m in c.hub.buffer))
-    pend = await c.store.pending_actions()
-    assert len(pend) == 1
-    return pend[0]
-
-
-def as_moderator(fake):
-    """Creator B is signed in; Creator A owns the livestream and has appointed B as a moderator."""
-    fake.account_id, fake.account_title, fake.account_handle = MOD, "Creator B", "@creatorb"
-    fake.stream_owner = OWNER
-    fake.moderators = {MOD}
-
-
-def test_scenario_a_channel_owner_keeps_working_through_liveBroadcasts():
-    async def go():
-        fake = FakeYouTube()                                   # account == stream owner
-        c = await boot(fake)
-        assert await wait_for(lambda: c.youtube.state == "live")
-        st = c.youtube.status()
-        assert st["mode"] == "owner" and st["account"]["channel_id"] == OWNER and st["target"]["channel_id"] == OWNER
-        assert fake.calls("/liveBroadcasts") and not fake.calls("/playlistItems")
-        pend = await spam_pending(c, fake)
-        res = await c.hub.approve(pend["id"])
-        assert res["ok"] and res["status"] == "executed"
-        assert c.youtube.status()["permissions"]["delete"] is True and c.youtube.status()["permissions"]["ban"] is True
-        await c.stop()
-    run(go())
-
-
-def test_scenario_b_appointed_moderator_discovers_reads_deletes_and_bans_on_another_channel():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        c = await boot(fake)                                   # target = Creator A's channel, signed in as Creator B
-        assert await wait_for(lambda: c.youtube.state == "live")
-        st = c.youtube.status()
-        assert st["mode"] == "moderator"
-        assert st["account"]["channel_id"] == MOD and st["account"]["title"] == "Creator B"      # who is signed in (from Google)
-        assert st["target"]["channel_id"] == OWNER and st["target"]["title"] == "Creator A"        # whose stream is moderated
-        assert not fake.calls("/liveBroadcasts")                                                   # owner-only endpoint is never used
-        assert fake.calls("/playlistItems")[0]["query"]["playlistId"] == "UU" + OWNER[2:]
-        assert fake.calls("/channels")[0]["query"]["mine"] == "true"
-        pend = await spam_pending(c, fake)
-        res = await c.hub.approve(pend["id"])
-        assert res["ok"] and res["status"] == "executed"
-        assert fake.calls("/liveChat/messages", "DELETE")[0]["query"]["id"] == "bad1"
-        assert fake.calls("/liveChat/bans", "POST")[0]["body"]["snippet"]["liveChatId"] == "chat1"
-        assert all(r["auth"].startswith("Bearer at-") for r in fake.server.requests if "/youtube/v3" in r["path"])   # always B's credentials
-        await c.stop()
-    run(go())
-
-
-def test_scenario_b2_moderator_who_is_not_appointed_gets_an_honest_permission_error_and_no_retries():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        fake.moderators = set()                                # Creator A never appointed B
-        c = await boot(fake)
-        pend = await spam_pending(c, fake)
-        used = c.quota.used
-        res = await c.hub.approve(pend["id"])
-        assert res["ok"] is False and res["status"] == "failed"
-        assert "not allowed" in res["error"] and "Creator B" in res["error"] and OWNER in res["error"] and "moderator" in res["error"]
-        assert c.youtube.status()["permissions"]["delete"] is False
-        assert len(fake.calls("/liveChat/messages", "DELETE")) == 1 and fake.calls("/liveChat/bans") == []     # stopped at the first refusal
-        ok, err = await c.youtube.delete("bad1")                # asking again must not hit YouTube or spend quota
-        assert ok is False and "not allowed" in err
-        assert len(fake.calls("/liveChat/messages", "DELETE")) == 1
-        assert c.quota.used - used == c.quota.cost("chat_delete")
-        assert (await c.store.get_action(pend["id"]))["status"] == "failed"      # never reported as success
-        await c.stop()
-    run(go())
-
-
-def test_scenario_c_video_from_another_channel_is_rejected_not_attached():
-    async def go():
-        fake = FakeYouTube()
-        fake.extra_videos["vidOther"] = {"id": "vidOther", "snippet": {"title": "Someone else", "channelId": OTHER, "channelTitle": "Other"},
-                                         "liveStreamingDetails": {"activeLiveChatId": "chatOther"}}
-        c = await boot(fake, YOUTUBE_VIDEO_ID="vidOther")
-        assert await wait_for(lambda: c.youtube.state == "target_mismatch")
-        assert c.youtube.chat_id == "" and not fake.calls("/liveChat/messages", "GET")
-        err = c.youtube.status()["last_error"]
-        assert OTHER in err and OWNER in err and "Refusing" in err
-        assert not fake.calls("/liveBroadcasts")                # and it did not quietly fall back to discovery
-        await c.stop()
-    run(go())
-
-
-def test_scenario_c_pinned_video_of_the_right_channel_is_accepted_for_a_moderator():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        c = await boot(fake, YOUTUBE_VIDEO_ID="vidLive")
-        assert await wait_for(lambda: c.youtube.state == "live")
-        assert c.youtube.video_id == "vidLive" and not fake.calls("/playlistItems") and not fake.calls("/liveBroadcasts")
-        await c.stop()
-    run(go())
-
-
-def test_scenario_d_missing_target_is_a_clear_config_error_and_never_monitors_the_own_channel():
-    async def go():
-        fake = FakeYouTube()
-        c = await boot(fake, YOUTUBE_TARGET_CHANNEL_ID="")
-        assert await wait_for(lambda: c.youtube.state == "config_error")
-        err = c.youtube.status()["last_error"]
-        assert "YOUTUBE_TARGET_CHANNEL_ID" in err and "never falls back" in err
-        assert OWNER in err                                     # the hint names the connected account's channel, but does not use it
-        assert c.youtube.chat_id == "" and not fake.calls("/liveBroadcasts") and not fake.calls("/liveChat/messages")
-        await c.stop()
-    run(go())
-
-
-def test_scenario_d_a_handle_is_not_a_channel_id_and_the_old_variable_still_works():
-    async def go():
-        fake = FakeYouTube()
-        c = await boot(fake, YOUTUBE_TARGET_CHANNEL_ID="@creatora")
-        assert await wait_for(lambda: c.youtube.state == "config_error")
-        assert "24 characters" in c.youtube.status()["last_error"]
-        await c.stop()
-        fake2 = FakeYouTube()
-        c2 = await boot(fake2, YOUTUBE_TARGET_CHANNEL_ID="", YOUTUBE_CHANNEL_ID=OWNER)       # older installs: deprecated alias
-        assert await wait_for(lambda: c2.youtube.state == "live")
-        assert c2.youtube.status()["target"]["deprecated_variable"] is True
-        assert all(i["set"] for i in c2.cfg.requirements_status()["youtube"])
-        await c2.stop()
-    run(go())
-
-
-def test_scenario_e_revoked_login_is_an_auth_error_with_recovery_instructions():
-    async def go():
-        fake = FakeYouTube()
-        c = await boot(fake, YOUTUBE_REFRESH_TOKEN="rt-revoked")
-        assert await wait_for(lambda: c.youtube.state == "auth_error")
-        err = c.youtube.status()["last_error"]
-        assert "Reconnect YouTube" in err and "moderator account" in err and "csecret" not in err and "rt-revoked" not in err
-        assert not fake.calls("/liveBroadcasts") and not fake.calls("/playlistItems")
-        await c.stop()
-    run(go())
-
-
-def test_scenario_e_a_token_youtube_keeps_rejecting_is_an_auth_error_not_a_loop():
-    async def go():
-        fake = FakeYouTube()
-        orig = fake._handle
-        fake.server.close()
-        fake.server = FakeServer(lambda m, p, q, b, h: (401, {"error": {"errors": [{"reason": "authError"}]}}) if "/youtube/v3" in p else orig(m, p, q, b, h))
-        c = await boot(fake)
-        assert await wait_for(lambda: c.youtube.state == "auth_error")
-        assert "Reconnect YouTube" in c.youtube.status()["last_error"]
-        await c.stop()
-    run(go())
-
-
-def test_scenario_f_chat_that_forbids_reading_is_reported_and_not_hammered():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        fake.chat_forbidden = True
-        c = await boot(fake, YOUTUBE_PERMISSION_RETRY_SECONDS="60")
-        assert await wait_for(lambda: c.youtube.state == "no_permission")
-        st = c.youtube.status()
-        assert st["permissions"]["read"] is False and "Creator B" in st["last_error"] and "Nothing is being moderated" in st["last_error"]
-        assert st["chat_attached"] is False and not c.hub.stream_live
-        polls = len(fake.calls("/liveChat/messages", "GET"))
-        await asyncio.sleep(0.4)
-        assert len(fake.calls("/liveChat/messages", "GET")) == polls          # waits the retry interval instead of spinning
-        await c.stop()
-    run(go())
-
-
-def test_scenario_f_owner_and_moderator_bans_are_refused_with_the_right_words():
-    async def go():
-        fake = FakeYouTube()
-        c = await boot(fake)
-        assert await live_and_polled(c)
-        fake.action_status["bans"] = (403, {"error": {"errors": [{"reason": "liveChatBanInsertionNotAllowed"}]}})
-        ok, err = await c.youtube.ban("UCsomeMod")
-        assert ok is False and "owner or another moderator" in err
-        ok, err = await c.youtube.ban("UCsomeMod")                              # a target-specific refusal must not block other users
-        assert fake.calls("/liveChat/bans") and len(fake.calls("/liveChat/bans")) == 2
-        fake.action_status["messages"] = (403, {"error": {"errors": [{"reason": "modificationNotAllowed"}]}})
-        ok, err = await c.youtube.delete("m1")
-        assert ok is False and "will not delete" in err
-        assert c.youtube.status()["permissions"]["ban"] is None                  # unverified is never shown as verified
-        await c.stop()
-    run(go())
-
-
-def test_scenario_g_livestream_ends_and_discovery_resumes_for_a_moderator():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        c = await boot(fake)
-        assert await wait_for(lambda: c.youtube.state == "live")
-        fake.live = False
-        fake.pages = [(403, {"error": {"errors": [{"reason": "liveChatEnded"}]}})]
-        assert await wait_for(lambda: c.youtube.state == "offline" and not c.hub.stream_live)
-        assert c.youtube.chat_id == ""
-        fake.live = True
-        assert await wait_for(lambda: c.youtube.state == "live" and c.hub.stream_live, timeout=6)
-        await c.stop()
-    run(go())
-
-
-def test_scenario_g_chat_ended_event_stops_monitoring_immediately():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        c = await boot(fake)
-        assert await live_and_polled(c)
-        fake.live = False
-        fake.pages = [(200, {"items": [{"id": "e1", "snippet": {"type": "chatEndedEvent", "publishedAt": "2026-11-02T10:00:00Z"}}],
-                             "nextPageToken": "t7", "pollingIntervalMillis": 10})]
-        assert await wait_for(lambda: c.youtube.state == "offline" and not c.hub.stream_live)
-        await c.stop()
-    run(go())
-
-
-def test_wrong_google_account_is_refused_when_a_moderator_account_is_expected():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        c = await boot(fake, YOUTUBE_MODERATOR_ACCOUNT="@someoneelse")
-        assert await wait_for(lambda: c.youtube.state == "wrong_account")
-        assert c.youtube.chat_id == "" and not fake.calls("/playlistItems") and not fake.calls("/liveChat/messages")
-        assert "Creator B" in c.youtube.status()["last_error"] and "@someoneelse" in c.youtube.status()["last_error"]
-        await c.stop()
-        fake2 = FakeYouTube()
-        as_moderator(fake2)
-        c2 = await boot(fake2, YOUTUBE_MODERATOR_ACCOUNT=MOD)                 # right account (channel id) -> proceeds
-        assert await wait_for(lambda: c2.youtube.state == "live")
-        await c2.stop()
-    run(go())
-
-
-def test_account_matching_accepts_id_handle_or_name_and_blank_means_no_check():
-    acct = {"channel_id": MOD, "title": "Creator B", "handle": "@creatorb"}
-    assert account_matches("", acct) and account_matches(MOD, acct) and account_matches("@CreatorB", acct)
-    assert account_matches("creatorb", acct) and account_matches("creator b", acct)
-    assert not account_matches(OWNER, acct) and not account_matches("@creatora", acct)
-
-
-def test_identity_after_sign_in_is_read_from_google_remembered_and_refreshed_on_reconnect():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        c = await boot(fake, BOT_MODE="demo")
-        verdict, msg = await c.youtube.identify()
-        assert verdict == "ok" and c.youtube.account["channel_id"] == MOD
-        assert (await c.youtube.account_info())["title"] == "Creator B"
-        await c.google.exchange_code("code")                                    # a new sign-in forgets the old identity...
-        fake.account_id, fake.account_title, fake.account_handle = OTHER, "Someone New", "@someonenew"   # ...and the next lookup sees whoever signed in
-        verdict, msg = await c.youtube.identify()
-        assert verdict == "ok" and c.youtube.account["channel_id"] == OTHER
-        await c.stop()
-        c2 = await boot(fake, BOT_MODE="demo", YOUTUBE_MODERATOR_ACCOUNT="@creatorb")
-        verdict, msg = await c2.youtube.identify()
-        assert verdict == "rejected" and "Someone New" in msg
-        await c2.stop()
-    run(go())
-
-
-def test_discovery_for_a_moderator_is_cheap_and_skips_the_video_lookup_when_nothing_changed():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        fake.live = False
-        c = await boot(fake, YOUTUBE_DETECT_INTERVAL_SECONDS="0.05")
-        assert await wait_for(lambda: len(fake.calls("/playlistItems")) >= 4)
-        assert len(fake.calls("/videos")) == 1                  # same uploads, none live or upcoming: no need to ask again
-        assert c.youtube.state == "offline" and not fake.calls("/search")      # search (100 units) is opt-in
-        await c.stop()
-    run(go())
-
-
-def test_search_fallback_is_opt_in_and_still_checks_the_channel_owner():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        fake.video_id = "vidNew"
-        orig = fake._handle
-        fake.server.close()
-        fake.server = FakeServer(lambda m, p, q, b, h: (200, {"items": []}) if p.endswith("/playlistItems") else orig(m, p, q, b, h))   # not in recent uploads
-        c = await boot(fake, YOUTUBE_DISCOVERY_USE_SEARCH="true")
-        assert await wait_for(lambda: c.youtube.state == "live")
-        assert fake.calls("/search")[0]["query"]["channelId"] == OWNER and fake.calls("/search")[0]["query"]["eventType"] == "live"
-        await c.stop()
-    run(go())
-
-
-def test_diagnose_reports_what_was_really_verified_and_what_cannot_be_tested():
-    async def go():
-        fake = FakeYouTube()
-        as_moderator(fake)
-        c = await boot(fake, BOT_MODE="demo")
-        res = await c.youtube.diagnose()
-        by = {x["label"]: x for x in res["checks"]}
-        assert res["ok"] and by["Connected account"]["ok"] is True and by["Role"]["detail"].find("moderator") >= 0
-        assert by["Read chat"]["ok"] is True
-        assert by["Delete messages"]["ok"] is None and "no dry run" in by["Delete messages"]["detail"]      # honest: unverified
-        assert by["Ban / time out"]["ok"] is None
-        fake.chat_forbidden = True
-        res = await c.youtube.diagnose()
-        assert res["ok"] is False and {x["label"]: x for x in res["checks"]}["Read chat"]["ok"] is False
-        assert c.youtube.state == "stopped"                                     # a check never disturbs the running state
-        await c.stop()
-    run(go())
-
-
-def test_no_secrets_in_status_or_errors():
-    async def go():
-        fake = FakeYouTube()
-        c = await boot(fake, YOUTUBE_REFRESH_TOKEN="rt-revoked")
-        assert await wait_for(lambda: c.youtube.state == "auth_error")
-        blob = str(c.youtube.status())
-        assert "csecret" not in blob and "rt-revoked" not in blob and "rt-1" not in blob
         await c.stop()
     run(go())

@@ -150,17 +150,10 @@ async def youtube_callback(request: Request, c: Any) -> Any:
         return done(False, "This sign-in link expired or is not valid. Start again from the dashboard.")
     try:
         await c.google.exchange_code(q.get("code", ""))
+        c.youtube.forget_identity()
     except RuntimeError as exc:
         return done(False, str(exc))
-    verdict, problem = await c.youtube.identify()  # ask Google WHO just signed in, and check it is the account the owner expects
-    if verdict == "rejected":
-        await c.google.disconnect()  # never keep a token for the wrong account
-        return done(False, problem)
-    if verdict == "unknown":
-        return done(True, "YouTube is connected, but the account could not be identified yet: " + problem)
-    acct = c.youtube.account
-    return done(True, f"YouTube is connected as {acct.get('title') or acct.get('channel_id')} ({acct.get('channel_id')}). "
-                      "That account's permissions are what SavahBot will use.")
+    return done(True, "YouTube is connected.")
 
 
 # ================================================================================= session + status
@@ -185,7 +178,6 @@ async def setup(request: Request, c: Any) -> dict:
         "requirements": c.cfg.requirements_status(), "public_url": c.settings.public_url,
         "telegram_webhook_url": (c.settings.public_url + "/api/telegram/webhook") if c.settings.public_url else "",
         "google_redirect_uri": c.google.redirect_uri(), "youtube_connected": await c.google.connected(),
-        "youtube_account": await c.youtube.account_info(), "youtube_target": c.youtube.status()["target"],
         "telegram_owner_bound": c.telegram.status()["owner_bound"], "telegram_bot": c.telegram.status()["bot_username"],
     }
 
@@ -516,6 +508,8 @@ async def youtube_diagnostics(request: Request, c: Any) -> dict:
 
     checks = [
         check(bool(cid), "Client ID is set.", "GOOGLE_CLIENT_ID is empty or still edit-me."),
+        check(not cid.lower().startswith(("http://", "https://")), "Client ID is not a web address.",
+              "The Client ID starts with http:// or https://. Delete that part: it must begin directly with the numbers."),
         check(cid.endswith(".apps.googleusercontent.com"), "Client ID has the usual ending (.apps.googleusercontent.com).",
               "Client ID should end in .apps.googleusercontent.com. If it starts with GOCSPX-, it is the secret, not the ID."),
         check(cid == cid.strip() and not any(ch in cid for ch in " \t\r\n\"'"), "No spaces or quote marks around the Client ID.",
@@ -529,18 +523,17 @@ async def youtube_diagnostics(request: Request, c: Any) -> dict:
         check(redirect.endswith("/api/youtube/oauth/callback") and "//api" not in redirect, "Redirect address ends correctly.",
               "Redirect address should end in /api/youtube/oauth/callback with no doubled slash."),
     ]
+    yt = c.youtube.status()
+    target_raw = str(c.cfg.get("youtube_target_channel_id") or c.cfg.get("youtube_channel_id") or "")
+    checks.append(check(bool(target_raw) and not target_raw.lower().startswith("edit-me"), "A target channel is set.",
+                        "No target channel is set. Put the channel to moderate in YOUTUBE_TARGET_CHANNEL_ID, or press 'Moderate my own channel'."))
     return {
+        "account": yt["account"], "target": yt["target"], "target_setting": target_raw,
         "client_id": cid, "client_id_length": len(cid), "secret_set": bool(secret), "secret_length": len(secret),
         "redirect_uri": redirect, "scope": c.cfg.get("google_oauth_scope"),
         "sign_in_url": c.google.auth_url("preview") if cid and redirect else "", "checks": checks,
         "note": "If every check passes and Google still says the client was not found, the client is missing in Google Cloud or has not propagated yet (can take up to a few hours).",
     }
-
-
-@R.add("/youtube/verify", ["POST"])
-async def youtube_verify(request: Request, c: Any) -> dict:
-    """Probe what the connected account can really do for the target channel (nothing is moderated or changed)."""
-    return await c.youtube.diagnose()
 
 
 @R.add("/youtube/oauth/start", ["POST"])
@@ -552,9 +545,22 @@ async def youtube_start(request: Request, c: Any) -> dict:
     return {"url": c.google.auth_url(c.google.new_state()), "redirect_uri": c.google.redirect_uri()}
 
 
+@R.add("/youtube/use-own-channel", ["POST"])
+async def youtube_use_own_channel(request: Request, c: Any) -> dict:
+    """An explicit choice by the owner: moderate the signed-in account's own channel. SavahBot never assumes this by itself."""
+    if not await c.google.connected():
+        raise ApiError("Connect your Google account first.", 409)
+    acct = c.youtube.account or await c.youtube.refresh_identity()
+    if not acct or not acct.get("channel_id"):
+        raise ApiError("This Google account has no YouTube channel of its own. Enter the target channel ID instead.", 409)
+    await c.cfg.set("youtube_target_channel_id", acct["channel_id"])
+    return {"ok": True, "target": acct["channel_id"], "title": acct.get("title", "")}
+
+
 @R.add("/youtube/disconnect", ["POST"])
 async def youtube_disconnect(request: Request, c: Any) -> dict:
     await c.google.disconnect()
+    c.youtube.forget_identity()
     return {"ok": True}
 
 

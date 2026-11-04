@@ -224,17 +224,6 @@ async def test_mode_switch_and_guards(api):
 
 
 @e2e
-async def test_youtube_account_and_target_are_reported_separately_and_verify_never_claims_success(api):
-    st, b = await api.call("GET", "/api/setup")
-    assert st == 200 and b["youtube_account"] == {} and b["youtube_target"]["configured"] is False
-    assert any(i["env"] == "YOUTUBE_TARGET_CHANNEL_ID" and i["set"] is False for i in b["requirements"]["youtube"])
-    st, b = await api.call("GET", "/api/youtube/status")
-    assert st == 200 and b["target"]["configured"] is False and b["account"]["channel_id"] == "" and b["permissions"]["delete"] is None
-    st, b = await api.call("POST", "/api/youtube/verify")
-    assert st == 200 and b["ok"] is False and b["checks"][0]["ok"] is False and "Not connected" in b["checks"][0]["detail"]
-
-
-@e2e
 async def test_integrations_without_credentials(api):
     st, b = await api.call("GET", "/api/youtube/status")
     assert st == 200 and b["connected"] is False
@@ -290,11 +279,12 @@ async def test_youtube_diagnostics_flags_swapped_and_bad_values(api):
     api.c.cfg.settings._values["google_client_secret"] = "12345.apps.googleusercontent.com"
     st, b = await api.call("GET", "/api/youtube/diagnostics")
     bad = [c["text"] for c in b["checks"] if not c["ok"]]
-    assert any("should end in" in t for t in bad) and any("secret normally starts" in t for t in bad)
+    assert any("should end in" in t for t in bad) and any("target channel" in t for t in bad) and any("secret normally starts" in t for t in bad)
     assert "GOCSPX-abc" == b["client_id"] and "12345" not in str(b)
     api.c.cfg.settings._values["google_client_id"] = "123-abc.apps.googleusercontent.com"
     api.c.cfg.settings._values["google_client_secret"] = "GOCSPX-xyz"
     api.c.settings._values["public_base_url"] = "https://bot.example.app"
+    api.c.settings._values["youtube_target_channel_id"] = "UC" + "o" * 22
     st, b = await api.call("GET", "/api/youtube/diagnostics")
     assert st == 200 and all(c["ok"] for c in b["checks"]), b["checks"]
     assert "client_id=123-abc.apps.googleusercontent.com" in b["sign_in_url"] and "GOCSPX" not in b["sign_in_url"]
