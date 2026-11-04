@@ -309,7 +309,8 @@ class YouTubeSource:
         return {"state": self.state, "connected": self._connected_cache, "chat_attached": bool(self.chat_id), "video_id": self.video_id,
                 "title": self.title, "last_error": self.last_error or self.auth.last_error, "last_poll": self.last_poll or None,
                 "polls": self.polls, "quota": self.quota.status(), "redirect_uri": self.auth.redirect_uri(),
-                "account": self.account, "target": self.target or self._configured_target(), "video_channel_id": self.video_channel_id,
+                "account": self.account, "target": self.target or self._configured_target(), "target_source": self._target_source(),
+                "video_channel_id": self.video_channel_id,
                 "last_action_error": self.last_action_error, "permissions": dict(self.perms),
                 "denied_for": {k: max(0, round(until - time.time())) for k, (until, _m) in self._denied.items() if until > time.time()},
                 "expected_account": (self.cfg.get("youtube_moderator_account") or "").strip()}
@@ -403,6 +404,15 @@ class YouTubeSource:
         if raw.startswith("@"):
             return {"channel_id": raw, "title": "(handle: resolved when live)"}
         return None
+
+    def _target_source(self) -> str:
+        """Where the target setting comes from. A value saved from the dashboard (for example by the 'Moderate my own channel'
+        button) silently beats the Railway variable, so the Setup page shows which one is in force."""
+        if "youtube_target_channel_id" in (getattr(self.cfg, "_overrides", None) or {}):
+            return "dashboard"
+        if self.cfg.get("youtube_target_channel_id"):
+            return "env"
+        return "legacy" if self.cfg.get("youtube_channel_id") else ""
 
     def _expected_account(self) -> str:
         return (self.cfg.get("youtube_moderator_account") or "").strip()

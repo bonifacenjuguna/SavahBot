@@ -1,4 +1,4 @@
-import { get, post } from "../api.js";
+import { del, get, post } from "../api.js";
 import { busy, copyButton, h, mount, toast, ago } from "../dom.js";
 import { refreshStatus } from "../state.js";
 import type { Page } from "./types.js";
@@ -59,7 +59,9 @@ export const setup: Page = {
                   h("span", null, yt.account ? (yt.account.title || "Unnamed account") : "Not looked up yet", yt.account?.channel_id ? h("span", { class: "mono muted" }, `  ${yt.account.channel_id}`) : yt.account ? h("span", { class: "muted" }, "  (no YouTube channel of its own)") : null)),
                 h("div", null, h("div", { class: "muted small" }, "Moderating the live chat of (the target channel)"),
                   yt.target ? h("span", null, yt.target.title || "Channel", h("span", { class: "mono muted" }, `  ${yt.target.channel_id}`)) : h("span", { class: "chip warn" }, "Not set: put its ID in YOUTUBE_TARGET_CHANNEL_ID"),
-                  !yt.target && yt.account?.channel_id ? h("div", { style: "margin-top:6px" }, h("button", { class: "btn small primary", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/youtube/use-own-channel"); await load(); }, "Now moderating your own channel") }, "Moderate my own channel")) : null)) : null,
+                  !yt.target && yt.account?.channel_id ? h("div", { style: "margin-top:6px" }, h("button", { class: "btn small primary", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/youtube/use-own-channel"); await load(); }, "Now moderating your own channel") }, "Moderate my own channel")) : null,
+                  yt.target ? h("p", { class: "muted small", style: "margin-top:6px" }, ((yt as any).target_source === "dashboard" ? "Set from this dashboard (this overrides the Railway variable). " : (yt as any).target_source === "legacy" ? "Taken from the old YOUTUBE_CHANNEL_ID variable: delete it and set YOUTUBE_TARGET_CHANNEL_ID. " : "Taken from the YOUTUBE_TARGET_CHANNEL_ID Railway variable. ")) : null,
+                  (yt as any)?.target_source === "dashboard" ? h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await del("/api/settings/youtube_target_channel_id"); await load(); }, "Now using the Railway variable") }, "Use the Railway variable instead") : null)) : null,
               yt ? h("p", { class: "muted small" }, `State: ${yt.state}. Last poll ${ago(yt.last_poll)}. Quota used today: ${yt.quota.used} of ${yt.quota.daily} units.`) : null,
               h("div", { class: "row" },
                 h("button", { class: "btn primary", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { const r = await post<{ url: string }>("/api/youtube/oauth/start"); location.href = r.url; }) }, s.youtube_connected ? "Reconnect Google account" : "Connect Google account"),
