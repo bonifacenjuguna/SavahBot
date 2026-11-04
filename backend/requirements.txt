@@ -1,0 +1,5 @@
+starlette>=0.40
+uvicorn[standard]>=0.30
+pydantic>=2.7
+asyncpg>=0.29
+tzdata>=2024.1

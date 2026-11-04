@@ -1,0 +1,203 @@
+"""Database layer: one small interface, two backends.
+
+  * SQLite  - local development and the test-suite (standard library, fully tested)
+  * PostgreSQL via asyncpg - Railway production (set DATABASE_URL)
+
+All timestamps are stored as unix seconds (double precision) and booleans as 0/1, so the exact same SQL
+runs on both. SQL is written with '?' placeholders; the PostgreSQL adapter rewrites them to $1, $2...
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import sqlite3
+import threading
+from pathlib import Path
+from typing import Any, Sequence
+
+logger = logging.getLogger("savahbot.db")
+
+# {PK} -> auto-increment primary key, {REAL} -> 8-byte float, per backend.
+SCHEMA: list[str] = [
+    "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated {REAL} NOT NULL)",
+    """CREATE TABLE IF NOT EXISTS commands (
+        id {PK}, name TEXT NOT NULL UNIQUE, response TEXT NOT NULL, userlevel TEXT NOT NULL DEFAULT 'everyone',
+        cooldown INTEGER NOT NULL DEFAULT 5, user_cooldown INTEGER NOT NULL DEFAULT 10,
+        enabled INTEGER NOT NULL DEFAULT 1, aliases TEXT NOT NULL DEFAULT '', uses INTEGER NOT NULL DEFAULT 0,
+        created {REAL} NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS timers (
+        id {PK}, name TEXT NOT NULL UNIQUE, message TEXT NOT NULL, interval_seconds INTEGER NOT NULL,
+        min_lines INTEGER NOT NULL DEFAULT 5, enabled INTEGER NOT NULL DEFAULT 1,
+        last_fired {REAL} NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL)""",
+    "CREATE TABLE IF NOT EXISTS quotes (id {PK}, body TEXT NOT NULL, author TEXT NOT NULL DEFAULT '', created {REAL} NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS regulars (id {PK}, ident TEXT NOT NULL UNIQUE, label TEXT NOT NULL, created {REAL} NOT NULL)",
+    """CREATE TABLE IF NOT EXISTS blacklist (
+        id {PK}, phrase TEXT NOT NULL UNIQUE, is_regex INTEGER NOT NULL DEFAULT 0, weight INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1, hits INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS notes (
+        id {PK}, body TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0,
+        created {REAL} NOT NULL, updated {REAL} NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS reminders (
+        id {PK}, body TEXT NOT NULL, due {REAL} NOT NULL, repeat_kind TEXT NOT NULL DEFAULT 'none',
+        interval_seconds INTEGER, status TEXT NOT NULL DEFAULT 'pending', created {REAL} NOT NULL,
+        fired_at {REAL})""",
+    """CREATE TABLE IF NOT EXISTS chat_messages (
+        id {PK}, platform TEXT NOT NULL, msg_id TEXT NOT NULL DEFAULT '', author_id TEXT NOT NULL,
+        author_name TEXT NOT NULL, body TEXT NOT NULL, level TEXT NOT NULL DEFAULT 'everyone', ts {REAL} NOT NULL,
+        score INTEGER NOT NULL DEFAULT 0, verdict TEXT NOT NULL DEFAULT 'allow', demo INTEGER NOT NULL DEFAULT 0)""",
+    """CREATE TABLE IF NOT EXISTS mod_actions (
+        id {PK}, ts {REAL} NOT NULL, platform TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL,
+        message_ids TEXT NOT NULL DEFAULT '[]', body TEXT NOT NULL DEFAULT '', action TEXT NOT NULL,
+        duration INTEGER, score INTEGER NOT NULL DEFAULT 0, reasons TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'suggest', error TEXT NOT NULL DEFAULT '',
+        resolved_ts {REAL}, demo INTEGER NOT NULL DEFAULT 0)""",
+    "CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS quota_usage (day TEXT PRIMARY KEY, units INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_chat_ts ON chat_messages (ts)",
+    "CREATE INDEX IF NOT EXISTS idx_actions_status ON mod_actions (status, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (status, due)",
+]
+
+
+class _SQLite:
+    backend = "sqlite"
+
+    def __init__(self, path: str) -> None:
+        if path != ":memory:":
+            Path(path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._lock = threading.Lock()
+
+    def _exec(self, sql: str, params: Sequence[Any], mode: str) -> Any:
+        with self._lock:
+            cur = self._conn.execute(sql, tuple(params))
+            if mode == "all":
+                return [dict(r) for r in cur.fetchall()]
+            if mode == "one":
+                r = cur.fetchone()
+                return dict(r) if r else None
+            if mode == "insert":
+                return cur.lastrowid
+            return cur.rowcount
+
+    async def run(self, sql: str, params: Sequence[Any], mode: str) -> Any:
+        return await asyncio.to_thread(self._exec, sql, params, mode)
+
+    async def init_schema(self) -> None:
+        for stmt in SCHEMA:
+            await self.run(stmt.replace("{PK}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL"), (), "exec")
+
+    async def close(self) -> None:
+        with self._lock:
+            self._conn.close()
+
+
+class _Postgres:
+    backend = "postgres"
+
+    def __init__(self, dsn: str, pool_size: int) -> None:
+        self._dsn = dsn
+        self._pool_size = pool_size
+        self._pool: Any = None
+
+    async def connect(self) -> None:
+        import asyncpg  # imported lazily so SQLite-only setups do not need it
+
+        self._pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=max(1, self._pool_size))
+
+    @staticmethod
+    def _q(sql: str) -> str:
+        out, n = [], 0
+        for ch in sql:
+            if ch == "?":
+                n += 1
+                out.append(f"${n}")
+            else:
+                out.append(ch)
+        return "".join(out)
+
+    async def run(self, sql: str, params: Sequence[Any], mode: str) -> Any:
+        q = self._q(sql)
+        async with self._pool.acquire() as conn:
+            if mode == "all":
+                return [dict(r) for r in await conn.fetch(q, *params)]
+            if mode == "one":
+                r = await conn.fetchrow(q, *params)
+                return dict(r) if r else None
+            if mode == "insert":
+                return await conn.fetchval(q + " RETURNING id", *params)
+            status = await conn.execute(q, *params)  # e.g. "UPDATE 3"
+            try:
+                return int(status.split()[-1])
+            except (ValueError, IndexError):
+                return 0
+
+    async def init_schema(self) -> None:
+        for stmt in SCHEMA:
+            await self.run(stmt.replace("{PK}", "SERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION"), (), "exec")
+
+    async def close(self) -> None:
+        if self._pool:
+            await self._pool.close()
+
+
+class Database:
+    def __init__(self, url: str = "", pool_size: int = 5, echo: bool = False) -> None:
+        self.echo = echo
+        url = (url or "").strip()
+        if url.startswith(("postgres://", "postgresql://")):
+            self._impl: _SQLite | _Postgres = _Postgres(url, pool_size)
+        else:
+            path = url[len("sqlite:///"):] if url.startswith("sqlite:///") else (url or "savahbot.db")
+            self._impl = _SQLite(path)
+
+    @property
+    def backend(self) -> str:
+        return self._impl.backend
+
+    async def connect(self) -> None:
+        if isinstance(self._impl, _Postgres):
+            await self._impl.connect()
+        await self._impl.init_schema()
+        logger.info("Database ready (%s)", self.backend)
+
+    async def close(self) -> None:
+        await self._impl.close()
+
+    async def execute(self, sql: str, params: Sequence[Any] = ()) -> int:
+        if self.echo:
+            logger.debug("SQL %s %s", sql, params)
+        return await self._impl.run(sql, params, "exec")
+
+    async def fetchall(self, sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
+        if self.echo:
+            logger.debug("SQL %s %s", sql, params)
+        return await self._impl.run(sql, params, "all")
+
+    async def fetchone(self, sql: str, params: Sequence[Any] = ()) -> dict[str, Any] | None:
+        if self.echo:
+            logger.debug("SQL %s %s", sql, params)
+        return await self._impl.run(sql, params, "one")
+
+    async def insert(self, sql: str, params: Sequence[Any] = ()) -> int:
+        if self.echo:
+            logger.debug("SQL %s %s", sql, params)
+        return int(await self._impl.run(sql, params, "insert"))
+
+    # ---- key/value helpers -----------------------------------------------------------------
+    async def kv_get(self, key: str, default: str | None = None) -> str | None:
+        row = await self.fetchone("SELECT value FROM kv WHERE key = ?", (key,))
+        return row["value"] if row else default
+
+    async def kv_set(self, key: str, value: str) -> None:
+        await self.execute(
+            "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+    async def kv_delete(self, key: str) -> None:
+        await self.execute("DELETE FROM kv WHERE key = ?", (key,))
