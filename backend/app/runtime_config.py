@@ -126,6 +126,8 @@ class RuntimeConfig:
             items = []
             for n in names:
                 v = self.settings.get(n) if n != "public_base_url" else self.settings.public_url
+                if n == "youtube_target_channel_id":
+                    v = v or self.settings.get("youtube_channel_id")  # deprecated alias still counts
                 items.append({"env": config.env_name(n), "set": v not in ("", None, 0)})
             status[area] = items
         return status

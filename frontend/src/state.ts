@@ -27,6 +27,10 @@ export interface Status {
     polls: number;
     quota: { used: number; daily: number; remaining: number; fraction: number; day: string; reset_tz: string };
     redirect_uri: string;
+    mode?: string; problem?: string;
+    permissions?: Record<string, boolean | null>;
+    account?: { channel_id: string; title: string; handle: string };
+    target?: { channel_id: string; title: string; configured: boolean };
   };
   demo: { state: string; ambient: boolean; scenarios_running: string[]; channel: string };
   pending: number;

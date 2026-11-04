@@ -83,15 +83,20 @@ _f(G, "google_client_id", "", "OAuth client id from Google Cloud Console (YouTub
 _f(G, "google_client_secret", "", "OAuth client secret.")
 _f(G, "google_redirect_uri", "", "OAuth redirect URI. Empty = PUBLIC_BASE_URL + /api/youtube/oauth/callback (add this exact URL in Google Cloud).")
 _f(G, "youtube_refresh_token", "", "Optional: paste a refresh token here, or connect from the dashboard and it is stored for you.")
-_f(G, "youtube_channel_id", "", "Optional: your channel id (informational).")
-_f(G, "youtube_video_id", "", "Optional: pin a specific live video id instead of auto-detecting your active broadcast.")
+_f(G, "youtube_moderator_account", "", "Optional safety check: the channel ID (UC...), @handle or channel name of the Google account you expect to connect (the moderator or the owner). If Google reports a different account, SavahBot refuses to attach. The real identity always comes from Google, never from this value, and it grants nothing.")
+_f(G, "youtube_target_channel_id", "", "The channel whose live chat SavahBot monitors and moderates: its channel ID, which starts with UC. This is NOT the account you sign in with. If you are a moderator on someone else's channel, put THEIR channel ID here. Never guessed or defaulted to the connected account.")
+_f(G, "youtube_channel_id", "", "Deprecated alias of YOUTUBE_TARGET_CHANNEL_ID, still honoured so older installs keep working. Use YOUTUBE_TARGET_CHANNEL_ID instead.")
+_f(G, "youtube_video_id", "", "Optional: pin one specific live video id instead of auto-discovering. It must belong to the target channel or SavahBot refuses to attach to it.")
 _f(G, "google_oauth_auth_url", "https://accounts.google.com/o/oauth2/v2/auth", "Google OAuth consent URL.")
 _f(G, "google_oauth_token_url", "https://oauth2.googleapis.com/token", "Google OAuth token URL.")
 _f(G, "google_oauth_scope", "https://www.googleapis.com/auth/youtube.force-ssl", "OAuth scope. force-ssl is required to read chat, delete messages and ban users.")
 _f(G, "youtube_api_key", "", "Reserved: API key for public (unauthenticated) reads.")
 _f(G, "youtube_api_base", "https://www.googleapis.com/youtube/v3", "YouTube Data API base URL.")
-_f(G, "youtube_auto_detect_live", True, "Automatically find your active live broadcast.")
-_f(G, "youtube_detect_interval_seconds", 90, "How often to check for a live broadcast while offline (costs 1 quota unit per check).")
+_f(G, "youtube_auto_detect_live", True, "Automatically find the target channel's active livestream (when no YOUTUBE_VIDEO_ID is pinned).")
+_f(G, "youtube_discovery_use_search", False, "Moderator mode only. If the cheap lookup (the channel's recent uploads, about 2 quota units) finds nothing, also try YouTube search for a live video. Search costs 100 units per check, so it is off by default.")
+_f(G, "youtube_search_interval_seconds", 600, "Minimum seconds between search-based lookups (only when YOUTUBE_DISCOVERY_USE_SEARCH is on).")
+_f(G, "youtube_permission_retry_seconds", 300, "After YouTube refuses an action because the account lacks permission, wait this long before trying that kind of action again.")
+_f(G, "youtube_detect_interval_seconds", 90, "How often to look for the target channel's live stream while offline (1 quota unit per check in owner mode, about 2 in moderator mode).")
 _f(G, "youtube_expected_stream_hours", 4.0, "Typical stream length. The quota governor paces chat polling so a stream this long fits the daily budget.")
 _f(G, "youtube_max_results", 200, "Chat messages requested per poll (200-2000).")
 _f(G, "youtube_use_streaming", False, "Reserved: use the streamList (gRPC) endpoint instead of polling.")
@@ -105,9 +110,12 @@ _f(G, "yt_cost_chat_list", 5, "Quota cost: read chat messages. Verify against th
 _f(G, "yt_cost_chat_insert", 20, "Quota cost: send a chat message.")
 _f(G, "yt_cost_chat_delete", 20, "Quota cost: delete a chat message.")
 _f(G, "yt_cost_ban", 200, "Quota cost: ban / time out a user.")
-_f(G, "yt_cost_broadcast_list", 1, "Quota cost: look up your live broadcast.")
+_f(G, "yt_cost_broadcast_list", 1, "Quota cost: look up your own live broadcasts (owner mode).")
 _f(G, "yt_cost_video_list", 1, "Quota cost: look up a video.")
 _f(G, "yt_cost_moderator_list", 50, "Quota cost: list moderators.")
+_f(G, "yt_cost_channel_list", 1, "Quota cost: look up the connected account's own channel.")
+_f(G, "yt_cost_playlist_list", 1, "Quota cost: read a channel's recent uploads.")
+_f(G, "yt_cost_search_list", 100, "Quota cost: YouTube search (only used when YOUTUBE_DISCOVERY_USE_SEARCH is on).")
 _f(G, "yt_read_budget_fraction", 0.6, "Share of the daily quota the bot may spend reading chat (the rest is kept for actions).")
 _f(G, "yt_min_poll_seconds", 5.0, "Never poll chat faster than this.")
 _f(G, "yt_max_poll_seconds", 60.0, "Never wait longer than this between polls.")
@@ -240,7 +248,7 @@ BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 EDITABLE_PREFIXES = (
     "mod_", "command_", "urlfetch_", "demo_", "yt_", "timers_", "reminders_", "scheduler_",
     "telegram_notify_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
-    "youtube_backfill", "youtube_auto", "chat_", "sse_",
+    "youtube_backfill", "youtube_auto", "youtube_search", "youtube_permission", "youtube_discovery", "chat_", "sse_",
 )
 EDITABLE_KEYS = {"bot_mode", "telegram_mode", "owner_timezone"}
 ENUMS: dict[str, list[str]] = {
@@ -297,7 +305,7 @@ def _read_env_file(path: str) -> dict[str, str]:
 PLACEHOLDER = "edit-me"
 
 NEEDS_EDIT = frozenset({
-    "owner_password", "public_base_url", "frontend_url", "telegram_bot_token", "google_client_id", "google_client_secret", "youtube_api_key",
+    "owner_password", "public_base_url", "frontend_url", "telegram_bot_token", "google_client_id", "google_client_secret", "youtube_target_channel_id", "youtube_api_key",
     "twitch_client_id", "twitch_client_secret", "twitch_channel", "twitch_bot_token", "kick_client_id", "kick_client_secret",
     "discord_bot_token", "discord_webhook_url", "redis_url", "sentry_dsn", "smtp_host", "smtp_user", "smtp_password", "smtp_from",
     "outbound_webhook_url", "outbound_webhook_secret", "ntfy_url", "ntfy_topic", "weather_api_key", "giphy_api_key", "ai_api_key",
@@ -312,8 +320,9 @@ BLANK_BECAUSE = {
     "telegram_webhook_secret": "generated and stored automatically",
     "google_redirect_uri": "built from PUBLIC_BASE_URL automatically",
     "youtube_refresh_token": "filled in when you press Connect on the Setup page",
-    "youtube_channel_id": "detected from your Google account",
-    "youtube_video_id": "blank means find the live stream automatically",
+    "youtube_moderator_account": "blank means no check; whichever Google account you connect is used",
+    "youtube_channel_id": "deprecated: use YOUTUBE_TARGET_CHANNEL_ID",
+    "youtube_video_id": "blank means find the target channel's live stream automatically",
     "urlfetch_allowed_hosts": "blank means any public host is allowed (private networks are always blocked)",
     "ai_provider": "AI is not used in this version",
     "ai_model": "AI is not used in this version",
@@ -397,7 +406,7 @@ class StaticConfig:
 REQUIREMENTS: dict[str, list[str]] = {
     "dashboard": ["owner_password"],
     "telegram": ["telegram_bot_token", "public_base_url"],
-    "youtube": ["google_client_id", "google_client_secret", "public_base_url"],
+    "youtube": ["google_client_id", "google_client_secret", "public_base_url", "youtube_target_channel_id"],
     "database": ["database_url"],
 }
 

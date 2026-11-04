@@ -224,6 +224,17 @@ async def test_mode_switch_and_guards(api):
 
 
 @e2e
+async def test_youtube_account_and_target_are_reported_separately_and_verify_never_claims_success(api):
+    st, b = await api.call("GET", "/api/setup")
+    assert st == 200 and b["youtube_account"] == {} and b["youtube_target"]["configured"] is False
+    assert any(i["env"] == "YOUTUBE_TARGET_CHANNEL_ID" and i["set"] is False for i in b["requirements"]["youtube"])
+    st, b = await api.call("GET", "/api/youtube/status")
+    assert st == 200 and b["target"]["configured"] is False and b["account"]["channel_id"] == "" and b["permissions"]["delete"] is None
+    st, b = await api.call("POST", "/api/youtube/verify")
+    assert st == 200 and b["ok"] is False and b["checks"][0]["ok"] is False and "Not connected" in b["checks"][0]["detail"]
+
+
+@e2e
 async def test_integrations_without_credentials(api):
     st, b = await api.call("GET", "/api/youtube/status")
     assert st == 200 and b["connected"] is False

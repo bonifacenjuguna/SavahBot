@@ -7,7 +7,11 @@ interface Setup {
   requirements: Record<string, { env: string; set: boolean }[]>;
   public_url: string; telegram_webhook_url: string; google_redirect_uri: string;
   youtube_connected: boolean; telegram_owner_bound: boolean; telegram_bot: string | null;
+  youtube_account: { channel_id?: string; title?: string; handle?: string };
+  youtube_target: { channel_id: string; title: string; configured: boolean; deprecated_variable: boolean };
 }
+
+interface Verify { ok: boolean; checks: { ok: boolean | null; label: string; detail: string }[] }
 
 interface Diag {
   client_id: string; client_id_length: number; secret_set: boolean; redirect_uri: string; scope: string; sign_in_url: string;
@@ -32,6 +36,14 @@ export const setup: Page = {
         h("p", { class: "muted small" }, "Compare both with the SavahBot client in Google Cloud: they must match exactly. The client secret is never shown."),
         h("p", { class: "muted small" }, d.note));
     };
+    const verifyBox = h("div", { class: "body stack" });
+    const runVerify = async () => {
+      const v = await post<Verify>("/api/youtube/verify");
+      mount(verifyBox,
+        h("ul", { class: "list", style: "margin:0" }, v.checks.map((c) => h("li", { class: "row", style: "padding:6px 0;border:0" },
+          h("span", { class: `chip ${c.ok === true ? "ok" : c.ok === false ? "bad" : "warn"}` }, c.ok === true ? "OK" : c.ok === false ? "Fix" : "Unverified"),
+          h("span", null, h("strong", null, c.label + ": "), c.detail)))));
+    };
     const load = async () => {
       const [s, st] = await Promise.all([get<Setup>("/api/setup"), refreshStatus()]);
       const yt = st?.youtube, tg = st?.telegram;
@@ -44,6 +56,9 @@ export const setup: Page = {
           h("section", { class: "block" }, h("header", null, h("h2", null, "YouTube"), h("span", { class: `chip ${s.youtube_connected ? "ok" : "warn"}` }, s.youtube_connected ? "Connected" : "Not connected")),
             h("div", { class: "body stack" },
               yt?.last_error ? h("p", { style: "color:var(--bad)" }, yt.last_error) : null,
+              h("p", { class: "small" }, h("strong", null, "Signed in as: "), s.youtube_account?.channel_id ? `${s.youtube_account.title || "(no name)"} (${s.youtube_account.channel_id})` : "not identified yet",
+                h("br"), h("strong", null, "Moderating channel: "), s.youtube_target?.configured ? `${s.youtube_target.title ? s.youtube_target.title + " " : ""}(${s.youtube_target.channel_id})` : "not set. Add YOUTUBE_TARGET_CHANNEL_ID in Railway."),
+              s.youtube_target?.deprecated_variable ? h("p", { class: "muted small" }, "You are using the older YOUTUBE_CHANNEL_ID name. Rename it to YOUTUBE_TARGET_CHANNEL_ID.") : null,
               yt ? h("p", { class: "muted small" }, `State: ${yt.state}. Last poll ${ago(yt.last_poll)}. Quota used today: ${yt.quota.used} of ${yt.quota.daily} units.`) : null,
               h("div", { class: "row" },
                 h("button", { class: "btn primary", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { const r = await post<{ url: string }>("/api/youtube/oauth/start"); location.href = r.url; }) }, s.youtube_connected ? "Reconnect Google account" : "Connect Google account"),
@@ -58,6 +73,8 @@ export const setup: Page = {
                 return sel;
               })()), h("button", { class: "btn ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/telegram/test"); }, "Test message sent") }, "Send test message")),
               h("p", { class: "muted small" }, tg?.mode === "webhook" ? `Webhook: ${tg.webhook_url || "not registered"}` : `Polling: ${tg?.polling ? "running" : "stopped"}`)))),
+        h("section", { class: "block flush" }, h("header", null, h("h2", null, "Verify moderator access"),
+          h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runVerify) }, "Verify access")), verifyBox),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Check the Google connection"),
           h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runDiag) }, "Run check")), diagBox),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Variables to set in Railway"), h("span", { class: "muted small" }, "Everything else already has a safe default")),

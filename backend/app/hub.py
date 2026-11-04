@@ -262,8 +262,8 @@ class Hub:
                 ok, err = await src.delete(mid)
                 if not ok:
                     errors.append(err)
-                    if "quota" in err.lower():
-                        break
+                    if "quota" in err.lower() or "not allowed" in err.lower():
+                        break  # out of quota, or YouTube said this account may not delete: more tries cannot succeed
             if a["action"] == "timeout" and not errors:
                 ok, err = await src.timeout(a["author_id"], a["duration"] or 300)
                 if not ok:

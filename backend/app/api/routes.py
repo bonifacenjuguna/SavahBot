@@ -152,7 +152,15 @@ async def youtube_callback(request: Request, c: Any) -> Any:
         await c.google.exchange_code(q.get("code", ""))
     except RuntimeError as exc:
         return done(False, str(exc))
-    return done(True, "YouTube is connected.")
+    verdict, problem = await c.youtube.identify()  # ask Google WHO just signed in, and check it is the account the owner expects
+    if verdict == "rejected":
+        await c.google.disconnect()  # never keep a token for the wrong account
+        return done(False, problem)
+    if verdict == "unknown":
+        return done(True, "YouTube is connected, but the account could not be identified yet: " + problem)
+    acct = c.youtube.account
+    return done(True, f"YouTube is connected as {acct.get('title') or acct.get('channel_id')} ({acct.get('channel_id')}). "
+                      "That account's permissions are what SavahBot will use.")
 
 
 # ================================================================================= session + status
@@ -177,6 +185,7 @@ async def setup(request: Request, c: Any) -> dict:
         "requirements": c.cfg.requirements_status(), "public_url": c.settings.public_url,
         "telegram_webhook_url": (c.settings.public_url + "/api/telegram/webhook") if c.settings.public_url else "",
         "google_redirect_uri": c.google.redirect_uri(), "youtube_connected": await c.google.connected(),
+        "youtube_account": await c.youtube.account_info(), "youtube_target": c.youtube.status()["target"],
         "telegram_owner_bound": c.telegram.status()["owner_bound"], "telegram_bot": c.telegram.status()["bot_username"],
     }
 
@@ -526,6 +535,12 @@ async def youtube_diagnostics(request: Request, c: Any) -> dict:
         "sign_in_url": c.google.auth_url("preview") if cid and redirect else "", "checks": checks,
         "note": "If every check passes and Google still says the client was not found, the client is missing in Google Cloud or has not propagated yet (can take up to a few hours).",
     }
+
+
+@R.add("/youtube/verify", ["POST"])
+async def youtube_verify(request: Request, c: Any) -> dict:
+    """Probe what the connected account can really do for the target channel (nothing is moderated or changed)."""
+    return await c.youtube.diagnose()
 
 
 @R.add("/youtube/oauth/start", ["POST"])
