@@ -262,10 +262,8 @@ class Hub:
                 ok, err = await src.delete(mid)
                 if not ok:
                     errors.append(err)
-                    # Stop at the first refusal that more requests cannot fix: no quota, or YouTube said this account may not delete.
-                    refused = getattr(src, "refused", None)
-                    if "quota" in err.lower() or (refused is not None and refused("delete")):
-                        break
+                    if "quota" in err.lower() or "not allowed to" in err.lower():
+                        break  # out of quota, or YouTube said this account may not do this: more tries cannot succeed
             if a["action"] == "timeout" and not errors:
                 ok, err = await src.timeout(a["author_id"], a["duration"] or 300)
                 if not ok:

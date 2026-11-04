@@ -36,23 +36,14 @@ class FakeYouTube:
         self.videos = {}                  # id -> item for /videos
         self.search_ids = []              # ids returned by /search
         self.handles = {}                 # "@handle" -> channel id
-        self.code_refresh = "rt-new"      # refresh token returned by a sign-in; None = Google returns none
-        self.code_access = "at-code"
-        self.code_account = None          # channel that the sign-in's access token belongs to (None = same as account_channel)
-        self.valid_refresh = {"rt-1", "rt-new"}
-        self.identity_status = None       # (status, json) forced for channels?mine=true, e.g. a 500
         self.server = FakeServer(self._handle)
 
     def _handle(self, method, path, query, body, headers):
         if path == "/token":
             self.token_calls += 1
             if body.get("grant_type") == "authorization_code":
-                out = {"access_token": self.code_access, "expires_in": 3600}
-                if self.code_refresh:
-                    out["refresh_token"] = self.code_refresh
-                    self.valid_refresh.add(self.code_refresh)
-                return 200, out
-            if body.get("refresh_token") not in self.valid_refresh:
+                return 200, {"access_token": "at-code", "refresh_token": "rt-new", "expires_in": 3600}
+            if body.get("refresh_token") != "rt-1" and body.get("refresh_token") != "rt-new":
                 return 400, {"error": "invalid_grant", "error_description": "Token has been revoked"}
             return 200, {"access_token": f"at-{self.token_calls}", "expires_in": 3600}
         if self.reject_first_api_call:
@@ -62,14 +53,9 @@ class FakeYouTube:
             if query.get("forHandle"):
                 cid = self.handles.get(query["forHandle"])
                 return 200, {"items": [{"id": cid, "snippet": {"title": "Handle channel"}}] if cid else []}
-            if self.identity_status:
-                return self.identity_status
-            who = self.account_channel
-            if self.code_account and (headers.get("Authorization") or headers.get("authorization")) == f"Bearer {self.code_access}":
-                who = self.code_account
-            if not who:
+            if not self.account_channel:
                 return 200, {}
-            return 200, {"items": [{"id": who, "snippet": {"title": "Signed-in account", "customUrl": "@signedin"}}]}
+            return 200, {"items": [{"id": self.account_channel, "snippet": {"title": "Signed-in account", "customUrl": "@signedin"}}]}
         if path.endswith("/search"):
             return 200, {"items": [{"id": {"videoId": v}} for v in self.search_ids]}
         if path.endswith("/videos"):

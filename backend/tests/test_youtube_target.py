@@ -202,10 +202,18 @@ def test_f_refused_delete_and_ban_are_reported_as_failures():
         ok, err = await c.youtube.ban("UC" + "s" * 22)
         assert not ok and "not allowed to ban" in err
         assert len(fake.calls("/liveChat/bans", "POST")) == 1 and c.youtube.status()["last_action_error"] == err
-        c.youtube._denied.clear()   # the refusal above starts a cooldown (tested separately); clear it to test the protected-user answer
+        await c.stop()
+        # A ban YouTube refuses because the TARGET USER is protected (owner / another moderator) is a different answer from "this
+        # account may not ban", and must not be treated as a permission denial. (A fresh bot: after a permission refusal the
+        # five-minute cooldown, covered in test_youtube_safety.py, rightly blocks further bans.)
+        fake = moderator_setup()
         fake.action_status = {"bans": (403, {"error": {"errors": [{"reason": "liveChatBanInsertionNotAllowed"}]}})}
+        c = await boot(fake, **FAST)
+        assert await wait_for(lambda: c.youtube.state == "live")
         ok, err = await c.youtube.ban("UC" + "t" * 22)
         assert not ok and "moderator or the channel owner" in err
+        ok, err = await c.youtube.ban("UC" + "u" * 22)                 # another user: still tried, no cooldown from a protected-user answer
+        assert len(fake.calls("/liveChat/bans", "POST")) == 2
         await c.stop()
     run(go())
 

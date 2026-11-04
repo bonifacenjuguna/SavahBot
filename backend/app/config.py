@@ -96,6 +96,7 @@ _f(G, "youtube_auto_detect_live", True, "Automatically find the target channel's
 _f(G, "youtube_detect_interval_seconds", 90, "How often to check for a live broadcast while offline (costs 1 quota unit per check).")
 _f(G, "youtube_expected_stream_hours", 4.0, "Typical stream length. The quota governor paces chat polling so a stream this long fits the daily budget.")
 _f(G, "youtube_max_results", 200, "Chat messages requested per poll (200-2000).")
+_f(G, "youtube_permission_retry_seconds", 300, "After YouTube refuses an action because this account lacks permission, wait this long before trying that kind of action (or reading that chat) again.")
 _f(G, "youtube_use_streaming", False, "Reserved: use the streamList (gRPC) endpoint instead of polling.")
 _f(G, "youtube_message_max_length", 200, "Longest message YouTube chat accepts; bot replies are trimmed to this.")
 _f(G, "youtube_backfill_on_connect", True, "Store the chat history found on connect (not moderated).")
@@ -112,7 +113,6 @@ _f(G, "yt_cost_video_list", 1, "Quota cost: look up a video.")
 _f(G, "yt_cost_channel_list", 1, "Quota cost: look up a channel (the signed-in account, or a @handle).")
 _f(G, "yt_cost_search", 100, "Quota cost: search for a channel's live stream. Verify against the current YouTube docs.")
 _f(G, "yt_detect_budget_fraction", 0.25, "Share of the daily quota that searching for another channel's live stream may use.")
-_f(G, "youtube_permission_retry_seconds", 300, "After YouTube refuses an action (delete, ban, post) because the signed-in account lacks permission, wait this long before asking YouTube again. Stops SavahBot repeating a request that cannot succeed.")
 _f(G, "youtube_target_detect_interval_seconds", 600, "How often to search for a live stream on a channel you do not own while it is offline. Searching is expensive, so it is also capped by YT_DETECT_BUDGET_FRACTION. Set YOUTUBE_VIDEO_ID to avoid searching.")
 _f(G, "yt_cost_moderator_list", 50, "Quota cost: list moderators.")
 _f(G, "yt_read_budget_fraction", 0.6, "Share of the daily quota the bot may spend reading chat (the rest is kept for actions).")
@@ -247,7 +247,7 @@ BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 EDITABLE_PREFIXES = (
     "mod_", "command_", "urlfetch_", "demo_", "yt_", "timers_", "reminders_", "scheduler_",
     "telegram_notify_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
-    "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "chat_", "sse_",
+    "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_",
 )
 EDITABLE_KEYS = {"bot_mode", "telegram_mode", "owner_timezone"}
 ENUMS: dict[str, list[str]] = {

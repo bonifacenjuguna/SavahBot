@@ -9,12 +9,12 @@ interface Setup {
   youtube_connected: boolean; telegram_owner_bound: boolean; telegram_bot: string | null;
 }
 
+interface Verify { ok: boolean; checks: { ok: boolean | null; label: string; detail: string }[] }
+
 interface Diag {
   client_id: string; client_id_length: number; secret_set: boolean; redirect_uri: string; scope: string; sign_in_url: string;
   checks: { ok: boolean; text: string }[]; note: string;
 }
-
-interface Verify { ok: boolean; checks: { ok: boolean | null; label: string; detail: string }[] }
 
 const AREA_NAMES: Record<string, string> = { dashboard: "Dashboard", database: "Database", telegram: "Telegram", youtube: "YouTube", app: "App" };
 
@@ -37,10 +37,9 @@ export const setup: Page = {
     const verifyBox = h("div", { class: "body stack" });
     const runVerify = async () => {
       const v = await post<Verify>("/api/youtube/verify");
-      mount(verifyBox,
-        h("ul", { class: "list", style: "margin:0" }, v.checks.map((c) => h("li", { class: "row", style: "padding:6px 0;border:0" },
-          h("span", { class: `chip ${c.ok === true ? "ok" : c.ok === false ? "bad" : "warn"}` }, c.ok === true ? "OK" : c.ok === false ? "Fix" : "Unverified"),
-          h("span", null, h("strong", null, c.label + ": "), c.detail)))));
+      mount(verifyBox, h("ul", { class: "list", style: "margin:0" }, v.checks.map((c) => h("li", { class: "row", style: "padding:6px 0;border:0" },
+        h("span", { class: `chip ${c.ok === true ? "ok" : c.ok === false ? "bad" : "warn"}` }, c.ok === true ? "OK" : c.ok === false ? "Fix" : "Unverified"),
+        h("span", null, h("strong", null, `${c.label}: `), c.detail)))));
     };
     const load = async () => {
       const [s, st] = await Promise.all([get<Setup>("/api/setup"), refreshStatus()]);
@@ -76,7 +75,8 @@ export const setup: Page = {
               })()), h("button", { class: "btn ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/telegram/test"); }, "Test message sent") }, "Send test message")),
               h("p", { class: "muted small" }, tg?.mode === "webhook" ? `Webhook: ${tg.webhook_url || "not registered"}` : `Polling: ${tg?.polling ? "running" : "stopped"}`)))),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Verify moderator access"),
-          h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runVerify) }, "Verify access")), verifyBox),
+          h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runVerify) }, "Verify access")),
+          h("div", { class: "body" }, h("p", { class: "muted small" }, "Asks YouTube what the signed-in account can really do for the target channel. It never deletes or bans anything, and deleting and banning cannot be tested ahead of time, so they show as Unverified until YouTube has answered a real action.")), verifyBox),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Check the Google connection"),
           h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runDiag) }, "Run check")), diagBox),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Variables to set in Railway"), h("span", { class: "muted small" }, "Everything else already has a safe default")),
