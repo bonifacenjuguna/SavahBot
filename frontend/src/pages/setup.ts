@@ -9,6 +9,11 @@ interface Setup {
   youtube_connected: boolean; telegram_owner_bound: boolean; telegram_bot: string | null;
 }
 
+interface Diag {
+  client_id: string; client_id_length: number; secret_set: boolean; redirect_uri: string; scope: string; sign_in_url: string;
+  checks: { ok: boolean; text: string }[]; note: string;
+}
+
 const AREA_NAMES: Record<string, string> = { dashboard: "Dashboard", database: "Database", telegram: "Telegram", youtube: "YouTube", app: "App" };
 
 export const setup: Page = {
@@ -17,6 +22,16 @@ export const setup: Page = {
   render(root, query) {
     const box = h("div", { class: "stack" });
     const urlRow = (label: string, value: string) => h("div", { class: "row between" }, h("span", null, h("div", { class: "muted small" }, label), h("span", { class: "mono" }, value || "Not set yet")), value ? copyButton(value) : null);
+    const diagBox = h("div", { class: "body stack" });
+    const runDiag = async () => {
+      const d = await get<Diag>("/api/youtube/diagnostics");
+      mount(diagBox,
+        h("ul", { class: "list", style: "margin:0" }, d.checks.map((c) => h("li", { class: "row", style: "padding:6px 0;border:0" }, h("span", { class: `chip ${c.ok ? "ok" : "bad"}` }, c.ok ? "OK" : "Fix"), h("span", null, c.text)))),
+        h("div", { class: "row between" }, h("span", null, h("div", { class: "muted small" }, `Client ID the bot sends (${d.client_id_length} characters)`), h("span", { class: "mono", style: "overflow-wrap:anywhere" }, d.client_id || "(empty)")), d.client_id ? copyButton(d.client_id) : null),
+        h("div", { class: "row between" }, h("span", null, h("div", { class: "muted small" }, "Redirect address the bot sends"), h("span", { class: "mono", style: "overflow-wrap:anywhere" }, d.redirect_uri || "(empty)")), d.redirect_uri ? copyButton(d.redirect_uri) : null),
+        h("p", { class: "muted small" }, "Compare both with the SavahBot client in Google Cloud: they must match exactly. The client secret is never shown."),
+        h("p", { class: "muted small" }, d.note));
+    };
     const load = async () => {
       const [s, st] = await Promise.all([get<Setup>("/api/setup"), refreshStatus()]);
       const yt = st?.youtube, tg = st?.telegram;
@@ -43,6 +58,8 @@ export const setup: Page = {
                 return sel;
               })()), h("button", { class: "btn ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/telegram/test"); }, "Test message sent") }, "Send test message")),
               h("p", { class: "muted small" }, tg?.mode === "webhook" ? `Webhook: ${tg.webhook_url || "not registered"}` : `Polling: ${tg?.polling ? "running" : "stopped"}`)))),
+        h("section", { class: "block flush" }, h("header", null, h("h2", null, "Check the Google connection"),
+          h("button", { class: "btn small ghost", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, runDiag) }, "Run check")), diagBox),
         h("section", { class: "block flush" }, h("header", null, h("h2", null, "Variables to set in Railway"), h("span", { class: "muted small" }, "Everything else already has a safe default")),
           h("div", { class: "body stack" }, Object.entries(s.requirements).map(([area, items]) => h("div", null, h("h3", null, AREA_NAMES[area] ?? area),
             h("div", { class: "row", style: "margin-top:6px" }, items.map((i) => h("span", { class: `chip ${i.set ? "ok" : "warn"}`, title: i.set ? "Set" : "Not set" }, `${i.set ? "✓" : "○"} ${i.env}`))))))));

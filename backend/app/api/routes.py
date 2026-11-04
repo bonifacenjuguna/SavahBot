@@ -495,6 +495,39 @@ async def youtube_status(request: Request, c: Any) -> dict:
     return c.youtube.status() | {"connected": await c.google.connected()}
 
 
+@R.add("/youtube/diagnostics", ["GET"])
+async def youtube_diagnostics(request: Request, c: Any) -> dict:
+    """Shows exactly what will be sent to Google. The client ID is public by design; the secret is never returned."""
+    cid = str(c.cfg.get("google_client_id") or "")
+    secret = str(c.cfg.get("google_client_secret") or "")
+    redirect = c.google.redirect_uri()
+
+    def check(ok: bool, good: str, bad: str) -> dict:
+        return {"ok": ok, "text": good if ok else bad}
+
+    checks = [
+        check(bool(cid), "Client ID is set.", "GOOGLE_CLIENT_ID is empty or still edit-me."),
+        check(cid.endswith(".apps.googleusercontent.com"), "Client ID has the usual ending (.apps.googleusercontent.com).",
+              "Client ID should end in .apps.googleusercontent.com. If it starts with GOCSPX-, it is the secret, not the ID."),
+        check(cid == cid.strip() and not any(ch in cid for ch in " \t\r\n\"'"), "No spaces or quote marks around the Client ID.",
+              "The Client ID contains a space, line break or quote mark. Paste it again with nothing around it."),
+        check(not secret or secret != cid, "Client ID and secret are different values.", "Client ID and secret are the same value."),
+        check(bool(secret), "Client secret is set.", "GOOGLE_CLIENT_SECRET is empty or still edit-me."),
+        check(not secret or secret.startswith("GOCSPX-"), "Client secret has the usual GOCSPX- start.",
+              "The secret normally starts with GOCSPX-. Check the two values are not swapped."),
+        check(redirect.startswith("https://") or redirect.startswith("http://localhost"), "Redirect address is https.",
+              "Redirect address is missing or not https. Set PUBLIC_BASE_URL to your Railway address."),
+        check(redirect.endswith("/api/youtube/oauth/callback") and "//api" not in redirect, "Redirect address ends correctly.",
+              "Redirect address should end in /api/youtube/oauth/callback with no doubled slash."),
+    ]
+    return {
+        "client_id": cid, "client_id_length": len(cid), "secret_set": bool(secret), "secret_length": len(secret),
+        "redirect_uri": redirect, "scope": c.cfg.get("google_oauth_scope"),
+        "sign_in_url": c.google.auth_url("preview") if cid and redirect else "", "checks": checks,
+        "note": "If every check passes and Google still says the client was not found, the client is missing in Google Cloud or has not propagated yet (can take up to a few hours).",
+    }
+
+
 @R.add("/youtube/oauth/start", ["POST"])
 async def youtube_start(request: Request, c: Any) -> dict:
     if not (c.cfg.get("google_client_id") and c.cfg.get("google_client_secret")):

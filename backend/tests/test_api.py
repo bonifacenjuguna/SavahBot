@@ -269,3 +269,22 @@ async def test_sse_stream_delivers_events(api):
             break
         await asyncio.sleep(0.1)
     assert api.c.bus.subscriber_count == 0
+
+
+@e2e
+async def test_youtube_diagnostics_flags_swapped_and_bad_values(api):
+    st, b = await api.call("GET", "/api/youtube/diagnostics")
+    assert st == 200 and not b["checks"][0]["ok"] and b["sign_in_url"] == ""
+    api.c.cfg.settings._values["google_client_id"] = "GOCSPX-abc"
+    api.c.cfg.settings._values["google_client_secret"] = "12345.apps.googleusercontent.com"
+    st, b = await api.call("GET", "/api/youtube/diagnostics")
+    bad = [c["text"] for c in b["checks"] if not c["ok"]]
+    assert any("should end in" in t for t in bad) and any("secret normally starts" in t for t in bad)
+    assert "GOCSPX-abc" == b["client_id"] and "12345" not in str(b)
+    api.c.cfg.settings._values["google_client_id"] = "123-abc.apps.googleusercontent.com"
+    api.c.cfg.settings._values["google_client_secret"] = "GOCSPX-xyz"
+    api.c.settings._values["public_base_url"] = "https://bot.example.app"
+    st, b = await api.call("GET", "/api/youtube/diagnostics")
+    assert st == 200 and all(c["ok"] for c in b["checks"]), b["checks"]
+    assert "client_id=123-abc.apps.googleusercontent.com" in b["sign_in_url"] and "GOCSPX" not in b["sign_in_url"]
+    assert b["redirect_uri"] == "https://bot.example.app/api/youtube/oauth/callback"
