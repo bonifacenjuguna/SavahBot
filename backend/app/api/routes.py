@@ -568,6 +568,14 @@ async def youtube_status(request: Request, c: Any) -> dict:
     return c.youtube.status() | {"connected": await c.google.connected()}
 
 
+@R.add("/youtube/quota", ["POST"])
+async def youtube_quota_set(request: Request, c: Any) -> dict:
+    """YouTube does not tell apps how much quota is left, so SavahBot keeps an estimate. This corrects it (0 restarts the count)."""
+    body = await parse(request, S.QuotaSet)
+    await c.quota.set_used(body.used)
+    return {"ok": True, "quota": c.quota.status()}
+
+
 @R.add("/youtube/diagnostics", ["GET"])
 async def youtube_diagnostics(request: Request, c: Any) -> dict:
     """Shows exactly what will be sent to Google. The client ID is public by design; the secret is never returned."""

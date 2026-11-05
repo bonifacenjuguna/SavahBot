@@ -1,4 +1,4 @@
-/** 1.1.3 building blocks used by several pages: date-range filter, area switcher, tiles and the zoom-to-fill effect. */
+/** 1.1.4 building blocks used by several pages: date-range filter, area switcher, tiles and the zoom-to-fill effect. */
 import { h, mount, type Child } from "../dom.js";
 import { icon } from "../icons.js";
 
@@ -103,7 +103,7 @@ export function areaNav(pageId: string): HTMLElement | null {
   if (!key) return null;
   const area = AREAS[key];
   return h("nav", { class: "area-nav", "aria-label": area.title },
-    h("a", { class: "an-back", href: "#/more", "aria-label": "All sections" }, icon("grid", 16), h("span", null, "More")),
+    h("a", { class: "an-back", href: "#/more", "aria-label": "All sections" }, icon("menu", 16), h("span", null, "More")),
     h("div", { class: "an-items scroll-x" }, area.items.map((i) => h("a", { href: `#/${i.id}`, "aria-current": i.id === pageId ? "page" : undefined }, icon(i.icon, 16), i.title))));
 }
 

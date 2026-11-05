@@ -1,4 +1,4 @@
-/* SavahBot 1.1.3 redesign layer. Loaded after styles.css, so it only adds and refines; the colour palette is unchanged. */
+/* SavahBot 1.1.4 redesign layer. Loaded after styles.css, so it only adds and refines; the colour palette is unchanged. */
 :root { --ease: cubic-bezier(0.2, 0.8, 0.2, 1); --shadow-1: 0 1px 2px rgba(10, 16, 32, 0.06), 0 6px 18px rgba(10, 16, 32, 0.06); --shadow-2: 0 24px 70px rgba(5, 9, 20, 0.38); }
 
 /* ---------- page heads and cards: a little more depth ---------- */
@@ -225,3 +225,9 @@ body.zoom-open .tabbar { z-index: 10; }
 @media (pointer: coarse) { .dr-chip, .an-items a { min-height: 40px; } }
 @media print { .area-nav, .setup-nav, .zoom-scrim { display: none !important; } }
 @media (max-width: 719px) { .hide-narrow { display: none; } }
+
+/* 1.1.4: the chat feed shows a short plain label for moderated lines, not scores or rule names */
+.line .why { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
+.line .why.flagged { color: var(--demo); border-color: color-mix(in srgb, var(--demo) 45%, transparent); }
+.line .why.blocked { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.line .why .ico { flex: none; }

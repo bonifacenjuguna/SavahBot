@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.4
+
+### Fixes
+- **YouTube quota that never reset.** The number shown could stay at yesterday's total whenever the bot was idle, because the daily roll-over only happened inside the live loop. It is now worked out from the current Pacific-time day every time it is read, so it drops to 0 at the reset. The Desk status card shows "Resets in 5h 12m".
+- **Quota used with no stream.** While live mode waited for a stream, SavahBot kept looking for it. The search budget for other channels was kept only in memory, so every restart gave it a fresh allowance. It is now stored in the database. Defaults are gentler: own-channel check every 180s (was 90s), search for another channel every 900s (was 600s) and at most 10% of the daily quota (was 25%). Set `YOUTUBE_VIDEO_ID` to skip searching completely. The YouTube loop only runs in live mode, so Demo never adds to the count.
+- **Quota is an estimate, and now says so.** YouTube gives apps no way to read the real remaining quota (only the Google Cloud Console shows it), so SavahBot counts what it spends. The card says "(estimate)" and has a **Fix count** button to type the number from the Console, or start again from 0. API: `POST /api/youtube/quota {"used": n}`.
+- **Chat no longer shows the bot's internals.** Moderated lines used to print the verdict, the score and the exact rule matches (including blacklist words). The feed now shows a small label such as "Blocked · banned phrase, link". Full details stay on the Moderation page.
+- **More tab icon** is now the three-line menu instead of the same grid as Desk.
+
 ## 1.1.3
 
 ### Fixes

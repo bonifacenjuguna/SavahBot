@@ -187,7 +187,7 @@ function showShell(): void {
       tabLinks.push(a);
       return a;
     }),
-    h("a", { class: "tab", href: "#/more", id: "tab-more", "data-id": "more" }, icon("grid", 22), "More"));
+    h("a", { class: "tab", href: "#/more", id: "tab-more", "data-id": "more" }, icon("menu", 22), "More"));
   const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });

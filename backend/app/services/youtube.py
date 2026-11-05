@@ -13,7 +13,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -42,32 +42,55 @@ def parse_video_id(value: str) -> str:
 
 # ---------------------------------------------------------------------------------------------
 class QuotaTracker:
+    """A local estimate of today's YouTube quota. Google does not let an app read its remaining quota (only the Cloud Console
+    shows it), so this adds up what SavahBot itself spends. The YouTube loop only runs in live mode, so demo never adds to it. It rolls over at the YouTube reset
+    (midnight Pacific) even while nothing is running, and can be corrected by hand with set_used()."""
+
     def __init__(self, cfg: Any, store: Any, now_fn: Callable[[], float] = time.time) -> None:
         self.cfg = cfg
         self.store = store
         self.now_fn = now_fn
         self._day = ""
-        self._used = 0
+        self._stored = 0
 
     def day(self) -> str:
         return datetime.fromtimestamp(self.now_fn(), ZoneInfo(self.cfg.get("yt_quota_reset_tz"))).strftime("%Y-%m-%d")
+
+    @property
+    def _used(self) -> int:
+        """Units spent today. Yesterday's number is never shown after the reset, even if nothing has synced yet."""
+        return self._stored if self._day == self.day() else 0
+
+    def resets_in(self) -> int:
+        """Seconds until the next YouTube quota reset (midnight in the reset timezone)."""
+        tz = ZoneInfo(self.cfg.get("yt_quota_reset_tz"))
+        now = datetime.fromtimestamp(self.now_fn(), tz)
+        nxt = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        return max(0, int((nxt - now).total_seconds()))
 
     async def sync(self) -> None:
         d = self.day()
         if d != self._day:
             self._day = d
-            self._used = await self.store.quota_get(d)
+            self._stored = await self.store.quota_get(d)
 
     async def spend(self, units: int) -> None:
         await self.sync()
-        self._used += units
+        self._stored += units
         await self.store.quota_add(self._day, units)
+
+    async def set_used(self, units: int) -> None:
+        """Replace today's estimate, e.g. with the number shown in the Google Cloud Console, or 0 to start the counter again."""
+        await self.sync()
+        units = max(0, int(units))
+        await self.store.quota_add(self._day, units - self._stored)
+        self._stored = units
 
     async def mark_exhausted(self) -> None:
         await self.sync()
         missing = self.cfg.get("yt_daily_quota") - self._used
         if missing > 0:
-            self._used += missing
+            self._stored += missing
             await self.store.quota_add(self._day, missing)
 
     @property
@@ -101,7 +124,7 @@ class QuotaTracker:
     def status(self) -> dict[str, Any]:
         daily = self.cfg.get("yt_daily_quota")
         return {"used": self._used, "daily": daily, "remaining": self.remaining, "fraction": round(self._used / daily, 4) if daily else 0,
-                "day": self._day or self.day(), "reset_tz": self.cfg.get("yt_quota_reset_tz")}
+                "day": self.day(), "reset_tz": self.cfg.get("yt_quota_reset_tz"), "resets_in": self.resets_in(), "estimate": True}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -574,7 +597,7 @@ class YouTubeSource:
         # Someone else's channel: search is the documented way to find its live video, but it is expensive.
         day = self.quota.day()
         if day != self._detect_day:
-            self._detect_day, self._detect_spent = day, 0
+            self._detect_day, self._detect_spent = day, await self.quota.store.quota_get(f"detect:{day}")   # kept in the database: a restart must not reset the cap
         cost = self.quota.cost("search")
         wait = float(self.cfg.get("youtube_target_detect_interval_seconds"))
         if self._detect_spent + cost > self.cfg.get("yt_daily_quota") * self.cfg.get("yt_detect_budget_fraction") or not self.quota.can_afford("search"):
@@ -583,6 +606,7 @@ class YouTubeSource:
                                "Set YOUTUBE_VIDEO_ID to the live video's ID or link to attach directly.")
             return 900.0
         self._detect_spent += cost
+        await self.quota.store.quota_add(f"detect:{day}", cost)
         await self.quota.spend(cost)
         status, data = await self._api("GET", "/search", params={"part": "id", "type": "video", "eventType": "live", "channelId": target, "maxResults": 5})
         bad = self._detect_failure(status, data, wait)

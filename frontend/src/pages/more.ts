@@ -28,7 +28,7 @@ function hero(s: Status | null): { state: "live" | "demo" | "standby"; title: st
 export const more: Page = {
   id: "more",
   title: "More",
-  icon: "grid",
+  icon: "menu",
   blurb: "Manage, system, appearance and account",
   render(root) {
     const ctx = appContext();

@@ -1,9 +1,9 @@
 import { get, post } from "../api.js";
-import { ago, busy, clock, dateTime, debounce, h, mount, toast } from "../dom.js";
+import { ago, busy, clock, dateTime, debounce, h, mount, sheet, toast } from "../dom.js";
 import * as feed from "../events.js";
 import { icon } from "../icons.js";
 import { ring, sparkline } from "../charts.js";
-import { onStatus, status, type Status } from "../state.js";
+import { onStatus, refreshStatus, status, type Status } from "../state.js";
 import { dateRange, rangeQuery, zoomToFill, type RangeValue } from "./kit.js";
 import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./shared.js";
 import type { Page } from "./types.js";
@@ -13,6 +13,14 @@ type Filter = "all" | "flagged" | "blocked";
 
 const kindOf = (m: Line): Filter | "ok" => (m.verdict === "allow" || !m.verdict ? "ok" : m.verdict === "flag" ? "flagged" : "blocked");
 const SIZES = [0.9, 1, 1.15, 1.3, 1.5];
+/** What the chat feed says about a line moderation reacted to: a short plain label. Scores, rule names and the words that
+ * matched stay on the Moderation page, so the live chat never shows the bot's internals (or the blacklist) to anyone watching. */
+const WHY: Record<string, string> = { blacklist: "banned phrase", link: "link", new_chatter: "new chatter", caps: "shouting", repeat: "repeated message", emote: "emote spam", symbols: "symbol spam", length: "very long message", mention: "mention spam", rate: "too fast", duplicate: "repeated message" };
+const whyText = (m: Line, k: Filter | "ok"): string => {
+  const names = Array.from(new Set((m.reasons ?? []).map((r) => r.split(":")[0].trim().toLowerCase()).filter(Boolean)));
+  const shown = names.map((n) => WHY[n] ?? n.replace(/_/g, " ")).slice(0, 2);
+  return `${k === "blocked" ? "Blocked" : "Flagged"}${shown.length ? " · " + shown.join(", ") : ""}`;
+};
 const SIZE_KEY = "savahbot.chatsize";
 
 export const desk: Page = {
@@ -55,7 +63,7 @@ export const desk: Page = {
         h("div", null,
           h("span", { class: `who ${m.level}` }, m.author_name),
           h("span", { class: "text" }, m.text),
-          k !== "ok" ? h("div", { class: "reasons" }, `${m.verdict} (score ${m.score ?? 0})${m.reasons?.length ? ": " + m.reasons.join(", ") : ""}`) : null));
+          k !== "ok" ? h("div", { class: `why ${k}` }, icon(k === "blocked" ? "shield" : "flag", 13), h("span", null, whyText(m, k))) : null));
     };
     const visible = (m: Line): boolean => {
       if (filter === "flagged" && kindOf(m) === "ok") return false;   // flagged = everything moderation reacted to
@@ -195,6 +203,20 @@ export const desk: Page = {
         kpi("", "shield", "Moderation", s.hub.mod_mode, `${s.hub.blacklist_size} blocked phrases`));
       mount(health, healthBlock(s));
     };
+    /** YouTube never tells an app how much quota is left, so the number is SavahBot's own estimate; this lets the owner correct it. */
+    const fixQuota = (current: number) => {
+      const input = h("input", { type: "number", inputmode: "numeric", min: "0", value: String(current), "aria-label": "Units used today" }) as HTMLInputElement;
+      let box: { close: () => void } | null = null;
+      const save = async (units: number) => {
+        try { await post("/api/youtube/quota", { used: units }); await refreshStatus(); toast("Quota count updated", "ok"); box?.close(); } catch (e) { toast((e as Error).message, "error"); }
+      };
+      box = sheet("Correct the quota estimate", h("div", { class: "stack" },
+        h("p", { class: "muted small" }, "YouTube does not let apps read the remaining quota, so SavahBot counts what it spends itself. If the Google Cloud Console shows a different number, type it here. It also resets by itself at midnight Pacific Time."),
+        input,
+        h("div", { class: "row" }, h("button", { class: "btn primary", type: "button", onclick: () => void save(Math.max(0, Math.round(Number(input.value) || 0))) }, "Save"),
+          h("button", { class: "btn", type: "button", onclick: () => void save(0) }, "Start from 0"))));
+    };
+    const resetsIn = (sec?: number) => { if (sec == null) return ""; const hh = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60); return hh ? `${hh}h ${mm}m` : `${mm}m`; };
     const healthBlock = (s: Status): HTMLElement => {
       const q = s.youtube.quota;
       const pct = Math.min(100, Math.round(q.fraction * 100));
@@ -202,7 +224,8 @@ export const desk: Page = {
         h("div", { class: "status-row" }, icon(ic, 18), h("div", { class: "grow" }, h("div", null, title), h("div", { class: "muted small" }, text)), h("span", { class: `chip ${chip[0]}` }, chip[1]));
       return h("div", null,
         h("div", { class: "health" }, ring(s.hub.mode === "demo" ? 0 : q.fraction, s.hub.mode === "demo" ? "Demo" : `${pct}%`, "YouTube quota used today", pct >= 75 ? "hot" : ""),
-          h("dl", null, h("dt", null, "YouTube quota"), h("dd", null, s.hub.mode === "demo" ? "Not used in demo mode" : `${q.used} of ${q.daily} units used`),
+          h("dl", null, h("dt", null, "YouTube quota"), h("dd", null, s.hub.mode === "demo" ? "Not used in demo mode" : `${q.used} of ${q.daily} units (estimate)`),
+            s.hub.mode === "demo" ? null : h("dt", null, "Resets in"), s.hub.mode === "demo" ? null : h("dd", null, h("span", null, `${resetsIn(q.resets_in)} `), h("button", { class: "btn small ghost", type: "button", onclick: () => fixQuota(q.used) }, "Fix count")),
             h("dt", null, "Last chat poll"), h("dd", null, s.hub.mode === "demo" ? "Simulated" : ago(s.youtube.last_poll)))),
         h("div", { class: "status-rows" },
           row("youtube", "YouTube", s.youtube.chat_attached ? (s.youtube.title || "Chat attached") : s.youtube.connected ? "Connected, no stream attached" : "Not connected", s.youtube.last_error ? ["bad", "Error"] : s.youtube.chat_attached ? ["ok", "Attached"] : s.youtube.connected ? ["warn", "Idle"] : ["", "Off"]),
