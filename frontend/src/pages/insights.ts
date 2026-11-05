@@ -2,6 +2,7 @@ import { get } from "../api.js";
 import { dateTime, downloadCsv, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { areaChart, donut, hbars, sparkline } from "../charts.js";
+import { areaNav } from "./kit.js";
 import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 
@@ -73,7 +74,7 @@ export const insights: Page = {
             card("flag", "What triggered moderation", hbars(s.signals.map((x) => ({ name: String(x.name), count: x.count })), "s2"), { flush: true }),
             card("ban", "Actions by type", hbars(Object.entries(s.actions_by_type).map(([name, count]) => ({ name, count })), "s4"), { flush: true }))));
     };
-    mount(root, pageHead("chart", "Insights", "How busy chat is, who is talking, and what the bot reacted to.", h("div", { class: "row" }, range, refreshBtn, exportBtn)), body);
+    mount(root, pageHead("chart", "Insights", "How busy chat is, who is talking, and what the bot reacted to.", h("div", { class: "row" }, range, refreshBtn, exportBtn)), areaNav("insights"), body);
     void load().catch((e) => toast(e.message, "error"));
     const t = window.setInterval(() => void load().catch(() => undefined), 30000);
     return () => window.clearInterval(t);
