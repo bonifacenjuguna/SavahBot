@@ -4,7 +4,7 @@ import * as feed from "../events.js";
 import { icon } from "../icons.js";
 import { ring, sparkline } from "../charts.js";
 import { onStatus, status, type Status } from "../state.js";
-import { dateRange, rangeQuery, resetZoomArtifacts, zoomToFill, type RangeValue } from "./kit.js";
+import { dateRange, rangeQuery, zoomToFill, type RangeValue } from "./kit.js";
 import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./shared.js";
 import type { Page } from "./types.js";
 
@@ -21,7 +21,6 @@ export const desk: Page = {
   icon: "desk",
   blurb: "Live chat and approvals",
   render(root) {
-    resetZoomArtifacts();            // a previous visit can never leave a dim layer, placeholder or scroll lock behind
     const MAX = 400;
     const lines: Line[] = [];
     const queue: Line[] = [];
@@ -80,6 +79,8 @@ export const desk: Page = {
       stick = true;
       jump.hidden = true;
     };
+    let stickQueued = false;       // many lines can arrive in one frame; scroll once per frame, not once per line
+    const stickSoon = () => { if (stickQueued) return; stickQueued = true; requestAnimationFrame(() => { stickQueued = false; if (stick) list.scrollTop = list.scrollHeight; }); };
     const push = (m: Line) => {
       lines.push(m);
       queueMicrotask(updateCounts);
@@ -88,7 +89,7 @@ export const desk: Page = {
       list.querySelector(".empty")?.remove();
       list.appendChild(lineEl(m));
       while (list.childElementCount > MAX) list.firstElementChild?.remove();
-      if (stick) list.scrollTop = list.scrollHeight;
+      if (stick) stickSoon();
     };
     const add = (m: Line) => {
       arrivals.push(m.ts);
@@ -223,7 +224,7 @@ export const desk: Page = {
     const sideToggle = h("button", { class: "btn small ghost zoom-only", type: "button", "aria-label": "Show what is waiting for you", onclick: () => chatPane.classList.toggle("side-open") }, icon("inbox", 15), h("span", { class: "hide-narrow" }, "Waiting"));
     const sizeDown = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Smaller text", title: "Smaller text", onclick: () => setSize(sizeIdx - 1) }, icon("textSize", 15), h("span", { class: "sz" }, "−"));
     const sizeUp = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Larger text", title: "Larger text", onclick: () => setSize(sizeIdx + 1) }, icon("textSize", 18), h("span", { class: "sz" }, "+"));
-    const expandBtn = h("button", { class: "icon-btn expand-btn", type: "button", "aria-label": "Expand the chat to fill the screen", "aria-expanded": "false", title: "Expand chat (F)", onclick: () => zoom.toggle() });
+    const expandBtn = h("button", { class: "icon-btn expand-btn", type: "button", "aria-label": "Expand the chat to fill the screen", "aria-expanded": "false", title: "Expand chat (F)", onclick: (e: Event) => { e.preventDefault(); zoom.toggle(); } });
     const paintExpand = (open: boolean) => {
       mount(expandBtn, icon(open ? "collapse" : "expand", 18));
       expandBtn.setAttribute("aria-expanded", String(open));
@@ -251,20 +252,17 @@ export const desk: Page = {
         paintExpand(true);
         side.querySelector(".zs-body")!.appendChild(pendingBox);     // the waiting list moves in beside the chat
         chatPane.classList.remove("side-open");
-        window.setTimeout(() => { if (stick) list.scrollTop = list.scrollHeight; }, 420);
+        window.requestAnimationFrame(() => { if (stick) list.scrollTop = list.scrollHeight; });
       },
       onClose: () => {
         paintExpand(false);
         chatPane.classList.remove("side-open");
         queueBody.appendChild(pendingBox);
-        window.setTimeout(() => { if (stick) list.scrollTop = list.scrollHeight; }, 420);
+        window.requestAnimationFrame(() => { if (stick) list.scrollTop = list.scrollHeight; });
         expandBtn.focus({ preventScroll: true });
       },
     });
-    // clicking the card's title bar (not its buttons) expands it too; double click works while it is open
-    const bar = chatPane.querySelector(":scope > header") as HTMLElement;
-    bar.classList.add("clickable");
-    bar.addEventListener("click", (e) => { if (!(e.target as HTMLElement).closest("button, a, input, select") && !zoom.isOpen()) zoom.open(); });
+    // the expand button is the only way in or out by touch (one tap); the title bar is not a hidden second button any more
 
     // panes are switched by the tab control on narrow screens; on wide screens both columns show
     const cols = h("div", { class: "cols" }, chatPane, sideStack);
@@ -296,6 +294,6 @@ export const desk: Page = {
     ];
     offs.push(onStatus(() => renderFacts()));
     const t = window.setInterval(renderFacts, 5000);
-    return () => { offs.forEach((f) => f()); window.clearInterval(t); document.removeEventListener("keydown", onKey); zoom.destroy(); resetZoomArtifacts(); };
+    return () => { offs.forEach((f) => f()); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },
 };

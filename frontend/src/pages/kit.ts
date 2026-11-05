@@ -1,4 +1,4 @@
-/** 1.1.2 building blocks used by several pages: date-range filter, area switcher, tiles and the zoom-to-fill effect. */
+/** 1.1.3 building blocks used by several pages: date-range filter, area switcher, tiles and the zoom-to-fill effect. */
 import { h, mount, type Child } from "../dom.js";
 import { icon } from "../icons.js";
 
@@ -123,125 +123,76 @@ export function stat(label: string, value: string, sub?: string): HTMLElement {
 export function mountInto(el: Element, ...kids: Child[]): void { mount(el, ...kids); }
 
 // ------------------------------------------------------------------ zoom to fill
-export interface Zoom { open(): void; close(): void; isOpen(): boolean; toggle(): void; destroy(): void }
-
-/** Removes anything a zoom may have left behind (placeholder, dim layer, scroll lock). Safe to call at any time. */
-export function resetZoomArtifacts(): void {
-  document.querySelectorAll(".zoom-scrim, .zoom-hold").forEach((e) => e.remove());
-  document.body.classList.remove("zoom-open");
-  if (!document.querySelector(".sheet")) document.body.classList.remove("no-scroll");
-}
-
-type Box = { left: number; top: number; width: number; height: number };
+export interface Zoom { open(): void; close(): void; isOpen(): boolean; toggle(): void }
 
 /**
- * Makes `card` grow to fill the workspace and shrink back to where it sat.
- *
- * 1.1.3: the card is placed at its FINAL size straight away and only a clip-path window is animated, so the browser lays the card out once
- * instead of on every frame (animating width and height made big chats freeze phones). Every step is idempotent, a timer guarantees the
- * state can never get stuck, and a tap during the animation just finishes it, so nothing is left behind to block the page.
+ * Lifts `card` out of the page (a placeholder keeps the page from jumping) and lets it fill the workspace; the whole screen on a phone.
+ * 1.1.3: the card is placed once, with no size or position animation. Only opacity and transform animate, which the phone's GPU handles
+ * without re-laying-out the live chat on every frame, so it no longer stutters or freezes. There is no scrim blur, and no timer can race
+ * with a quick second tap: open and close always leave a clean state. Esc closes it; the page behind is locked while it is open.
  */
 export function zoomToFill(card: HTMLElement, hooks: { onOpen?: () => void; onClose?: () => void } = {}): Zoom {
-  type State = "closed" | "opening" | "open" | "closing";
-  let state: State = "closed";
+  let open = false;
   let hold: HTMLElement | null = null;
   let scrim: HTMLElement | null = null;
-  let anim: Animation | null = null;
-  let guard = 0;
-  let frame = 0;
-  const reduce = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const MS = 320;
-  const EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
+  let timer = 0;
   const px = (n: number) => `${Math.round(n)}px`;
-  const place = (r: Box) => { card.style.left = px(r.left); card.style.top = px(r.top); card.style.width = px(r.width); card.style.height = px(r.height); };
-
-  /** Where the card ends up: right of the sidebar and under the top bar; the whole screen on a phone. */
-  const target = (): Box => {
-    if (matchMedia("(max-width: 719px)").matches) return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  /** Where the card goes: the area right of the sidebar and under the top bar; the whole screen on a phone. */
+  const place = () => {
+    const phone = matchMedia("(max-width: 719px)").matches;
+    if (phone) { card.style.left = "0"; card.style.top = "0"; card.style.width = "100%"; card.style.height = "100%"; return; }
     const stage = document.querySelector(".stage") as HTMLElement | null;
     const top = (document.querySelector(".topbar") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 0;
-    const left = stage?.getBoundingClientRect().left ?? 0;
+    const r = stage?.getBoundingClientRect() ?? { left: 0, width: window.innerWidth } as DOMRect;
     const gap = 10;
-    return { left: left + gap, top: top + gap, width: window.innerWidth - left - gap * 2, height: window.innerHeight - top - gap * 2 };
+    card.style.left = px(r.left + gap); card.style.top = px(top + gap);
+    card.style.width = px(r.width - gap * 2); card.style.height = px(window.innerHeight - top - gap * 2);
   };
-  /** A clip-path that shows only `small`, expressed inside `big`. */
-  const windowOf = (small: DOMRect | Box, big: Box, radius = 12): string => {
-    const t = Math.max(0, small.top - big.top), l = Math.max(0, small.left - big.left);
-    const r = Math.max(0, big.left + big.width - (small.left + small.width)), b = Math.max(0, big.top + big.height - (small.top + small.height));
-    return `inset(${px(t)} ${px(r)} ${px(b)} ${px(l)} round ${radius}px)`;
-  };
-  const FULL = "inset(0px 0px 0px 0px round 18px)";
-
-  const settle = () => { window.clearTimeout(guard); anim = null; };
-  const watchdog = (fn: () => void) => { window.clearTimeout(guard); guard = window.setTimeout(fn, MS + 250); };
-
+  const onResize = () => { if (open) place(); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && open && !document.querySelector(".sheet, .popover, .palette")) { e.stopPropagation(); api.close(); } };
+  /** Removes everything the zoom added. Safe to call at any time, any number of times. */
   const cleanup = () => {
-    settle();
-    window.cancelAnimationFrame(frame);
-    window.removeEventListener("resize", onResize);
-    document.removeEventListener("keydown", onKey, true);
-    card.classList.remove("zoomed", "zoom-on");
-    card.style.left = card.style.top = card.style.width = card.style.height = card.style.clipPath = "";
+    window.clearTimeout(timer);
+    card.classList.remove("zoomed", "zoom-in", "zoom-out");
+    card.style.left = card.style.top = card.style.width = card.style.height = "";
     hold?.remove(); hold = null;
     scrim?.remove(); scrim = null;
-    resetZoomArtifacts();
-    state = "closed";
-  };
-  const onResize = () => { if (state === "open") { window.cancelAnimationFrame(frame); frame = window.requestAnimationFrame(() => place(target())); } };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape" && state !== "closed" && !document.querySelector(".sheet, .popover, .palette")) { e.stopPropagation(); api.close(); }
+    document.body.classList.remove("zoom-open");
+    if (!document.querySelector(".sheet")) document.body.classList.remove("no-scroll");
   };
 
   const api: Zoom = {
-    isOpen: () => state === "opening" || state === "open",
-    toggle: () => (api.isOpen() ? api.close() : api.open()),
+    isOpen: () => open,
+    toggle: () => (open ? api.close() : api.open()),
     open() {
-      if (api.isOpen()) return;
-      if (state === "closing") cleanup();                    // a tap during the closing animation finishes it, then opens again
-      const from = card.getBoundingClientRect();
-      state = "opening";
-      hold = h("div", { class: "zoom-hold", "aria-hidden": "true", style: `height:${px(from.height)}` });
+      if (open) return;
+      cleanup();                          // finish a close that is still fading, so a quick re-tap never leaves leftovers
+      open = true;
+      hold = h("div", { class: "zoom-hold", "aria-hidden": "true", style: `height:${px(card.getBoundingClientRect().height)}` });
       card.before(hold);
       scrim = h("div", { class: "zoom-scrim" });
       scrim.addEventListener("click", () => api.close());
       document.body.appendChild(scrim);
+      card.classList.add("zoomed", "zoom-in");
+      place();
       document.body.classList.add("no-scroll", "zoom-open");
-      const to = target();
-      card.classList.add("zoomed", "zoom-on");
-      place(to);
       window.addEventListener("resize", onResize);
       document.addEventListener("keydown", onKey, true);
-      frame = window.requestAnimationFrame(() => scrim?.classList.add("on"));
-      const done = () => { if (state === "opening") { settle(); card.style.clipPath = ""; state = "open"; } };
-      if (reduce() || typeof card.animate !== "function") done();
-      else {
-        card.style.clipPath = windowOf(from, to);
-        anim = card.animate([{ clipPath: windowOf(from, to) }, { clipPath: FULL }], { duration: MS, easing: EASE });
-        anim.onfinish = done;
-        watchdog(done);
-      }
       hooks.onOpen?.();
     },
     close() {
-      if (!api.isOpen()) return;
-      if (anim) anim.cancel();
-      settle();
-      state = "closing";
-      scrim?.classList.remove("on");
-      const back = hold?.getBoundingClientRect();
-      const big = card.getBoundingClientRect();
+      if (!open) return;
+      open = false;
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("keydown", onKey, true);
       hooks.onClose?.();
-      if (reduce() || !back || typeof card.animate !== "function") { cleanup(); return; }
-      anim = card.animate([{ clipPath: FULL }, { clipPath: windowOf(back, big) }], { duration: MS, easing: EASE, fill: "forwards" });
-      const done = () => {
-        if (state !== "closing") return;
-        cleanup();
-        card.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 160, easing: "ease-out" });   // hides the swap from the zoomed layout to the card layout
-      };
-      anim.onfinish = done;
-      watchdog(done);
+      const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduce) { cleanup(); return; }
+      card.classList.remove("zoom-in");
+      card.classList.add("zoom-out");
+      scrim?.classList.add("off");
+      timer = window.setTimeout(cleanup, 200);
     },
-    destroy() { if (state !== "closed") cleanup(); },
   };
   return api;
 }

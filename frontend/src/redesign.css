@@ -1,4 +1,4 @@
-/* SavahBot 1.1.2 redesign layer. Loaded after styles.css, so it only adds and refines; the colour palette is unchanged. */
+/* SavahBot 1.1.3 redesign layer. Loaded after styles.css, so it only adds and refines; the colour palette is unchanged. */
 :root { --ease: cubic-bezier(0.2, 0.8, 0.2, 1); --shadow-1: 0 1px 2px rgba(10, 16, 32, 0.06), 0 6px 18px rgba(10, 16, 32, 0.06); --shadow-2: 0 24px 70px rgba(5, 9, 20, 0.38); }
 
 /* ---------- page heads and cards: a little more depth ---------- */
@@ -140,19 +140,23 @@
 }
 
 /* ---------- Desk: the chat card that zooms to fill the workspace ---------- */
-.chat-card > header.clickable { cursor: zoom-in; }
-.chat-card.zoomed > header.clickable { cursor: default; }
-.chat-card > header.clickable:hover h2 { color: var(--accent); }
 .chat-tools { gap: 6px; }
 .chat-tools .zoom-only, .zoom-side { display: none; }
 .rate-pill { font: 600 0.78rem var(--mono); padding: 2px 9px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); color: var(--muted); }
-.expand-btn { border: 1px solid var(--line); background: var(--raised); }
+.expand-btn, .chat-tools .icon-btn, .chat-tools .btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.expand-btn { border: 1px solid var(--line); background: var(--raised); min-width: 40px; min-height: 40px; border-radius: 12px; transition: border-color 0.15s, color 0.15s, background 0.15s; }
 .expand-btn:hover { border-color: var(--accent); color: var(--accent); }
+.expand-btn:active { background: color-mix(in srgb, var(--accent) 14%, var(--raised)); }
 .sz { font-weight: 700; margin-left: -2px; font-size: 0.8rem; }
 .zoom-hold { visibility: hidden; }
-.zoom-scrim { position: fixed; inset: 0; z-index: 65; background: rgba(8, 12, 22, 0.62); opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
-.zoom-scrim.on { opacity: 1; pointer-events: auto; }
-.chat-card.zoomed { position: fixed; z-index: 70; margin: 0; display: flex; flex-direction: column; border-radius: 18px; box-shadow: var(--shadow-2); contain: layout; }
+/* 1.1.3: no blur and no size animation. Only opacity and transform move, so the live chat is never re-laid-out mid-animation. */
+.zoom-scrim { position: fixed; inset: 0; z-index: 65; background: rgba(8, 12, 22, 0.72); animation: zoom-fade 0.18s ease-out both; }
+.zoom-scrim.off { animation: zoom-fade 0.16s ease-in reverse both; }
+.chat-card.zoomed { position: fixed; z-index: 70; margin: 0; display: flex; flex-direction: column; border-radius: 18px; box-shadow: var(--shadow-2); overflow: hidden; contain: layout paint; }
+.chat-card.zoomed.zoom-in { animation: zoom-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.chat-card.zoomed.zoom-out { animation: zoom-pop 0.16s ease-in reverse both; pointer-events: none; }
+@keyframes zoom-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes zoom-pop { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
 .chat-card.zoomed .chat-tools .zoom-only { display: inline-flex; }
 .chat-card.zoomed > header { flex: none; }
 .chat-card.zoomed .chat-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); position: relative; overflow: hidden; }
@@ -180,12 +184,27 @@
   .chat-card.zoomed .toolbar { padding: 8px 12px; }
 }
 body.zoom-open .tabbar { z-index: 10; }
+/* chat card polish */
+.chat-card > header { align-items: center; gap: 10px; }
+.chat-card > header h2 { letter-spacing: 0.01em; }
+.chat-card .line { border-radius: 10px; margin: 0 6px; padding-left: 10px; padding-right: 10px; transition: background 0.15s; }
+.chat-card .line time { opacity: 0.75; }
+.chat-card .feed { scroll-behavior: auto; -webkit-overflow-scrolling: touch; }
+.chat-card.zoomed > header { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 92%, var(--accent) 3%); }
+.chat-card.zoomed .feed { scrollbar-width: thin; }
+.chat-card.zoomed .say { border-top: 1px solid var(--line); background: var(--panel); }
+@media (max-width: 719px) {
+  .chat-card .line { grid-template-columns: 1fr; gap: 0; }
+  .chat-card .line time { order: 2; font-size: 0.72rem; padding-top: 0; }
+  .chat-card.zoomed .chat-tools { padding-bottom: 2px; scrollbar-width: none; }
+  .chat-card.zoomed .chat-tools::-webkit-scrollbar { display: none; }
+}
 
 /* ---------- Notebook list view and misc ---------- */
 .notes-grid.as-list { columns: 1; }
 .notes-grid.as-list .note-card { margin-bottom: 8px; }
 @media (prefers-reduced-motion: reduce) {
-  .zoom-scrim, .zoom-side, .setup-panel, .tile { transition: none !important; animation: none !important; }
+  .chat-card.zoomed, .zoom-scrim, .zoom-side, .setup-panel, .tile { transition: none !important; animation: none !important; }
 }
 @media (max-width: 719px) {
   .area-nav { margin-bottom: 14px; }

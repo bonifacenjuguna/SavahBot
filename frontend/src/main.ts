@@ -15,7 +15,6 @@ import { notebook } from "./pages/notebook.js";
 import { community } from "./pages/community.js";
 import { insights } from "./pages/insights.js";
 import { demo } from "./pages/demo.js";
-import { resetZoomArtifacts } from "./pages/kit.js";
 import { more } from "./pages/more.js";
 import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
@@ -216,7 +215,6 @@ function showShell(): void {
   let lastId = "";
   const render = () => {
     cleanup?.();
-    resetZoomArtifacts();            // whatever a page left open, the next page starts clean
     const { id, query } = route();
     const page = PAGES.find((p) => p.id === id) ?? PAGES[0];
     for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));

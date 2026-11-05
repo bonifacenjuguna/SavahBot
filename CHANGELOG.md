@@ -3,10 +3,9 @@
 ## 1.1.3
 
 ### Fixes
-- **Expanded chat no longer freezes or sticks (found on a phone).** The zoom animated the card's width and height, which made the browser re-lay out the whole chat on every frame. It now places the card at its final size once and animates only a clipping window, so it is smooth on phones.
-- **Nothing is left behind.** Tapping expand again during the animation used to leave an invisible placeholder (blank gaps above and beside the chat), a dim layer that swallowed taps, and a locked page scroll. The zoom is now a small state machine: a tap during the animation finishes it, a timer guarantees it can never get stuck, and every page start and exit clears any leftovers.
-- Double-click on the chat title bar no longer opens and instantly closes it. Click the title bar or the expand button to open; Esc or the button to close.
-- The dim layer no longer uses a blur (costly on phones) and ignores taps unless the chat is expanded.
+- **Expand no longer lags or freezes the phone.** The chat card used to animate its size and position while live chat kept arriving, forcing a re-layout every frame, and blurred the whole screen behind it. It now appears with a short fade and slide (no blur, no size animation), and chat auto-scroll is batched to once per frame.
+- **One tap to close.** The expand/collapse button works on a single tap in both directions. The hidden double-click on the title bar is removed, and a quick re-tap during the animation can no longer leave the card stuck.
+- **Chat card polish.** Rounder, calmer card with a clearer header and input bar, softer rows and larger touch targets for the expand button.
 
 ## 1.1.2
 
