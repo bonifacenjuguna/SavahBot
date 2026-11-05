@@ -80,6 +80,8 @@ class Hub:
                 except Exception:
                     logger.exception("Stopping %s failed", self.source.name)
                 self.stream_state(False)
+            if self.source is not wanted:
+                self.lines = 0  # the "chat lines this session" counter belongs to one mode
             self.source = wanted
             if wanted is not None:
                 try:
@@ -177,7 +179,8 @@ class Hub:
         self.lines += 1
         if ACTION_RANK.get(msg.verdict, -1) < ACTION_RANK["delete"]:
             try:
-                for reply in await self.commands.handle(msg):
+                replies = await self.commands.handle(msg) or await self.commands.handle_triggers(msg)
+                for reply in replies:
                     await self.send_chat(reply)
             except Exception:
                 logger.exception("Command handling failed")
@@ -293,9 +296,9 @@ class Hub:
         self.bus.publish("mod_resolved", {"id": id_, "status": "rejected", "action": a["action"], "author": a["author_name"]})
         return {"ok": True, "status": "rejected"}
 
-    async def resolve_all(self, approve: bool) -> dict[str, int]:
+    async def resolve_all(self, approve: bool, demo: bool | None = None) -> dict[str, int]:
         done = failed = 0
-        for a in await self.store.pending_actions():
+        for a in await self.store.pending_actions(demo):
             res = await (self.approve(a["id"]) if approve else self.reject(a["id"]))
             done += 1 if res.get("ok") else 0
             failed += 0 if res.get("ok") else 1

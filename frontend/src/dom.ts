@@ -130,7 +130,7 @@ export function sheet(title: string, body: Node, onClose?: () => void): { close:
     onClose?.();
   };
   const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
-  const panel = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title },
+  const panel = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: -1 },
     h("div", { class: "sheet-grip", "aria-hidden": "true" }),
     h("header", { class: "sheet-head" }, h("h2", null, title), h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: close }, icon("x", 20))),
     h("div", { class: "sheet-body" }, body));
@@ -140,7 +140,13 @@ export function sheet(title: string, body: Node, onClose?: () => void): { close:
   document.body.classList.add("no-scroll");
   openSheets++;
   document.addEventListener("keydown", onKey, true);
-  (panel.querySelector("input, textarea, select, button.btn") as HTMLElement | null)?.focus();
+  // Always open at the top. Only text fields get focus, and not on touch screens (it would pop the keyboard and scroll the sheet).
+  const body_ = panel.querySelector(".sheet-body") as HTMLElement;
+  body_.scrollTop = 0;
+  const first = panel.querySelector("input, textarea, select") as HTMLElement | null;
+  const touch = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  (first && !touch ? first : panel).focus({ preventScroll: true });
+  body_.scrollTop = 0;
   return { close };
 }
 

@@ -50,11 +50,13 @@ export const desk: Page = {
           k !== "ok" ? h("div", { class: "reasons" }, `${m.verdict} (score ${m.score ?? 0})${m.reasons?.length ? ": " + m.reasons.join(", ") : ""}`) : null));
     };
     const visible = (m: Line): boolean => {
-      if (filter !== "all" && kindOf(m) !== filter) return false;
+      if (filter === "flagged" && kindOf(m) === "ok") return false;   // flagged = everything moderation reacted to
+      if (filter === "blocked" && kindOf(m) !== "blocked") return false;
       if (needle && !(`${m.author_name} ${m.text}`.toLowerCase().includes(needle))) return false;
       return true;
     };
     const redraw = () => {
+      updateCounts();
       list.replaceChildren(...lines.filter(visible).map(lineEl));
       if (!list.childElementCount) list.appendChild(empty("message", lines.length ? "No chat lines match this filter." : "No chat yet. Lines appear here as they arrive."));
       list.scrollTop = list.scrollHeight;
@@ -63,6 +65,7 @@ export const desk: Page = {
     };
     const push = (m: Line) => {
       lines.push(m);
+      queueMicrotask(updateCounts);
       if (lines.length > MAX) lines.shift();
       if (!visible(m)) return;
       list.querySelector(".empty")?.remove();
@@ -78,8 +81,10 @@ export const desk: Page = {
     };
 
     // ----- toolbar: filters, search, pause
+    const count = (f: Filter) => lines.filter((m) => (f === "flagged" ? kindOf(m) !== "ok" : kindOf(m) === "blocked")).length;
+    const updateCounts = () => (["flagged", "blocked"] as Filter[]).forEach((f) => { const n = filterBtns[f === "flagged" ? 1 : 2].querySelector(".n") as HTMLElement; const v = count(f); n.hidden = v === 0; n.textContent = String(v); });
     const filterBtns = (["all", "flagged", "blocked"] as Filter[]).map((f) =>
-      h("button", { type: "button", "aria-pressed": String(f === filter), onclick: () => { filter = f; filterBtns.forEach((b, i) => b.setAttribute("aria-pressed", String((["all", "flagged", "blocked"] as Filter[])[i] === f))); redraw(); } }, f[0].toUpperCase() + f.slice(1)));
+      h("button", { type: "button", "aria-pressed": String(f === filter), onclick: () => { filter = f; filterBtns.forEach((b, i) => b.setAttribute("aria-pressed", String((["all", "flagged", "blocked"] as Filter[])[i] === f))); redraw(); } }, f[0].toUpperCase() + f.slice(1), h("span", { class: "n", hidden: true }, "")));
     const search = h("input", { type: "search", placeholder: "Filter chat", "aria-label": "Filter chat", maxLength: 80 });
     search.addEventListener("input", () => { needle = search.value.trim().toLowerCase(); redraw(); });
     const pauseBtn = h("button", { class: "btn small ghost", type: "button", onclick: () => {
@@ -177,7 +182,7 @@ export const desk: Page = {
     void loadPending().catch((e) => toast(e.message, "error"));
     renderFacts();
     const offs = [
-      feed.on("chat", (e) => add(e.data)),
+      feed.on("chat", (e) => { if (Boolean(e.data.demo) === (status?.hub.mode === "demo")) add(e.data); }),
       feed.on("mod_pending", () => void loadPending()),
       feed.on("mod_resolved", () => void loadPending()),
       feed.on("mod_expired", () => void loadPending()),

@@ -4,6 +4,7 @@ import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
+import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
 import { THEME_ICON, applyTheme, initTheme, installShortcuts, nextTheme, openPalette, themePref, type AppContext, type ThemePref } from "./ui.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
@@ -16,7 +17,7 @@ import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
 import type { Page } from "./pages/types.js";
 
-export const APP_VERSION = "1.1.0";
+export const APP_VERSION = "1.1.1";
 
 const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings];
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
@@ -107,23 +108,27 @@ function showShell(): void {
   const ctx: AppContext = {
     pages: PAGES,
     go: (id) => { location.hash = `#/${id}`; },
-    setMode: async (mode) => { await post("/api/mode", { mode }); await refreshStatus(); },
+    setMode: async (mode) => { await post("/api/mode", { mode }); await refreshStatus(); toast(`Switched to ${mode === "demo" ? "Demo" : "Live"} mode`); },
     signOut,
     cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
     setTheme: (p: ThemePref) => { applyTheme(p); syncTheme(); },
   };
 
   // ----- sidebar (desktop and tablet)
-  const lamp = h("div", { class: "lamp", "aria-hidden": "true" });
+  const STATE_ICON = { demo: "flask", live: "radio", standby: "power" } as const;
+  const STATE_TAG = { demo: "Simulated", live: "On air", standby: "Idle" } as const;
+  const mcBadge = h("div", { class: "mc-badge", "aria-hidden": "true" }, icon("power", 22));
   const tTitle = h("strong", null, "Connecting");
-  const tDetail = h("span", null, "");
-  const tally = h("div", { class: "tally", "data-state": "standby", role: "status", title: "Bot status" }, lamp, h("div", null, tTitle), h("div", null, tDetail));
-  const demoBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("flask", 15), "Demo");
-  const liveBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("zap", 15), "Live");
+  const mcTag = h("span", { class: "mc-tag" }, "Idle");
+  const tDetail = h("span", { class: "mc-detail" }, "");
+  const demoBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("flask", 15), h("span", null, "Demo"));
+  const liveBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("radio", 15), h("span", null, "Live"));
   const setMode = (mode: "demo" | "live") => () => busy(mode === "demo" ? demoBtn : liveBtn, () => ctx.setMode(mode));
   demoBtn.onclick = setMode("demo");
   liveBtn.onclick = setMode("live");
-  const segment = h("div", { class: "segment", role: "group", "aria-label": "Bot mode" }, demoBtn, liveBtn);
+  const segment = h("div", { class: "mc-switch", role: "group", "aria-label": "Bot mode" }, demoBtn, liveBtn);
+  const tally = h("div", { class: "modecard", "data-state": "standby", role: "status", title: "Bot status" },
+    h("div", { class: "mc-head" }, mcBadge, h("div", { class: "mc-text" }, h("div", { class: "mc-title" }, tTitle, mcTag), tDetail)), segment);
 
   const counts = new Map<string, HTMLElement>();
   const navLinks: HTMLAnchorElement[] = [];
@@ -152,22 +157,21 @@ function showShell(): void {
   const verTag = h("span", { class: "ver", title: "Dashboard version" }, `v${APP_VERSION}`);
   const rail = h("aside", { class: "rail" },
     h("div", { class: "rail-brand" }, logo(30), h("span", { class: "brand" }, "SavahBot"), verTag),
-    tally, segment, nav,
+    tally, nav,
     h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out));
 
   // ----- top bar
-  const tbDot = h("span", { class: "dot" });
+  const tbIco = h("span", { class: "tb-ico", "aria-hidden": "true" }, icon("power", 13));
   const tbTitle = h("span", null, "Connecting");
   const tbDetail = h("span", { class: "muted t-detail" }, "");
-  const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbDot, tbTitle, tbDetail);
+  const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbIco, tbTitle, tbDetail);
   const searchBtn = h("button", { class: "search-btn", type: "button", onclick: () => openPalette(ctx), "aria-label": "Search and jump to" },
     icon("search", 18), h("span", { class: "grow" }, "Search pages and actions"), h("kbd", null, "Ctrl K"));
   const connChip = h("span", { class: "conn-chip down", role: "status" }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
-  const bellBadge = h("span", { class: "badge", hidden: true }, "0");
-  const bell = h("a", { class: "icon-btn", href: "#/moderation", "aria-label": "Moderation requests waiting", title: "Moderation requests" }, icon("bell", 20), bellBadge);
-  const themeTop = h("button", { class: "icon-btn", type: "button", onclick: () => ctx.cycleTheme(), "aria-label": "Change theme", title: "Change theme" });
+  const bellBadge = h("span", { class: "badge accent", hidden: true }, "0");
+  const bell = h("button", { class: "icon-btn", type: "button", "aria-label": "Notifications", "aria-haspopup": "dialog", "aria-expanded": "false", title: "Notifications", onclick: () => openNotifications(bell) }, icon("bell", 20), bellBadge);
   const topbar = h("header", { class: "topbar" },
-    h("span", { class: "tb-brand" }, logo(26)), tbTally, searchBtn, h("span", { class: "tb-spacer" }), connChip, themeTop, bell);
+    h("span", { class: "tb-brand" }, logo(26)), tbTally, searchBtn, h("span", { class: "tb-spacer" }), connChip, bell);
 
   // ----- phone tab bar
   const tabLinks: HTMLElement[] = [];
@@ -243,18 +247,21 @@ function showShell(): void {
     const p = themePref();
     mount(themeIcon, icon(THEME_ICON[p], 18));
     themeText.textContent = `Theme: ${p === "system" ? "auto" : p}`;
-    mount(themeTop, icon(THEME_ICON[p], 20));
   }
   syncTheme();
 
   // ----- live status
   let lastStatus: Status | null = null;
+  let shownMode: string | null = null;
   const currentMode = () => lastStatus?.hub.mode ?? "demo";
   offs.push(onStatus((s) => {
     lastStatus = s;
     const t = tallyState(s);
     tally.setAttribute("data-state", t.state);
     tbTally.setAttribute("data-state", t.state);
+    mount(mcBadge, icon(STATE_ICON[t.state], 22));
+    mount(tbIco, icon(STATE_ICON[t.state], 13));
+    mcTag.textContent = STATE_TAG[t.state];
     tTitle.textContent = t.title;
     tDetail.textContent = t.detail;
     tbTitle.textContent = t.title;
@@ -269,7 +276,11 @@ function showShell(): void {
     const badge = counts.get("moderation")!;
     badge.hidden = s.pending === 0;
     badge.textContent = String(s.pending);
-    for (const b of [bellBadge, tabBadge]) { b.hidden = s.pending === 0; b.textContent = String(s.pending); }
+    tabBadge.hidden = s.pending === 0;
+    tabBadge.textContent = String(s.pending);
+    // the pages were drawn for the previous mode: draw them again so Demo and Live never show each other's data
+    if (shownMode && shownMode !== s.hub.mode) render();
+    shownMode = s.hub.mode;
   }));
   offs.push(feed.onConnection((up) => {
     connText.textContent = up ? "Live feed: connected" : "Live feed: reconnecting";
@@ -278,6 +289,15 @@ function showShell(): void {
     mount(connChip, icon(up ? "wifi" : "wifiOff", 16), h("span", { class: "txt" }, up ? "Live" : "Reconnecting"));
   }));
   for (const t of ["mode", "stream", "mod_pending", "mod_resolved"]) offs.push(feed.on(t, () => void refreshStatus()));
+  const syncBell = () => {
+    const n = unreadCount();
+    bellBadge.hidden = n === 0;
+    bellBadge.textContent = n > 9 ? "9+" : String(n);
+    bell.setAttribute("aria-label", n ? `Notifications, ${n} unread` : "Notifications");
+  };
+  offs.push(onNotices(syncBell));
+  syncBell();
+  offs.push(startNotifications(() => lastStatus));
   offs.push(installShortcuts(ctx));
 
   render();

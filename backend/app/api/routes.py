@@ -15,7 +15,7 @@ from starlette.routing import Route
 
 from .. import __version__
 from ..analytics import summary
-from ..commands import BUILTIN_NAMES
+from ..commands import BUILTIN_NAMES, Ctx
 from ..config import BY_NAME
 from ..models import ChatMessage
 from ..moderation import ModInput
@@ -167,7 +167,7 @@ async def status(request: Request, c: Any) -> dict:
     return {
         "app": c.cfg.get("app_name"), "version": __version__, "timezone": c.cfg.get("owner_timezone"),
         "hub": c.hub.status(), "telegram": c.telegram.status(), "youtube": c.youtube.status(), "demo": c.demo.status(),
-        "pending": len(await c.store.pending_actions()), "database": c.db.backend, "uptime": round(time.time() - c.started_at),
+        "pending": len(await c.store.pending_actions(_demo_filter(c))), "database": c.db.backend, "uptime": round(time.time() - c.started_at),
         "sse_clients": c.bus.subscriber_count,
     }
 
@@ -256,7 +256,8 @@ async def timers_list(request: Request, c: Any) -> dict:
 @R.add("/timers", ["POST"])
 async def timers_create(request: Request, c: Any) -> dict:
     b = await parse(request, S.TimerIn)
-    await c.store.create_timer(b.name, b.message, b.interval_seconds, b.min_lines, b.enabled)
+    lines = b.min_lines if b.min_lines is not None else (5 if b.interval_seconds else 0)
+    await c.store.create_timer(b.name, b.message, b.interval_seconds, lines, b.enabled, b.match_mode, b.max_runs)
     return {"items": await c.store.list_timers()}
 
 
@@ -270,6 +271,48 @@ async def timers_update(request: Request, c: Any) -> dict:
 @R.add("/timers/{id:int}", ["DELETE"])
 async def timers_delete(request: Request, c: Any) -> dict:
     need(await c.store.delete_timer(request.path_params["id"]), "timer")
+    return {"ok": True}
+
+
+@R.add("/timers/{id:int}/send", ["POST"])
+async def timers_send(request: Request, c: Any) -> dict:
+    """Post a timer's message to chat right now, without touching its schedule."""
+    t = await c.store.get_timer(request.path_params["id"])
+    need(t, "timer")
+    text = await c.hub.commands.renderer.render(t["message"], Ctx(channel=c.hub.commands.channel_fn(), now=time.time()))
+    if not text or not await c.hub.send_chat(text):
+        raise ApiError("Could not send. The chat source is not connected to a live chat.", 409)
+    return {"ok": True, "text": text}
+
+
+# ================================================================================= auto-replies (triggers)
+@R.add("/triggers", ["GET"])
+async def triggers_list(request: Request, c: Any) -> dict:
+    return {"items": await c.store.list_triggers(), "levels": list(LEVELS), "enabled": c.cfg.get("triggers_enabled")}
+
+
+@R.add("/triggers", ["POST"])
+async def triggers_create(request: Request, c: Any) -> dict:
+    b = await parse(request, S.TriggerIn)
+    id_ = await c.store.create_trigger(
+        b.phrase, b.response, b.match_type, b.mention, b.userlevel,
+        b.cooldown if b.cooldown is not None else c.cfg.get("trigger_default_cooldown"),
+        b.user_cooldown if b.user_cooldown is not None else c.cfg.get("trigger_user_cooldown"), b.enabled)
+    return {"item": await c.store.get_trigger(id_)}
+
+
+@R.add("/triggers/{id:int}", ["PATCH"])
+async def triggers_update(request: Request, c: Any) -> dict:
+    id_ = request.path_params["id"]
+    b = await parse(request, S.TriggerPatch)
+    need(await c.store.get_trigger(id_), "auto-reply")
+    await c.store.update_trigger(id_, **b.model_dump(exclude_unset=True))
+    return {"item": await c.store.get_trigger(id_)}
+
+
+@R.add("/triggers/{id:int}", ["DELETE"])
+async def triggers_delete(request: Request, c: Any) -> dict:
+    need(await c.store.delete_trigger(request.path_params["id"]), "auto-reply")
     return {"ok": True}
 
 
@@ -349,14 +392,14 @@ async def moderation_test(request: Request, c: Any) -> dict:
 
 @R.add("/moderation/pending", ["GET"])
 async def moderation_pending(request: Request, c: Any) -> dict:
-    return {"items": await c.store.pending_actions()}
+    return {"items": await c.store.pending_actions(_demo_filter(c))}
 
 
 @R.add("/moderation/history", ["GET"])
 async def moderation_history(request: Request, c: Any) -> dict:
     q = request.query_params
     limit = max(1, min(int(q.get("limit", 100)), 500))
-    return {"items": await c.store.action_history(limit, q.get("status") or None)}
+    return {"items": await c.store.action_history(limit, q.get("status") or None, _demo_filter(c))}
 
 
 @R.add("/moderation/{id:int}/{verb}", ["POST"])
@@ -376,7 +419,7 @@ async def moderation_resolve_all(request: Request, c: Any) -> dict:
     verb = request.path_params["verb"]
     if verb not in ("approve", "reject"):
         raise ApiError("Unknown action.", 404)
-    return await c.hub.resolve_all(verb == "approve")
+    return await c.hub.resolve_all(verb == "approve", _demo_filter(c))
 
 
 # ================================================================================= notes + reminders
@@ -429,9 +472,10 @@ async def reminders_cancel(request: Request, c: Any) -> dict:
 @R.add("/chat/recent", ["GET"])
 async def chat_recent(request: Request, c: Any) -> dict:
     limit = max(1, min(int(request.query_params.get("limit", 100)), 500))
-    items = list(c.hub.buffer)[-limit:]
+    want_demo = _demo_filter(c)  # only the chat of the mode you are in; demo and live never mix
+    items = [m for m in c.hub.buffer if bool(m.get("demo")) == want_demo][-limit:]
     if not items:
-        items = [m | {"from_bot": m["level"] == "bot", "reasons": []} for m in await c.store.recent_chat(limit)]
+        items = [m | {"from_bot": m["level"] == "bot", "reasons": []} for m in await c.store.recent_chat(limit, want_demo)]
         for m in items:
             m["text"], m["demo"] = m.pop("body"), bool(m["demo"])
     return {"items": items}
