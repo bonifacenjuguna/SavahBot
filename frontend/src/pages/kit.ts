@@ -178,14 +178,14 @@ export function zoomToFill(card: HTMLElement, hooks: { onOpen?: () => void; onCl
       document.body.classList.add("no-scroll", "zoom-open");
       window.addEventListener("resize", onResize);
       document.addEventListener("keydown", onKey, true);
-      hooks.onOpen?.();
+      try { hooks.onOpen?.(); } catch (err) { console.error(err); }
     },
     close() {
       if (!open) return;
       open = false;
       window.removeEventListener("resize", onResize);
       document.removeEventListener("keydown", onKey, true);
-      hooks.onClose?.();
+      try { hooks.onClose?.(); } catch (err) { console.error(err); }   // a hook problem must never leave the card stuck open
       const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (reduce) { cleanup(); return; }
       card.classList.remove("zoom-in");

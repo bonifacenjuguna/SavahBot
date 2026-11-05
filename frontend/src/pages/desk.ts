@@ -243,7 +243,6 @@ export const desk: Page = {
     setSize(sizeIdx);
 
     const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true });
-    const queueBody = queuePane.querySelector(":scope > .body, :scope > div:not(header)") as HTMLElement | null ?? queuePane;
     const statusPane = card("activity", "Bot status", health, { flush: true });
     const sideStack = h("div", { class: "stack" }, queuePane, statusPane);
 
@@ -257,7 +256,7 @@ export const desk: Page = {
       onClose: () => {
         paintExpand(false);
         chatPane.classList.remove("side-open");
-        queueBody.appendChild(pendingBox);
+        queuePane.appendChild(pendingBox);   // back where it was: the last child of its card (it is the card body itself)
         window.requestAnimationFrame(() => { if (stick) list.scrollTop = list.scrollHeight; });
         expandBtn.focus({ preventScroll: true });
       },
