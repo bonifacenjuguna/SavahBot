@@ -164,8 +164,6 @@ async def me(request: Request, c: Any) -> dict:
 
 @R.add("/status", ["GET"])
 async def status(request: Request, c: Any) -> dict:
-    # Refresh the Pacific quota day even when the YouTube polling loop is stopped.
-    await c.quota.sync()
     return {
         "app": c.cfg.get("app_name"), "version": __version__, "timezone": c.cfg.get("owner_timezone"),
         "hub": c.hub.status(), "telegram": c.telegram.status(), "youtube": c.youtube.status(), "demo": c.demo.status(),
@@ -397,11 +395,24 @@ async def moderation_pending(request: Request, c: Any) -> dict:
     return {"items": await c.store.pending_actions(_demo_filter(c))}
 
 
+def _epoch(raw: str | None, name: str) -> float | None:
+    """Reads a since/until query value: epoch seconds. Empty means no limit."""
+    if raw in (None, ""):
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        raise ApiError(f"'{name}' must be a time in epoch seconds.", 422) from None
+
+
 @R.add("/moderation/history", ["GET"])
 async def moderation_history(request: Request, c: Any) -> dict:
     q = request.query_params
     limit = max(1, min(int(q.get("limit", 100)), 500))
-    return {"items": await c.store.action_history(limit, q.get("status") or None, _demo_filter(c))}
+    items = await c.store.action_history(limit, q.get("status") or None, _demo_filter(c), since=_epoch(q.get("since"), "since"),
+                                         until=_epoch(q.get("until"), "until"), q=(q.get("q") or "").strip()[:100] or None,
+                                         offset=max(0, int(q.get("offset", 0))))
+    return {"items": items}
 
 
 @R.add("/moderation/{id:int}/{verb}", ["POST"])
@@ -483,6 +494,21 @@ async def chat_recent(request: Request, c: Any) -> dict:
     return {"items": items}
 
 
+@R.add("/chat/search", ["GET"])
+async def chat_search(request: Request, c: Any) -> dict:
+    """Search the stored chat by text, date range (since/until, epoch seconds) and moderation outcome."""
+    q = request.query_params
+    verdict = q.get("verdict") if q.get("verdict") in ("flagged", "blocked") else None
+    limit = max(1, min(int(q.get("limit", 200)), 500))
+    rows = await c.store.search_chat((q.get("q") or "").strip()[:100] or None, _epoch(q.get("since"), "since"), _epoch(q.get("until"), "until"),
+                                     verdict, _demo_filter(c), limit)
+    items = []
+    for m in rows:
+        m["text"], m["demo"] = m.pop("body"), bool(m["demo"])
+        items.append(m | {"from_bot": m["level"] == "bot", "reasons": []})
+    return {"items": items, "retention_days": c.cfg.get("chat_retention_days")}
+
+
 @R.add("/chat/send", ["POST"])
 async def chat_send(request: Request, c: Any) -> dict:
     b = await parse(request, S.ChatSend)
@@ -539,8 +565,6 @@ async def demo_ambient(request: Request, c: Any) -> dict:
 # ================================================================================= integrations
 @R.add("/youtube/status", ["GET"])
 async def youtube_status(request: Request, c: Any) -> dict:
-    # Status polling must roll the tracker over at midnight Pacific in every bot mode.
-    await c.quota.sync()
     return c.youtube.status() | {"connected": await c.google.connected()}
 
 

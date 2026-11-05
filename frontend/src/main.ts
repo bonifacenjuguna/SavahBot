@@ -1,11 +1,13 @@
 import "./styles.css";
+import "./redesign.css";
 import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
 import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
-import { THEME_ICON, applyTheme, initTheme, installShortcuts, nextTheme, openPalette, themePref, type AppContext, type ThemePref } from "./ui.js";
+import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
+import { APP_VERSION } from "./version.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -13,13 +15,14 @@ import { notebook } from "./pages/notebook.js";
 import { community } from "./pages/community.js";
 import { insights } from "./pages/insights.js";
 import { demo } from "./pages/demo.js";
+import { more } from "./pages/more.js";
 import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
 import type { Page } from "./pages/types.js";
 
-export const APP_VERSION = "1.1.1";
+export { APP_VERSION };
 
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings];
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings, more];
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Operate", ids: ["desk", "moderation", "commands"] },
   { title: "Manage", ids: ["notebook", "community", "insights", "demo"] },
@@ -113,6 +116,7 @@ function showShell(): void {
     cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
     setTheme: (p: ThemePref) => { applyTheme(p); syncTheme(); },
   };
+  setAppContext(ctx);
 
   // ----- sidebar (desktop and tablet)
   const STATE_ICON = { demo: "flask", live: "radio", standby: "power" } as const;
@@ -183,7 +187,7 @@ function showShell(): void {
       tabLinks.push(a);
       return a;
     }),
-    h("button", { class: "tab", type: "button", id: "tab-more", onclick: () => openMore() }, icon("menu", 22), "More"));
+    h("a", { class: "tab", href: "#/more", id: "tab-more", "data-id": "more" }, icon("grid", 22), "More"));
   const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
@@ -206,24 +210,6 @@ function showShell(): void {
     const t = tallyState(lastStatus);
     holder.close = sheet("Bot mode", h("div", { class: "stack" }, h("div", { class: "banner" }, icon("info", 18), h("span", null, `${t.title}: ${t.detail}`)), modeCards(() => holder.close()))).close;
   }
-  function openMore(): void {
-    const holder: { close: () => void } = { close: () => undefined };
-    const rest = PAGES.filter((p) => !TAB_IDS.includes(p.id));
-    const cur = route().id;
-    const themes: ThemePref[] = ["system", "light", "dark"];
-    const themeSeg = h("div", { class: "seg-control", role: "group", "aria-label": "Theme" }, themes.map((t) =>
-      h("button", { type: "button", "aria-pressed": String(themePref() === t), onclick: () => { ctx.setTheme(t); holder.close(); } }, icon(THEME_ICON[t], 16), t === "system" ? "Auto" : t[0].toUpperCase() + t.slice(1))));
-    const body = h("div", null,
-      h("div", { class: "more-grid" }, rest.map((p) => h("a", { class: "more-item", href: `#/${p.id}`, "aria-current": cur === p.id ? "page" : undefined, onclick: () => holder.close() }, icon(p.icon, 24), p.title))),
-      h("div", { class: "more-section" }, h("h3", null, "Bot mode"), modeCards(() => holder.close())),
-      h("div", { class: "more-section" }, h("h3", null, "Theme"), themeSeg),
-      h("div", { class: "more-section" },
-        h("button", { class: "btn ghost block-btn", type: "button", onclick: () => { holder.close(); openPalette(ctx); } }, icon("search", 16), "Search pages and actions"),
-        h("button", { class: "btn ghost block-btn", type: "button", onclick: () => { holder.close(); signOut(); } }, icon("logout", 16), "Sign out"),
-        h("p", { class: "muted small", style: "text-align:center" }, `SavahBot dashboard v${APP_VERSION}`)));
-    holder.close = sheet("More", body).close;
-  }
-
   // ----- routing
   let cleanup: (() => void) | void;
   let lastId = "";
@@ -233,6 +219,7 @@ function showShell(): void {
     const page = PAGES.find((p) => p.id === id) ?? PAGES[0];
     for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+    // More stays lit for every page that lives behind it (Notebook, Community, Setup and so on)
     if (TAB_IDS.includes(page.id)) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
     document.title = `${page.title} · SavahBot`;
     clear(content);
