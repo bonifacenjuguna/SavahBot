@@ -3,6 +3,7 @@ import * as feed from "./events.js";
 import { h, mount, sheet } from "./dom.js";
 import { icon } from "./icons.js";
 import { onStatus, type Status } from "./state.js";
+import { dateRange, type RangeValue } from "./pages/kit.js";
 
 export type Kind = "info" | "ok" | "warn" | "bad";
 export interface Notice { id: string; ts: number; kind: Kind; icon: string; title: string; text: string; href?: string; read: boolean; key?: string; count: number }
@@ -101,13 +102,15 @@ const ago = (ts: number): string => {
 
 function panelContent(close: () => void): { el: HTMLElement; stop: () => void } {
   let onlyUnread = false;
+  let range: RangeValue = { label: "", active: false };
+  const dates = dateRange({ presets: ["any", "today", "yesterday", "7d", "custom"], label: "Notification dates" }, (v) => { range = v; draw(); });
   const list = h("div", { class: "notice-list" });
   const filter = h("div", { class: "seg-control", role: "group", "aria-label": "Show" },
     [["All", false], ["Unread", true]].map(([l, v]) => h("button", { type: "button", "aria-pressed": String(onlyUnread === v), onclick: (e: Event) => { onlyUnread = v as boolean; Array.from((e.currentTarget as HTMLElement).parentElement!.children).forEach((b, i) => b.setAttribute("aria-pressed", String((i === 1) === onlyUnread))); draw(); } }, String(l))));
   const readAll = h("button", { class: "btn small ghost", type: "button", onclick: () => markAllRead() }, icon("check", 15), "Read all");
   const clear = h("button", { class: "btn small ghost", type: "button", onclick: () => clearAll() }, icon("trash", 15), "Clear");
   function draw(): void {
-    const shown = items.filter((n) => !onlyUnread || !n.read);
+    const shown = items.filter((n) => (!onlyUnread || !n.read) && (range.since === undefined || n.ts >= range.since) && (range.until === undefined || n.ts < range.until));
     readAll.disabled = unreadCount() === 0;
     clear.disabled = items.length === 0;
     mount(list, shown.length ? shown.map((n) => {
@@ -116,11 +119,11 @@ function panelContent(close: () => void): { el: HTMLElement; stop: () => void } 
         h("span", { class: "notice-ico" }, icon(n.icon, 18)),
         h("span", { class: "notice-body" }, h("strong", null, n.title), n.text ? h("span", { class: "small muted" }, n.text) : null, h("span", { class: "small muted" }, ago(n.ts))),
         n.read ? null : h("i", { class: "notice-dot", "aria-label": "Unread" }));
-    }) : h("div", { class: "empty" }, icon("checkCircle", 30), h("span", null, onlyUnread ? "No unread notifications." : "You are all caught up. Events like stream start, reminders and problems appear here.")));
+    }) : h("div", { class: "empty" }, icon("checkCircle", 30), h("span", null, range.active ? `Nothing for ${range.label.toLowerCase()}.` : onlyUnread ? "No unread notifications." : "You are all caught up. Events like stream start, reminders and problems appear here.")));
   }
   draw();
   const off = onNotices(draw);
-  const el = h("div", { class: "notice-panel" }, h("div", { class: "notice-tools" }, filter, h("span", { class: "tb-spacer" }), readAll, clear), list);
+  const el = h("div", { class: "notice-panel" }, h("div", { class: "notice-tools" }, filter, h("span", { class: "tb-spacer" }), readAll, clear), dates.el, list);
   return { el, stop: off };
 }
 

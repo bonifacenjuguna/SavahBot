@@ -414,6 +414,29 @@ class Store:
             (since, limit),
         )
 
+    async def search_chat(self, q: str | None = None, since: float | None = None, until: float | None = None,
+                          verdict: str | None = None, demo: bool | None = None, limit: int = 200) -> list[dict]:
+        """Stored chat, newest last, filtered by text, by date range and by what moderation did. Kept for chat_retention_days."""
+        where, params = [], []
+        if q:
+            where.append("(lower(body) LIKE ? ESCAPE '\\' OR lower(author_name) LIKE ? ESCAPE '\\')")
+            params += [self._like(q)] * 2
+        if since is not None:
+            where.append("ts >= ?")
+            params.append(since)
+        if until is not None:
+            where.append("ts < ?")
+            params.append(until)
+        if verdict == "flagged":
+            where.append("verdict IS NOT NULL AND verdict <> 'allow'")
+        elif verdict == "blocked":
+            where.append("verdict IS NOT NULL AND verdict NOT IN ('allow', 'flag')")
+        if demo is not None:
+            where.append("demo = ?")
+            params.append(int(demo))
+        sql = "SELECT * FROM chat_messages" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY ts DESC, id DESC LIMIT ?"
+        return list(reversed(await self.db.fetchall(sql, (*params, limit))))
+
     async def clear_demo_data(self) -> None:
         await self.db.execute("DELETE FROM chat_messages WHERE demo = 1")
         await self.db.execute("DELETE FROM mod_actions WHERE demo = 1")
@@ -451,24 +474,31 @@ class Store:
             "SELECT * FROM mod_actions WHERE status = 'pending' AND platform = ? AND author_id = ? "
             "AND action IN ('timeout', 'ban') ORDER BY ts DESC LIMIT 1", (platform, author_id)))
 
+    @staticmethod
+    def _like(q: str) -> str:
+        """Escapes %, _ and \\ so a search for "50%" matches the text and not a wildcard."""
+        return "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
     async def action_history(self, limit: int = 100, status: str | None = None, demo: bool | None = None,
-                             since: float | None = None, until: float | None = None) -> list[dict]:
-        """Newest first. `since` is inclusive and `until` exclusive (unix seconds), so a day is [midnight, next midnight)."""
+                             since: float | None = None, until: float | None = None, q: str | None = None, offset: int = 0) -> list[dict]:
         where, params = [], []
-        if since is not None:
-            where.append("ts >= ?")
-            params.append(since)
-        if until is not None:
-            where.append("ts < ?")
-            params.append(until)
         if status:
             where.append("status = ?")
             params.append(status)
         if demo is not None:
             where.append("demo = ?")
             params.append(int(demo))
-        sql = "SELECT * FROM mod_actions" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY ts DESC LIMIT ?"
-        return [self._action(r) for r in await self.db.fetchall(sql, (*params, limit))]
+        if since is not None:
+            where.append("ts >= ?")
+            params.append(since)
+        if until is not None:
+            where.append("ts < ?")
+            params.append(until)
+        if q:
+            where.append("(lower(author_name) LIKE ? ESCAPE '\\' OR lower(body) LIKE ? ESCAPE '\\' OR lower(action) LIKE ? ESCAPE '\\' OR lower(reasons) LIKE ? ESCAPE '\\')")
+            params += [self._like(q)] * 4
+        sql = "SELECT * FROM mod_actions" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY ts DESC LIMIT ? OFFSET ?"
+        return [self._action(r) for r in await self.db.fetchall(sql, (*params, limit, max(0, offset)))]
 
     async def actions_since(self, since: float) -> list[dict]:
         return [self._action(r) for r in await self.db.fetchall("SELECT * FROM mod_actions WHERE ts >= ? ORDER BY ts", (since,))]
