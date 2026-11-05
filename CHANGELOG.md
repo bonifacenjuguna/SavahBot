@@ -1,6 +1,25 @@
 # Changelog
 
-## 1.0.0 (version number unchanged)
+## 1.1.0
+
+### Dashboard redesign (frontend only, no API or database changes)
+
+- **Adaptive layout.** Full sidebar on desktop, icon rail on tablets, and on phones a top bar with a bottom tab bar plus a "More" sheet. Safe-area aware, 44 px touch targets, 16 px inputs (no iOS zoom), tables turn into cards on phones, forms open as bottom sheets.
+- **New logo** (transparent background, SVG, inline and as app icons), favicon, Apple touch icon and an installable web app manifest ("Add to Home Screen"). Logo files are also in `branding/`.
+- **All emoji and glyph icons replaced** by a built-in SVG icon set.
+- **Charts and graphs.** Insights now has KPI cards with trend lines, an interactive area chart (hover or touch), donut charts (chatter levels, moderation outcomes), bar charts, peak and average rate, and CSV export. The Desk shows a live chat-rate trend and a YouTube quota ring.
+- **Desk:** KPI strip, chat filters (all, flagged, blocked), chat search, pause and resume, "Latest" jump button, and a bot status card (YouTube, Telegram, database).
+- **Moderation:** mode picker cards, history filters, search and CSV export, phrase search, and a tester that shows each signal as a weighted bar.
+- **Commands:** search, inline on/off switches, tap-to-insert variables, editor in a sheet.
+- **Notebook:** note cards, pinned first, search and tag filter, quick reminder presets.
+- **Setup:** progress checklist. **Settings:** "changed from default only" filter and remembered open groups.
+- **Command palette** (Ctrl or Cmd + K, or `/`): jump to any page, switch mode, change theme, run demo scenarios. Shortcuts: `g` then `d m c n u i x s t`, `?` for help.
+- **Theme switch:** auto, light or dark, remembered, no flash on load. Colours and accent unchanged; no glows.
+- Sign-in screen redesigned.
+
+Version bumped to 1.1.0 (backend `__version__`, dashboard `package.json`).
+
+## 1.0.0
 
 ### YouTube safety fixes on top of the account / target-channel work
 

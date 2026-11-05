@@ -1,5 +1,6 @@
 import { post } from "../api.js";
-import { busy, dateTime, duration, h } from "../dom.js";
+import { busy, dateTime, duration, h, type Child } from "../dom.js";
+import { icon } from "../icons.js";
 
 export interface Action {
   id: number; ts: number; author_name: string; action: string; duration: number | null; score: number; reasons: string[];
@@ -10,20 +11,67 @@ export function actionLabel(a: Action): string {
   return a.action === "timeout" && a.duration ? `timeout ${duration(a.duration)}` : a.action;
 }
 
+/** Standard page heading: icon tile, title, optional description and right-aligned actions. */
+export function pageHead(iconName: string, title: string, description?: string, actions?: Child): HTMLElement {
+  return h("div", { class: "page-head" },
+    h("div", { class: "ph-main" }, h("span", { class: "ph-icon" }, icon(iconName, 22)), h("div", null, h("h1", null, title), description ? h("p", null, description) : null)),
+    actions ? h("div", { class: "ph-actions" }, actions) : null);
+}
+
+/** A titled card. `body` goes under the header; use `flush` when the body supplies its own padding. */
+export function card(iconName: string | null, title: string, body: Child, opts: { flush?: boolean; actions?: Child; cls?: string } = {}): HTMLElement {
+  return h("section", { class: `block${opts.flush ? " flush" : ""}${opts.cls ? " " + opts.cls : ""}` },
+    h("header", null, h("h2", null, iconName ? icon(iconName, 18) : null, title), opts.actions ?? null), body);
+}
+
+export function empty(iconName: string, text: string): HTMLElement {
+  return h("div", { class: "empty" }, icon(iconName, 28), h("span", null, text));
+}
+
+export function chipFor(status: string): string {
+  return status === "executed" || status === "approved" ? "ok" : status === "failed" || status === "rejected" ? "bad" : status === "pending" ? "warn" : "";
+}
+
+/** Two-pane switcher for narrow screens. Panes stay visible side by side on wide screens (CSS). */
+export function paneTabs(labels: { id: string; label: string; badge?: () => number }[], panes: Record<string, HTMLElement>, initial: string): HTMLElement {
+  let current = initial;
+  const wrap = h("div", { class: "seg-control pane-tabs", role: "tablist" });
+  const apply = () => {
+    for (const [id, el] of Object.entries(panes)) { el.classList.add("pane"); el.setAttribute("data-hidden", String(id !== current)); }
+    for (const b of Array.from(wrap.children)) b.setAttribute("aria-selected", String(b.getAttribute("data-id") === current));
+  };
+  for (const l of labels) {
+    const n = h("span", { class: "n", hidden: true }, "");
+    const b = h("button", { type: "button", role: "tab", "data-id": l.id, onclick: () => { current = l.id; apply(); } }, l.label, n);
+    (b as any).__n = n;
+    wrap.appendChild(b);
+  }
+  apply();
+  (wrap as any).refreshBadges = () => {
+    labels.forEach((l, i) => {
+      const n = (wrap.children[i] as any).__n as HTMLElement;
+      const v = l.badge?.() ?? 0;
+      n.hidden = v <= 0;
+      n.textContent = String(v);
+    });
+  };
+  return wrap;
+}
+
 export function approvalList(items: Action[], reload: () => Promise<void> | void): HTMLElement {
-  if (!items.length) return h("div", { class: "empty" }, "Nothing is waiting. Requests appear here when the bot wants to delete, time out or ban someone.");
+  if (!items.length) return h("div", { class: "empty" }, icon("check", 28), h("span", null, "Nothing is waiting. Requests appear here when the bot wants to delete, time out or ban someone."));
   const decide = (id: number, verb: "approve" | "reject") => (e: Event) =>
     busy(e.currentTarget as HTMLButtonElement, async () => { await post(`/api/moderation/${id}/${verb}`); await reload(); });
   const all = (verb: "approve" | "reject") => (e: Event) =>
     busy(e.currentTarget as HTMLButtonElement, async () => { await post(`/api/moderation/${verb}-all`); await reload(); });
   return h("ul", { class: "list" },
-    items.length > 1 ? h("li", { class: "row" }, h("button", { class: "btn small primary", onclick: all("approve") }, "Approve all"), h("button", { class: "btn small ghost", onclick: all("reject") }, "Reject all")) : null,
+    items.length > 1 ? h("li", { class: "row" }, h("button", { class: "btn small primary", onclick: all("approve") }, icon("check", 15), "Approve all"), h("button", { class: "btn small ghost", onclick: all("reject") }, icon("x", 15), "Reject all")) : null,
     items.map((a) =>
       h("li", { class: "approval" },
         h("div", { class: "row between" }, h("strong", null, a.author_name), h("span", { class: "chip warn" }, `${actionLabel(a)} · score ${a.score}`)),
         a.body ? h("q", null, a.body) : null,
         h("div", { class: "reasons" }, a.reasons.join(", ")),
-        h("div", { class: "row" }, h("button", { class: "btn small primary", onclick: decide(a.id, "approve") }, "Approve"),
-          h("button", { class: "btn small ghost", onclick: decide(a.id, "reject") }, "Reject"), h("span", { class: "muted small" }, dateTime(a.ts))))),
+        h("div", { class: "row" }, h("button", { class: "btn small primary", onclick: decide(a.id, "approve") }, icon("check", 15), "Approve"),
+          h("button", { class: "btn small ghost", onclick: decide(a.id, "reject") }, icon("x", 15), "Reject"), h("span", { class: "muted small" }, dateTime(a.ts))))),
   );
 }

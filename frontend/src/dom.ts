@@ -1,3 +1,5 @@
+import { icon } from "./icons.js";
+
 export type Child = Node | string | number | null | undefined | false | Child[];
 type Props = Record<string, unknown> | null;
 
@@ -38,8 +40,9 @@ export function toast(message: string, kind: "ok" | "error" = "ok"): void {
     toastHost = h("div", { class: "toasts", role: "status", "aria-live": "polite" });
     document.body.appendChild(toastHost);
   }
-  const t = h("div", { class: `toast ${kind}` }, message);
+  const t = h("div", { class: `toast ${kind}` }, icon(kind === "error" ? "alert" : "check", 18), h("span", { class: "grow" }, message));
   toastHost.appendChild(t);
+  while (toastHost.childElementCount > 4) toastHost.firstElementChild?.remove();
   setTimeout(() => t.remove(), kind === "error" ? 6000 : 3000);
 }
 
@@ -95,7 +98,7 @@ export function busy(btn: HTMLButtonElement, action: () => Promise<unknown>, okM
 }
 
 export function copyButton(text: string, label = "Copy"): HTMLButtonElement {
-  const b = h("button", { class: "btn small ghost", type: "button" }, label);
+  const b = h("button", { class: "btn small ghost", type: "button" }, icon("copy", 15), label);
   b.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -105,4 +108,53 @@ export function copyButton(text: string, label = "Copy"): HTMLButtonElement {
     }
   });
   return b;
+}
+
+/** Button that holds an icon and (optionally) a text label. */
+export function iconButton(name: string, label: string, onclick: (e: Event) => void, cls = "btn small ghost", showLabel = true): HTMLButtonElement {
+  return h("button", { class: cls, type: "button", onclick, "aria-label": label, title: label }, icon(name, 16), showLabel ? h("span", null, label) : null);
+}
+
+let openSheets = 0;
+
+/** Modal panel: bottom sheet on phones, centred dialog on larger screens. Esc and the backdrop close it. */
+export function sheet(title: string, body: Node, onClose?: () => void): { close: () => void } {
+  const previous = document.activeElement as HTMLElement | null;
+  const overlay = h("div", { class: "overlay" });
+  const close = () => {
+    if (!overlay.isConnected) return;
+    overlay.remove();
+    document.removeEventListener("keydown", onKey, true);
+    if (--openSheets <= 0) { openSheets = 0; document.body.classList.remove("no-scroll"); }
+    previous?.focus?.();
+    onClose?.();
+  };
+  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  const panel = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title },
+    h("div", { class: "sheet-grip", "aria-hidden": "true" }),
+    h("header", { class: "sheet-head" }, h("h2", null, title), h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: close }, icon("x", 20))),
+    h("div", { class: "sheet-body" }, body));
+  overlay.appendChild(panel);
+  overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  document.body.classList.add("no-scroll");
+  openSheets++;
+  document.addEventListener("keydown", onKey, true);
+  (panel.querySelector("input, textarea, select, button.btn") as HTMLElement | null)?.focus();
+  return { close };
+}
+
+/** Downloads rows as a CSV file (client side only). */
+export function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]): void {
+  const esc = (v: string | number | null | undefined) => {
+    let t = v === null || v === undefined ? "" : String(v);
+    if (/^[=+\-@]/.test(t)) t = "'" + t; // stop spreadsheet formula injection
+    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const blob = new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = h("a", { href: URL.createObjectURL(blob), download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }

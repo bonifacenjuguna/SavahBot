@@ -3,7 +3,7 @@
 A personal, owner-only moderation and utility bot for YouTube live chat, controlled from a web dashboard and from Telegram.
 
 - **Backend** (`backend/`): Python 3.13, Starlette + uvicorn, PostgreSQL (SQLite for local use). Runs on Railway.
-- **Dashboard** (`frontend/`): Vite + TypeScript, no framework. Runs on Vercel.
+- **Dashboard** (`frontend/`): Vite + TypeScript, no framework, responsive for phone, tablet and desktop, installable as an app. Runs on Vercel.
 - **Telegram**: webhook or polling, switchable at any time from the dashboard or with `/tgmode`.
 - **Demo mode**: simulated chat and nine scenarios (raid, link spammer, caps flood, bot timing, disguised words, ...). Nothing is sent to YouTube or Telegram and no quota is used. Switch between Demo and Live in the sidebar; the lamp at the top shows which one you are in (amber = demo, red = on air, grey = standby).
 

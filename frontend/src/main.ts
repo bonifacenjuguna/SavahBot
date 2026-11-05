@@ -1,8 +1,10 @@
 import "./styles.css";
 import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
-import { busy, clear, h, mount, toast } from "./dom.js";
+import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
+import { icon, logo } from "./icons.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
+import { THEME_ICON, applyTheme, initTheme, installShortcuts, nextTheme, openPalette, themePref, type AppContext, type ThemePref } from "./ui.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -14,9 +16,20 @@ import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
 import type { Page } from "./pages/types.js";
 
+export const APP_VERSION = "1.1.0";
+
 const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings];
+const NAV_GROUPS: { title: string; ids: string[] }[] = [
+  { title: "Operate", ids: ["desk", "moderation", "commands"] },
+  { title: "Manage", ids: ["notebook", "community", "insights", "demo"] },
+  { title: "System", ids: ["setup", "settings"] },
+];
+const TAB_IDS = ["desk", "moderation", "commands", "insights"];
 const root = document.getElementById("app")!;
 let statusTimer: number | undefined;
+let shellCleanup: (() => void) | null = null;
+
+initTheme();
 
 function route(): { id: string; query: URLSearchParams } {
   const raw = location.hash.replace(/^#\/?/, "");
@@ -31,15 +44,22 @@ function tallyState(s: Status | null): { state: "live" | "demo" | "standby"; tit
   return { state: "standby", title: "Standby", detail: s.youtube.connected ? "Waiting for a live stream" : "YouTube not connected" };
 }
 
+function signOut(): void {
+  setToken("");
+  showLogin();
+}
+
 // ------------------------------------------------------------------------------------------------ login
 function showLogin(): void {
+  shellCleanup?.();
+  shellCleanup = null;
   feed.stop();
   window.clearInterval(statusTimer);
   const needsBase = !apiBase();
   const pass = h("input", { type: "password", autocomplete: "current-password", required: true, id: "pw" });
   const base = h("input", { type: "url", placeholder: "https://your-app.up.railway.app", value: apiBase(), id: "base" });
   const err = h("p", { class: "small", style: "color:var(--bad)", role: "alert" });
-  const btn = h("button", { class: "btn primary", type: "submit" }, "Sign in");
+  const btn = h("button", { class: "btn primary", type: "submit" }, icon("lock", 16), "Sign in");
   const form = h(
     "form",
     {
@@ -54,7 +74,8 @@ function showLogin(): void {
           .finally(() => (btn.disabled = false));
       },
     },
-    h("h1", null, h("span", { class: "lamp-sm" }), "SavahBot"),
+    h("div", { class: "mobile-logo" }, logo(44)),
+    h("div", { class: "head" }, h("h1", null, "Sign in")),
     h("p", { class: "muted" }, "Owner sign-in. The password is the OWNER_PASSWORD variable, or the one printed once in the Railway logs on first start."),
     h("label", { class: "field" }, "Password", pass),
     needsBase
@@ -62,63 +83,182 @@ function showLogin(): void {
       : h("details", null, h("summary", { class: "small muted" }, "Backend address"), h("label", { class: "field" }, "Address", base)),
     err,
     btn,
+    h("p", { class: "muted small" }, `SavahBot dashboard v${APP_VERSION}`),
   );
-  mount(root, h("main", { class: "login" }, form));
+  const brand = h("aside", { class: "login-brand" },
+    h("div", { class: "row nowrap mark" }, logo(40), h("span", { class: "brand", style: "font-size:1.3rem" }, "SavahBot")),
+    h("div", { class: "stack" },
+      h("h2", null, "Your chat, under control."),
+      h("p", null, "A private moderation and utility bot for YouTube live chat, run from this dashboard and from Telegram."),
+      h("ul", { class: "login-points" },
+        [["shield", "Explainable moderation: every score shows its signals."], ["flask", "Demo mode: simulated chat, nothing sent, no quota used."], ["chart", "Live charts of chat activity and moderation."]]
+          .map(([i, t]) => h("li", null, icon(i, 20), h("span", null, t))))),
+    h("span", { class: "small" }, `v${APP_VERSION}`));
+  mount(root, h("main", { class: "login" }, brand, h("div", { class: "login-pane" }, form)));
   pass.focus();
 }
 
 // ------------------------------------------------------------------------------------------------ shell
 function showShell(): void {
+  shellCleanup?.();
+  const offs: (() => void)[] = [];
+
+  // ----- shared actions
+  const ctx: AppContext = {
+    pages: PAGES,
+    go: (id) => { location.hash = `#/${id}`; },
+    setMode: async (mode) => { await post("/api/mode", { mode }); await refreshStatus(); },
+    signOut,
+    cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
+    setTheme: (p: ThemePref) => { applyTheme(p); syncTheme(); },
+  };
+
+  // ----- sidebar (desktop and tablet)
   const lamp = h("div", { class: "lamp", "aria-hidden": "true" });
   const tTitle = h("strong", null, "Connecting");
   const tDetail = h("span", null, "");
-  const tally = h("div", { class: "tally", "data-state": "standby", role: "status" }, lamp, tTitle, tDetail);
-  const demoBtn = h("button", { type: "button", "aria-pressed": "false" }, "Demo");
-  const liveBtn = h("button", { type: "button", "aria-pressed": "false" }, "Live");
-  const setMode = (mode: "demo" | "live") => () => busy(mode === "demo" ? demoBtn : liveBtn, async () => {
-    await post("/api/mode", { mode });
-    await refreshStatus();
-  });
+  const tally = h("div", { class: "tally", "data-state": "standby", role: "status", title: "Bot status" }, lamp, h("div", null, tTitle), h("div", null, tDetail));
+  const demoBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("flask", 15), "Demo");
+  const liveBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("zap", 15), "Live");
+  const setMode = (mode: "demo" | "live") => () => busy(mode === "demo" ? demoBtn : liveBtn, () => ctx.setMode(mode));
   demoBtn.onclick = setMode("demo");
   liveBtn.onclick = setMode("live");
   const segment = h("div", { class: "segment", role: "group", "aria-label": "Bot mode" }, demoBtn, liveBtn);
 
   const counts = new Map<string, HTMLElement>();
+  const navLinks: HTMLAnchorElement[] = [];
   const nav = h("nav", { class: "nav", "aria-label": "Sections" },
-    PAGES.map((p) => {
-      const badge = h("span", { class: "count", hidden: true }, "");
-      counts.set(p.id, badge);
-      return h("a", { href: `#/${p.id}`, "data-id": p.id }, p.title, badge);
-    }));
+    NAV_GROUPS.flatMap((g) => [
+      h("div", { class: "nav-title" }, g.title),
+      ...g.ids.map((id) => {
+        const p = PAGES.find((x) => x.id === id)!;
+        const badge = h("span", { class: "count", hidden: true }, "");
+        counts.set(p.id, badge);
+        const a = h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), badge);
+        navLinks.push(a);
+        return a;
+      }),
+    ]));
 
-  const quotaText = h("span", null, "");
+  const quotaText = h("span", { class: "txt" }, "");
   const meterBar = h("i", null);
   const meter = h("div", { class: "meter", title: "YouTube API quota used today" }, meterBar);
-  const connText = h("span", null, "Live feed: connecting");
-  const out = h("button", { class: "link-btn", type: "button", onclick: () => { setToken(""); showLogin(); } }, "Sign out");
-  const rail = h("aside", { class: "rail" }, h("div", { class: "brand" }, "SavahBot"), tally, segment, nav,
-    h("div", { class: "rail-foot" }, quotaText, meter, connText, out));
+  const connText = h("span", { class: "txt" }, "Live feed: connecting");
+  const connIcon = h("span", { class: "ico-slot" }, icon("wifiOff", 16));
+  const themeIcon = h("span", { class: "ico-slot" });
+  const themeText = h("span", { class: "txt" }, "");
+  const themeBtn = h("button", { class: "rail-btn", type: "button", onclick: () => ctx.cycleTheme(), title: "Change theme" }, themeIcon, themeText);
+  const out = h("button", { class: "rail-btn", type: "button", onclick: signOut, title: "Sign out" }, icon("logout", 18), h("span", { class: "txt" }, "Sign out"));
+  const verTag = h("span", { class: "ver", title: "Dashboard version" }, `v${APP_VERSION}`);
+  const rail = h("aside", { class: "rail" },
+    h("div", { class: "rail-brand" }, logo(30), h("span", { class: "brand" }, "SavahBot"), verTag),
+    tally, segment, nav,
+    h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out));
+
+  // ----- top bar
+  const tbDot = h("span", { class: "dot" });
+  const tbTitle = h("span", null, "Connecting");
+  const tbDetail = h("span", { class: "muted t-detail" }, "");
+  const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbDot, tbTitle, tbDetail);
+  const searchBtn = h("button", { class: "search-btn", type: "button", onclick: () => openPalette(ctx), "aria-label": "Search and jump to" },
+    icon("search", 18), h("span", { class: "grow" }, "Search pages and actions"), h("kbd", null, "Ctrl K"));
+  const connChip = h("span", { class: "conn-chip down", role: "status" }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
+  const bellBadge = h("span", { class: "badge", hidden: true }, "0");
+  const bell = h("a", { class: "icon-btn", href: "#/moderation", "aria-label": "Moderation requests waiting", title: "Moderation requests" }, icon("bell", 20), bellBadge);
+  const themeTop = h("button", { class: "icon-btn", type: "button", onclick: () => ctx.cycleTheme(), "aria-label": "Change theme", title: "Change theme" });
+  const topbar = h("header", { class: "topbar" },
+    h("span", { class: "tb-brand" }, logo(26)), tbTally, searchBtn, h("span", { class: "tb-spacer" }), connChip, themeTop, bell);
+
+  // ----- phone tab bar
+  const tabLinks: HTMLElement[] = [];
+  const tabBadge = h("span", { class: "badge", hidden: true }, "0");
+  const tabbar = h("nav", { class: "tabbar", "aria-label": "Main" },
+    TAB_IDS.map((id) => {
+      const p = PAGES.find((x) => x.id === id)!;
+      const a = h("a", { class: "tab", href: `#/${p.id}`, "data-id": p.id }, icon(p.icon, 22), p.title, id === "moderation" ? tabBadge : null);
+      tabLinks.push(a);
+      return a;
+    }),
+    h("button", { class: "tab", type: "button", id: "tab-more", onclick: () => openMore() }, icon("menu", 22), "More"));
+  const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
-  mount(root, h("div", { class: "shell" }, rail, content));
+  const skip = h("a", { class: "skip", href: "#content", onclick: (e: Event) => { e.preventDefault(); content.focus(); } }, "Skip to content");
+  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, content)), tabbar);
 
+  // ----- sheets
+  function modeCards(close: () => void): HTMLElement {
+    const mk = (mode: "demo" | "live", ic: string, title: string, text: string) => {
+      const b = h("button", { class: "mode-card", type: "button", "aria-pressed": String(currentMode() === mode) }, icon(ic, 22), h("strong", null, title), h("span", null, text));
+      b.onclick = () => busy(b as HTMLButtonElement, async () => { await ctx.setMode(mode); close(); });
+      return b;
+    };
+    return h("div", { class: "mode-cards", style: "grid-template-columns:1fr" },
+      mk("demo", "flask", "Demo", "Simulated chat. Nothing is sent to YouTube or Telegram and no quota is used."),
+      mk("live", "zap", "Live", "Real YouTube chat. The bot attaches when your stream starts."));
+  }
+  function openModeSheet(): void {
+    const holder: { close: () => void } = { close: () => undefined };
+    const t = tallyState(lastStatus);
+    holder.close = sheet("Bot mode", h("div", { class: "stack" }, h("div", { class: "banner" }, icon("info", 18), h("span", null, `${t.title}: ${t.detail}`)), modeCards(() => holder.close()))).close;
+  }
+  function openMore(): void {
+    const holder: { close: () => void } = { close: () => undefined };
+    const rest = PAGES.filter((p) => !TAB_IDS.includes(p.id));
+    const cur = route().id;
+    const themes: ThemePref[] = ["system", "light", "dark"];
+    const themeSeg = h("div", { class: "seg-control", role: "group", "aria-label": "Theme" }, themes.map((t) =>
+      h("button", { type: "button", "aria-pressed": String(themePref() === t), onclick: () => { ctx.setTheme(t); holder.close(); } }, icon(THEME_ICON[t], 16), t === "system" ? "Auto" : t[0].toUpperCase() + t.slice(1))));
+    const body = h("div", null,
+      h("div", { class: "more-grid" }, rest.map((p) => h("a", { class: "more-item", href: `#/${p.id}`, "aria-current": cur === p.id ? "page" : undefined, onclick: () => holder.close() }, icon(p.icon, 24), p.title))),
+      h("div", { class: "more-section" }, h("h3", null, "Bot mode"), modeCards(() => holder.close())),
+      h("div", { class: "more-section" }, h("h3", null, "Theme"), themeSeg),
+      h("div", { class: "more-section" },
+        h("button", { class: "btn ghost block-btn", type: "button", onclick: () => { holder.close(); openPalette(ctx); } }, icon("search", 16), "Search pages and actions"),
+        h("button", { class: "btn ghost block-btn", type: "button", onclick: () => { holder.close(); signOut(); } }, icon("logout", 16), "Sign out"),
+        h("p", { class: "muted small", style: "text-align:center" }, `SavahBot dashboard v${APP_VERSION}`)));
+    holder.close = sheet("More", body).close;
+  }
+
+  // ----- routing
   let cleanup: (() => void) | void;
+  let lastId = "";
   const render = () => {
     cleanup?.();
     const { id, query } = route();
     const page = PAGES.find((p) => p.id === id) ?? PAGES[0];
-    nav.querySelectorAll("a").forEach((a) => (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
+    for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+    for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+    if (TAB_IDS.includes(page.id)) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
     document.title = `${page.title} · SavahBot`;
     clear(content);
     cleanup = page.render(content, query);
+    if (lastId && lastId !== page.id) window.scrollTo(0, 0);
+    lastId = page.id;
   };
   window.onhashchange = render;
 
-  const offStatus = onStatus((s) => {
+  // ----- theme icon sync
+  function syncTheme(): void {
+    const p = themePref();
+    mount(themeIcon, icon(THEME_ICON[p], 18));
+    themeText.textContent = `Theme: ${p === "system" ? "auto" : p}`;
+    mount(themeTop, icon(THEME_ICON[p], 20));
+  }
+  syncTheme();
+
+  // ----- live status
+  let lastStatus: Status | null = null;
+  const currentMode = () => lastStatus?.hub.mode ?? "demo";
+  offs.push(onStatus((s) => {
+    lastStatus = s;
     const t = tallyState(s);
     tally.setAttribute("data-state", t.state);
+    tbTally.setAttribute("data-state", t.state);
     tTitle.textContent = t.title;
     tDetail.textContent = t.detail;
+    tbTitle.textContent = t.title;
+    tbDetail.textContent = t.detail;
     demoBtn.setAttribute("aria-pressed", String(s.hub.mode === "demo"));
     liveBtn.setAttribute("aria-pressed", String(s.hub.mode === "live"));
     const q = s.youtube.quota;
@@ -129,15 +269,29 @@ function showShell(): void {
     const badge = counts.get("moderation")!;
     badge.hidden = s.pending === 0;
     badge.textContent = String(s.pending);
-  });
-  const offConn = feed.onConnection((up) => (connText.textContent = up ? "Live feed: connected" : "Live feed: reconnecting"));
-  const offEvents = ["mode", "stream", "mod_pending", "mod_resolved"].map((t) => feed.on(t, () => void refreshStatus()));
+    for (const b of [bellBadge, tabBadge]) { b.hidden = s.pending === 0; b.textContent = String(s.pending); }
+  }));
+  offs.push(feed.onConnection((up) => {
+    connText.textContent = up ? "Live feed: connected" : "Live feed: reconnecting";
+    mount(connIcon, icon(up ? "wifi" : "wifiOff", 16));
+    connChip.classList.toggle("down", !up);
+    mount(connChip, icon(up ? "wifi" : "wifiOff", 16), h("span", { class: "txt" }, up ? "Live" : "Reconnecting"));
+  }));
+  for (const t of ["mode", "stream", "mod_pending", "mod_resolved"]) offs.push(feed.on(t, () => void refreshStatus()));
+  offs.push(installShortcuts(ctx));
 
   render();
   void refreshStatus();
   statusTimer = window.setInterval(() => void refreshStatus(), 15000);
   feed.start();
-  loggedOut.addEventListener("out", () => { offStatus(); offConn(); offEvents.forEach((f) => f()); }, { once: true });
+
+  const stopShell = () => {
+    cleanup?.();
+    cleanup = undefined;
+    offs.forEach((f) => f());
+    window.onhashchange = null;
+  };
+  shellCleanup = stopShell;
 }
 
 function boot(): void {
