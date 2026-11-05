@@ -289,30 +289,3 @@ async def test_youtube_diagnostics_flags_swapped_and_bad_values(api):
     assert st == 200 and all(c["ok"] for c in b["checks"]), b["checks"]
     assert "client_id=123-abc.apps.googleusercontent.com" in b["sign_in_url"] and "GOCSPX" not in b["sign_in_url"]
     assert b["redirect_uri"] == "https://bot.example.app/api/youtube/oauth/callback"
-
-
-@e2e
-async def test_timer_modes_and_auto_replies(api):
-    # a timer may wait for lines only, for a time only, or both; at least one is required
-    st, b = await api.call("POST", "/api/timers", {"name": "lines-only", "message": "Hi", "min_lines": 20})
-    assert st == 200
-    t = next(x for x in b["items"] if x["name"] == "lines-only")
-    assert t["interval_seconds"] == 0 and t["min_lines"] == 20 and t["match_mode"] == "all" and t["max_runs"] == 0
-    assert (await api.call("POST", "/api/timers", {"name": "empty", "message": "Hi"}))[0] == 422
-    assert (await api.call("POST", "/api/timers", {"name": "bad", "message": "Hi", "interval_seconds": 30}))[0] == 422
-    st, b = await api.call("POST", "/api/timers", {"name": "once", "message": "Hi", "interval_seconds": 600, "min_lines": 5, "match_mode": "any", "max_runs": 1})
-    assert st == 200 and next(x for x in b["items"] if x["name"] == "once")["max_runs"] == 1
-    assert (await api.call("PATCH", f"/api/timers/{t['id']}", {"interval_seconds": 0, "min_lines": 0}))[0] == 422
-
-    # auto-replies
-    st, b = await api.call("POST", "/api/triggers", {"phrase": "gm", "response": "Good morning!"})
-    assert st == 200 and b["item"]["match_type"] == "exact" and b["item"]["mention"] is True
-    tid = b["item"]["id"]
-    assert (await api.call("POST", "/api/triggers", {"phrase": "GM", "response": "dup"}))[0] == 422
-    assert (await api.call("POST", "/api/triggers", {"phrase": "x", "response": "y", "match_type": "regex"}))[0] == 422
-    st, b = await api.call("PATCH", f"/api/triggers/{tid}", {"enabled": False})
-    assert st == 200 and b["item"]["enabled"] is False
-    st, b = await api.call("GET", "/api/triggers")
-    assert st == 200 and len(b["items"]) == 1 and "everyone" in b["levels"]
-    assert (await api.call("DELETE", f"/api/triggers/{tid}"))[0] == 200
-    assert (await api.call("DELETE", f"/api/triggers/{tid}"))[0] == 404

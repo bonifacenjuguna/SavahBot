@@ -58,6 +58,7 @@ class Hub:
         self._suppressed = 0
         self._mode_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
+        self._announced_mode: str | None = None
 
     # ------------------------------------------------------------------ sources and mode
     def register(self, source: ChatSource) -> None:
@@ -70,25 +71,41 @@ class Hub:
     def source_name_for_mode(self) -> str:
         return "demo" if self.mode == "demo" else "youtube"
 
+    @property
+    def is_demo(self) -> bool:
+        return self.mode == "demo"
+
+    @property
+    def state(self) -> str:
+        """The one operating state the whole dashboard shows: demo | live | standby.
+        demo = simulated chat. live = real YouTube chat with a stream attached. standby = live mode, waiting for a stream."""
+        if self.mode == "demo":
+            return "demo"
+        return "live" if self.stream_live else "standby"
+
     async def apply_mode(self) -> dict[str, Any]:
         """Start the chat source that matches bot_mode (demo | live), stopping the previous one."""
         async with self._mode_lock:
             wanted = self.sources.get(self.source_name_for_mode())
-            if self.source is not None and self.source is not wanted:
+            switched = self.source is not wanted
+            if self.source is not None and switched:
                 try:
                     await self.source.stop()
                 except Exception:
                     logger.exception("Stopping %s failed", self.source.name)
                 self.stream_state(False)
-            if self.source is not wanted:
-                self.lines = 0  # the "chat lines this session" counter belongs to one mode
+            if switched:
+                self.lines = 0  # the session counter belongs to one mode; never carry demo lines into live or back
             self.source = wanted
             if wanted is not None:
                 try:
                     await wanted.start()
                 except Exception:
                     logger.exception("Starting %s failed", wanted.name)
-            self.bus.publish("mode", {"mode": self.mode})
+            self.bus.publish("mode", {"mode": self.mode, "state": self.state})
+            if switched and self._announced_mode is not None and self._announced_mode != self.mode:
+                self._spawn(self.notice("mode", f"Switched to {self.mode.title()} mode", "Demo is simulated chat. Live uses the real YouTube chat.", demo=self.is_demo))
+            self._announced_mode = self.mode
             return self.status()
 
     async def shutdown(self) -> None:
@@ -109,9 +126,21 @@ class Hub:
         self.stream_title = title if live else ""
         self._stream_started = time.time() if live and not was_live else (self._stream_started if live else None)
         self.bus.publish("stream", {"live": live, "title": self.stream_title})
+        if self.source is not None and self.source.name == "youtube":   # a real stream; demo starting or stopping is not news
+            self._spawn(self.notice("stream", f"Stream is live: {title}" if live else "Stream has ended", level="info", demo=False))
         if self.mode == "live" and self.cfg.get("telegram_notify_stream_events"):
             text = f"Stream is live: {title}" if live else "Stream has ended."
             self._spawn(self._notify(text))
+
+    async def notice(self, kind: str, title: str, body: str = "", level: str = "info", demo: bool | None = None) -> None:
+        """Record a system notification (stream events, timer problems, reminders...). Separate from moderation requests."""
+        demo = self.is_demo if demo is None else demo      # callers that spawn this pass demo so the tag is fixed at the moment of the event
+        try:
+            id_ = await self.store.add_notification(kind, title, body, level, demo=demo)
+        except Exception:
+            logger.exception("Could not store notification")
+            return
+        self.bus.publish("notification", {"id": id_, "kind": kind, "level": level, "title": title, "demo": demo})
 
     def uptime(self) -> float | None:
         return time.time() - self._stream_started if self.stream_live and self._stream_started else None
@@ -179,8 +208,7 @@ class Hub:
         self.lines += 1
         if ACTION_RANK.get(msg.verdict, -1) < ACTION_RANK["delete"]:
             try:
-                replies = await self.commands.handle(msg) or await self.commands.handle_triggers(msg)
-                for reply in replies:
+                for reply in await self.commands.handle(msg):
                     await self.send_chat(reply)
             except Exception:
                 logger.exception("Command handling failed")
@@ -311,7 +339,7 @@ class Hub:
     def status(self) -> dict[str, Any]:
         src = self.source.status() if self.source else {"state": "stopped"}
         return {
-            "mode": self.mode, "source": self.source.name if self.source else None, "source_status": src,
+            "mode": self.mode, "state": self.state, "source": self.source.name if self.source else None, "source_status": src,
             "stream_live": self.stream_live, "stream_title": self.stream_title, "uptime": self.uptime(),
             "mod_mode": self.cfg.get("mod_mode"), "lines": self.lines,
             "blacklist_size": self.engine.matcher.size,

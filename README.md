@@ -5,7 +5,7 @@ A personal, owner-only moderation and utility bot for YouTube live chat, control
 - **Backend** (`backend/`): Python 3.13, Starlette + uvicorn, PostgreSQL (SQLite for local use). Runs on Railway.
 - **Dashboard** (`frontend/`): Vite + TypeScript, no framework, responsive for phone, tablet and desktop, installable as an app. Runs on Vercel.
 - **Telegram**: webhook or polling, switchable at any time from the dashboard or with `/tgmode`.
-- **Demo mode**: simulated chat and nine scenarios (raid, link spammer, caps flood, bot timing, disguised words, ...). Nothing is sent to YouTube or Telegram and no quota is used. Switch between Demo and Live in the sidebar; the status card at the top shows which one you are in (flask = demo, red broadcast icon = on air, power icon = standby). Switching mode redraws every page, so Demo and Live data never mix.
+- **Demo mode**: simulated chat and nine scenarios (raid, link spammer, caps flood, bot timing, disguised words, ...). Nothing is sent to YouTube or Telegram and no quota is used. Switch between Demo and Live in the sidebar; the lamp at the top shows which one you are in (amber = demo, red = on air, grey = standby).
 
 There is no AI in this version. Moderation is a set of explainable algorithms, each of which shows up as a named signal with a weight, so you can always see why a message scored what it did.
 
@@ -114,9 +114,7 @@ Score maps to flag, delete, timeout or ban, and repeat offenders climb a timeout
 
 - Custom commands with variables: `$(user) $(touser) $(args) $(1) $(count) $(countdown ...) $(uptime) $(time) $(date) $(random 1 100) $(choose a|b) $(math 2+2) $(quote) $(urlfetch https://...)`. `$(math)` is parsed safely (never `eval`) and `$(urlfetch)` blocks private networks and redirects.
 - Per-command user level and cooldowns, aliases, a live preview, and built-ins (`!commands !addcom !editcom !delcom !permit !quote !addquote !uptime`).
-- Timers post only while the stream is live. Each timer waits for a time, a number of chat lines, or both (both must happen, or whichever comes first), and can repeat, post once, or post a set number of times. "Post now" sends one immediately.
-- Auto-replies answer when a viewer sends an exact phrase (or contains a word). They never override `!commands`, have cooldowns and a user level, and can be switched off with `TRIGGERS_ENABLED`.
-- The bell is the notification center (stream start, reminders, failures, quota warnings). Moderation approvals live under Moderation.
+- Timers post only while the stream is live and after enough chat lines since the last post.
 - Notes and reminders (`30m`, `2h30m`, `18:30`, `tomorrow 09:00`, `daily 08:00`, `every 2h`), delivered to Telegram and the Desk.
 - Insights: activity timeline, top chatters, which signals fire most, and action outcomes.
 

@@ -29,13 +29,7 @@ SCHEMA: list[str] = [
     """CREATE TABLE IF NOT EXISTS timers (
         id {PK}, name TEXT NOT NULL UNIQUE, message TEXT NOT NULL, interval_seconds INTEGER NOT NULL,
         min_lines INTEGER NOT NULL DEFAULT 5, enabled INTEGER NOT NULL DEFAULT 1,
-        last_fired {REAL} NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL,
-        match_mode TEXT NOT NULL DEFAULT 'all', max_runs INTEGER NOT NULL DEFAULT 0, runs INTEGER NOT NULL DEFAULT 0)""",
-    """CREATE TABLE IF NOT EXISTS triggers (
-        id {PK}, phrase TEXT NOT NULL, match_type TEXT NOT NULL DEFAULT 'exact', response TEXT NOT NULL,
-        mention INTEGER NOT NULL DEFAULT 1, userlevel TEXT NOT NULL DEFAULT 'everyone',
-        cooldown INTEGER NOT NULL DEFAULT 30, user_cooldown INTEGER NOT NULL DEFAULT 60,
-        enabled INTEGER NOT NULL DEFAULT 1, hits INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL)""",
+        last_fired {REAL} NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL)""",
     "CREATE TABLE IF NOT EXISTS quotes (id {PK}, body TEXT NOT NULL, author TEXT NOT NULL DEFAULT '', created {REAL} NOT NULL)",
     "CREATE TABLE IF NOT EXISTS regulars (id {PK}, ident TEXT NOT NULL UNIQUE, label TEXT NOT NULL, created {REAL} NOT NULL)",
     """CREATE TABLE IF NOT EXISTS blacklist (
@@ -60,17 +54,34 @@ SCHEMA: list[str] = [
         resolved_ts {REAL}, demo INTEGER NOT NULL DEFAULT 0)""",
     "CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)",
     "CREATE TABLE IF NOT EXISTS quota_usage (day TEXT PRIMARY KEY, units INTEGER NOT NULL)",
+    """CREATE TABLE IF NOT EXISTS timer_runs (
+        id {PK}, timer_id INTEGER NOT NULL, ts {REAL} NOT NULL, ok INTEGER NOT NULL DEFAULT 1,
+        error TEXT NOT NULL DEFAULT '', demo INTEGER NOT NULL DEFAULT 0)""",
+    """CREATE TABLE IF NOT EXISTS notifications (
+        id {PK}, ts {REAL} NOT NULL, kind TEXT NOT NULL, level TEXT NOT NULL DEFAULT 'info',
+        title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', demo INTEGER NOT NULL DEFAULT 0,
+        read INTEGER NOT NULL DEFAULT 0)""",
+    """CREATE TABLE IF NOT EXISTS auto_replies (
+        id {PK}, name TEXT NOT NULL, triggers TEXT NOT NULL DEFAULT '[]', responses TEXT NOT NULL DEFAULT '[]',
+        match_type TEXT NOT NULL DEFAULT 'phrase', case_sensitive INTEGER NOT NULL DEFAULT 0,
+        category TEXT NOT NULL DEFAULT 'general', priority INTEGER NOT NULL DEFAULT 100,
+        enabled INTEGER NOT NULL DEFAULT 0, hits INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL)""",
     "CREATE INDEX IF NOT EXISTS idx_chat_ts ON chat_messages (ts)",
+    "CREATE INDEX IF NOT EXISTS idx_timer_runs ON timer_runs (timer_id, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_ts ON notifications (ts)",
     "CREATE INDEX IF NOT EXISTS idx_actions_status ON mod_actions (status, ts)",
     "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (status, due)",
 ]
 
 
-# Columns added after 1.0: (table, column, definition). Existing databases get them on start-up.
-MIGRATIONS: list[tuple[str, str, str]] = [
-    ("timers", "match_mode", "TEXT NOT NULL DEFAULT 'all'"),
-    ("timers", "max_runs", "INTEGER NOT NULL DEFAULT 0"),
-    ("timers", "runs", "INTEGER NOT NULL DEFAULT 0"),
+# Additive-only migrations: (table, column, ddl). Applied once if the column is missing; existing rows get the default.
+COLUMNS: list[tuple[str, str, str]] = [
+    ("timers", "trigger_mode", "TEXT NOT NULL DEFAULT 'all'"),     # all = every set trigger must be met, any = either one
+    ("timers", "kind", "TEXT NOT NULL DEFAULT 'recurring'"),         # recurring | once
+    ("timers", "run_at", "{REAL}"),                                  # optional: earliest time a one-time message may post
+    ("timers", "done", "INTEGER NOT NULL DEFAULT 0"),                # one-time message already sent
+    ("timers", "last_error", "TEXT NOT NULL DEFAULT ''"),
+    ("blacklist", "category", "TEXT NOT NULL DEFAULT 'blocked_phrases'"),
 ]
 
 
@@ -104,10 +115,10 @@ class _SQLite:
     async def init_schema(self) -> None:
         for stmt in SCHEMA:
             await self.run(stmt.replace("{PK}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL"), (), "exec")
-        for table, column, definition in MIGRATIONS:
+        for table, column, ddl in COLUMNS:
             have = {r["name"] for r in await self.run(f"PRAGMA table_info({table})", (), "all")}
             if column not in have:
-                await self.run(f"ALTER TABLE {table} ADD COLUMN {column} {definition}", (), "exec")
+                await self.run(f"ALTER TABLE {table} ADD COLUMN {column} {ddl.replace('{REAL}', 'REAL')}", (), "exec")
 
     async def close(self) -> None:
         with self._lock:
@@ -157,8 +168,8 @@ class _Postgres:
     async def init_schema(self) -> None:
         for stmt in SCHEMA:
             await self.run(stmt.replace("{PK}", "SERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION"), (), "exec")
-        for table, column, definition in MIGRATIONS:
-            await self.run(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}", (), "exec")
+        for table, column, ddl in COLUMNS:
+            await self.run(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl.replace('{REAL}', 'DOUBLE PRECISION')}", (), "exec")
 
     async def close(self) -> None:
         if self._pool:
