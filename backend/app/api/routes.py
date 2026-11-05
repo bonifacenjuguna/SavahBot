@@ -395,24 +395,28 @@ async def moderation_pending(request: Request, c: Any) -> dict:
     return {"items": await c.store.pending_actions(_demo_filter(c))}
 
 
-def _epoch(raw: str | None, name: str) -> float | None:
-    """Reads a since/until query value: epoch seconds. Empty means no limit."""
-    if raw in (None, ""):
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        raise ApiError(f"'{name}' must be a time in epoch seconds.", 422) from None
-
-
 @R.add("/moderation/history", ["GET"])
 async def moderation_history(request: Request, c: Any) -> dict:
     q = request.query_params
     limit = max(1, min(int(q.get("limit", 100)), 500))
-    items = await c.store.action_history(limit, q.get("status") or None, _demo_filter(c), since=_epoch(q.get("since"), "since"),
-                                         until=_epoch(q.get("until"), "until"), q=(q.get("q") or "").strip()[:100] or None,
-                                         offset=max(0, int(q.get("offset", 0))))
-    return {"items": items}
+
+    def stamp(name: str) -> float | None:
+        raw = (q.get(name) or "").strip()
+        if not raw:
+            return None
+        try:
+            value = float(raw)
+        except ValueError:
+            raise ApiError(f"'{name}' must be a unix timestamp in seconds.", 400) from None
+        if not 0 <= value < 4_102_444_800:  # year 2100: anything beyond is a mistake, not a date
+            raise ApiError(f"'{name}' is not a valid date.", 400)
+        return value
+
+    since, until = stamp("since"), stamp("until")
+    if since is not None and until is not None and since >= until:
+        raise ApiError("The start of the range must be before its end.", 400)
+    items = await c.store.action_history(limit, q.get("status") or None, _demo_filter(c), since, until)
+    return {"items": items, "since": since, "until": until}
 
 
 @R.add("/moderation/{id:int}/{verb}", ["POST"])
@@ -492,21 +496,6 @@ async def chat_recent(request: Request, c: Any) -> dict:
         for m in items:
             m["text"], m["demo"] = m.pop("body"), bool(m["demo"])
     return {"items": items}
-
-
-@R.add("/chat/search", ["GET"])
-async def chat_search(request: Request, c: Any) -> dict:
-    """Search the stored chat by text, date range (since/until, epoch seconds) and moderation outcome."""
-    q = request.query_params
-    verdict = q.get("verdict") if q.get("verdict") in ("flagged", "blocked") else None
-    limit = max(1, min(int(q.get("limit", 200)), 500))
-    rows = await c.store.search_chat((q.get("q") or "").strip()[:100] or None, _epoch(q.get("since"), "since"), _epoch(q.get("until"), "until"),
-                                     verdict, _demo_filter(c), limit)
-    items = []
-    for m in rows:
-        m["text"], m["demo"] = m.pop("body"), bool(m["demo"])
-        items.append(m | {"from_bot": m["level"] == "bot", "reasons": []})
-    return {"items": items, "retention_days": c.cfg.get("chat_retention_days")}
 
 
 @R.add("/chat/send", ["POST"])

@@ -1,13 +1,11 @@
 import "./styles.css";
-import "./redesign.css";
 import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
 import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
-import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
-import { APP_VERSION } from "./version.js";
+import { THEME_ICON, applyTheme, initTheme, installShortcuts, nextTheme, openPalette, themePref, type AppContext, type ThemePref } from "./ui.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -15,15 +13,13 @@ import { notebook } from "./pages/notebook.js";
 import { community } from "./pages/community.js";
 import { insights } from "./pages/insights.js";
 import { demo } from "./pages/demo.js";
-import { resetZoomArtifacts } from "./pages/kit.js";
-import { more } from "./pages/more.js";
 import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
 import type { Page } from "./pages/types.js";
 
-export { APP_VERSION };
+export const APP_VERSION = "1.1.2";
 
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings, more];
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings];
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Operate", ids: ["desk", "moderation", "commands"] },
   { title: "Manage", ids: ["notebook", "community", "insights", "demo"] },
@@ -117,7 +113,6 @@ function showShell(): void {
     cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
     setTheme: (p: ThemePref) => { applyTheme(p); syncTheme(); },
   };
-  setAppContext(ctx);
 
   // ----- sidebar (desktop and tablet)
   const STATE_ICON = { demo: "flask", live: "radio", standby: "power" } as const;
@@ -139,12 +134,12 @@ function showShell(): void {
   const navLinks: HTMLAnchorElement[] = [];
   const nav = h("nav", { class: "nav", "aria-label": "Sections" },
     NAV_GROUPS.flatMap((g) => [
-      h("div", { class: "nav-title" }, g.title),
+      h("div", { class: "nav-title", "aria-hidden": "true" }, g.title),
       ...g.ids.map((id) => {
         const p = PAGES.find((x) => x.id === id)!;
         const badge = h("span", { class: "count", hidden: true }, "");
         counts.set(p.id, badge);
-        const a = h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), badge);
+        const a = h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.blurb ? `${p.title}: ${p.blurb}` : p.title, "aria-label": p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), badge);
         navLinks.push(a);
         return a;
       }),
@@ -188,7 +183,7 @@ function showShell(): void {
       tabLinks.push(a);
       return a;
     }),
-    h("a", { class: "tab", href: "#/more", id: "tab-more", "data-id": "more" }, icon("grid", 22), "More"));
+    h("button", { class: "tab", type: "button", id: "tab-more", onclick: () => openMore() }, icon("menu", 22), "More"));
   const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
@@ -211,21 +206,46 @@ function showShell(): void {
     const t = tallyState(lastStatus);
     holder.close = sheet("Bot mode", h("div", { class: "stack" }, h("div", { class: "banner" }, icon("info", 18), h("span", null, `${t.title}: ${t.detail}`)), modeCards(() => holder.close()))).close;
   }
+  function openMore(): void {
+    const holder: { close: () => void } = { close: () => undefined };
+    const cur = route().id;
+    const themes: ThemePref[] = ["system", "light", "dark"];
+    const themeSeg = h("div", { class: "seg-control", role: "group", "aria-label": "Theme" }, themes.map((t) =>
+      h("button", { type: "button", "aria-pressed": String(themePref() === t), onclick: () => { ctx.setTheme(t); holder.close(); } }, icon(THEME_ICON[t], 16), t === "system" ? "Auto" : t[0].toUpperCase() + t.slice(1))));
+    const groups = NAV_GROUPS.map((g) => ({ title: g.title, pages: g.ids.map((id) => PAGES.find((x) => x.id === id)!).filter((p) => !TAB_IDS.includes(p.id)) })).filter((g) => g.pages.length);
+    const t = tallyState(lastStatus);
+    const body = h("div", { class: "more" },
+      h("button", { class: "more-status", type: "button", "data-state": t.state, onclick: () => { holder.close(); openModeSheet(); } },
+        h("span", { class: "more-ico" }, icon(t.state === "live" ? "radio" : t.state === "demo" ? "flask" : "power", 20)),
+        h("span", { class: "more-txt" }, h("strong", null, t.title), h("small", null, t.detail)), h("span", { class: "small muted" }, "Change"), icon("chevronRight", 16)),
+      groups.map((g) => h("section", { class: "more-group" }, h("h3", { class: "more-h" }, g.title),
+        h("div", { class: "more-list" }, g.pages.map((p) => h("a", { class: "more-row", href: `#/${p.id}`, "aria-current": cur === p.id ? "page" : undefined, onclick: () => holder.close() },
+          h("span", { class: "more-ico" }, icon(p.icon, 20)), h("span", { class: "more-txt" }, h("strong", null, p.title), h("small", null, p.blurb ?? "")), icon("chevronRight", 16)))))),
+      h("section", { class: "more-group" }, h("h3", { class: "more-h" }, "Preferences"),
+        h("div", { class: "more-list" },
+          h("div", { class: "more-row static" }, h("span", { class: "more-ico" }, icon("sun", 20)), h("span", { class: "more-txt" }, h("strong", null, "Theme")), themeSeg),
+          h("button", { class: "more-row", type: "button", onclick: () => { holder.close(); openPalette(ctx); } }, h("span", { class: "more-ico" }, icon("search", 20)), h("span", { class: "more-txt" }, h("strong", null, "Search"), h("small", null, "Pages and actions")), icon("chevronRight", 16)),
+          h("button", { class: "more-row danger", type: "button", onclick: () => { holder.close(); signOut(); } }, h("span", { class: "more-ico" }, icon("logout", 20)), h("span", { class: "more-txt" }, h("strong", null, "Sign out")), icon("chevronRight", 16)))),
+      h("p", { class: "muted small", style: "text-align:center" }, `SavahBot dashboard v${APP_VERSION}`));
+    holder.close = sheet("More", body).close;
+  }
+
   // ----- routing
   let cleanup: (() => void) | void;
   let lastId = "";
   const render = () => {
     cleanup?.();
-    resetZoomArtifacts();            // whatever a page left open, the next page starts clean
     const { id, query } = route();
     const page = PAGES.find((p) => p.id === id) ?? PAGES[0];
     for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
-    // More stays lit for every page that lives behind it (Notebook, Community, Setup and so on)
     if (TAB_IDS.includes(page.id)) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
     document.title = `${page.title} · SavahBot`;
     clear(content);
     cleanup = page.render(content, query);
+    const group = NAV_GROUPS.find((g) => g.ids.includes(page.id));
+    const headText = content.querySelector(".page-head .ph-main > div");
+    if (group && headText) headText.prepend(h("div", { class: "eyebrow" }, group.title));
     if (lastId && lastId !== page.id) window.scrollTo(0, 0);
     lastId = page.id;
   };

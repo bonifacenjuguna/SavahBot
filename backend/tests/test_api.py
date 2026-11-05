@@ -316,3 +316,12 @@ async def test_timer_modes_and_auto_replies(api):
     assert st == 200 and len(b["items"]) == 1 and "everyone" in b["levels"]
     assert (await api.call("DELETE", f"/api/triggers/{tid}"))[0] == 200
     assert (await api.call("DELETE", f"/api/triggers/{tid}"))[0] == 404
+
+
+@e2e
+async def test_history_date_range_is_validated(api):
+    assert (await api.call("GET", "/api/moderation/history?since=200&until=100"))[0] == 400
+    assert (await api.call("GET", "/api/moderation/history?since=abc"))[0] == 400
+    assert (await api.call("GET", "/api/moderation/history?until=99999999999"))[0] == 400
+    st, b = await api.call("GET", "/api/moderation/history?since=0&until=4000000000")
+    assert st == 200 and b["since"] == 0.0 and b["until"] == 4000000000.0

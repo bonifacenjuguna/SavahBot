@@ -2,7 +2,6 @@ import { del, get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { refreshStatus } from "../state.js";
-import { areaNav } from "./kit.js";
 import { card, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 
@@ -34,7 +33,7 @@ export const demo: Page = {
         card("trash", "Clean up", h("div", { class: "body row between" }, h("span", { class: "muted" }, "Remove all simulated chat and actions from the database."),
           h("button", { class: "btn danger", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await del("/api/chat/demo"); }, "Demo data cleared") }, icon("trash", 16), "Clear demo data")), { flush: true }));
     };
-    mount(root, pageHead("flask", "Demo", "Everything here is simulated: no YouTube or Telegram traffic, no quota used. Moderation, commands and approvals behave exactly as they do live.", h("a", { class: "btn ghost", href: "#/desk" }, icon("desk", 16), "Open Desk")), areaNav("demo"), box);
+    mount(root, pageHead("flask", "Demo", "Everything here is simulated: no YouTube or Telegram traffic, no quota used. Moderation, commands and approvals behave exactly as they do live.", h("a", { class: "btn ghost", href: "#/desk" }, icon("desk", 16), "Open Desk")), box);
     void load().catch((e) => toast(e.message, "error"));
     const t = window.setInterval(() => void load().catch(() => undefined), 8000);
     return () => window.clearInterval(t);

@@ -2,8 +2,7 @@ import { del, get, patch } from "../api.js";
 import { h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { refreshStatus } from "../state.js";
-import { areaNav } from "./kit.js";
-import { empty, pageHead } from "./shared.js";
+import { empty, pageHead, skeleton } from "./shared.js";
 import type { Page } from "./types.js";
 
 interface Setting {
@@ -56,11 +55,12 @@ export const settings: Page = {
     const load = async () => { items = (await get<{ items: Setting[] }>("/api/settings")).items; draw(); };
     search.oninput = draw;
     changedOnly.onchange = draw;
-    mount(root, pageHead("sliders", "Settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."), areaNav("settings"),
+    mount(root, pageHead("sliders", "Settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."),
       h("div", { class: "row between", style: "margin-bottom:14px" },
         h("div", { class: "input-icon", style: "flex:1 1 280px;max-width:420px" }, icon("search", 16), search),
         h("label", { class: "check small" }, changedOnly, "Changed from default only"), summary),
       box);
-    void load().catch((e) => toast(e.message, "error"));
+    mount(box, skeleton(6));
+    void load().catch((e) => { mount(box, empty("alert", `Could not load settings: ${e.message}`)); toast(e.message, "error"); });
   },
 };

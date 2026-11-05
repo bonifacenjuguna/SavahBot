@@ -8,7 +8,6 @@ from typing import Any
 
 from ..commands import Ctx
 from ..timeparse import next_repeat
-from .telegram_ui import reminder_card
 from ..utils import from_epoch, to_epoch
 
 logger = logging.getLogger("savahbot.scheduler")
@@ -72,7 +71,7 @@ class Scheduler:
                 await self.store.finish_reminder(r["id"], now)
             self.bus.publish("reminder", {"id": r["id"], "text": r["body"]})
             if self.cfg.get("telegram_notify_reminders"):
-                await self.hub._notify(reminder_card(r["body"]))
+                await self.hub._notify(f"Reminder: {r['body']}")
 
     @staticmethod
     def timer_due(t: dict, now: float, started: float, lines_since: int) -> bool:
