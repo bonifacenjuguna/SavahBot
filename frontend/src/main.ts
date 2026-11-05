@@ -1,10 +1,10 @@
 import "./styles.css";
 import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
-import { clear, h, mount, sheet, toast } from "./dom.js";
+import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
-import { refreshStatus, onStatus, onModeChange, resetState, type Status } from "./state.js";
-import { describeState, modeControl } from "./modeswitch.js";
+import { refreshStatus, onStatus, type Status } from "./state.js";
+import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
 import { THEME_ICON, applyTheme, initTheme, installShortcuts, nextTheme, openPalette, themePref, type AppContext, type ThemePref } from "./ui.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
@@ -15,15 +15,13 @@ import { insights } from "./pages/insights.js";
 import { demo } from "./pages/demo.js";
 import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
-import { notifications } from "./pages/notifications.js";
 import type { Page } from "./pages/types.js";
 
 export const APP_VERSION = "1.1.1";
 
-const PAGES: Page[] = [desk, moderation, commands, notifications, notebook, community, insights, demo, setup, settings];
-if ("scrollRestoration" in history) history.scrollRestoration = "manual";   // the browser must not restore a scroll offset into a freshly drawn page
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings];
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
-  { title: "Operate", ids: ["desk", "moderation", "commands", "notifications"] },
+  { title: "Operate", ids: ["desk", "moderation", "commands"] },
   { title: "Manage", ids: ["notebook", "community", "insights", "demo"] },
   { title: "System", ids: ["setup", "settings"] },
 ];
@@ -40,9 +38,15 @@ function route(): { id: string; query: URLSearchParams } {
   return { id: path || "desk", query: new URLSearchParams(qs ?? "") };
 }
 
+function tallyState(s: Status | null): { state: "live" | "demo" | "standby"; title: string; detail: string } {
+  if (!s) return { state: "standby", title: "Connecting", detail: "Waiting for the backend" };
+  if (s.hub.mode === "demo") return { state: "demo", title: "Demo", detail: "Simulated chat, nothing is sent" };
+  if (s.hub.stream_live) return { state: "live", title: "On air", detail: s.hub.stream_title || "YouTube live chat" };
+  return { state: "standby", title: "Standby", detail: s.youtube.connected ? "Waiting for a live stream" : "YouTube not connected" };
+}
+
 function signOut(): void {
   setToken("");
-  resetState();
   showLogin();
 }
 
@@ -104,14 +108,27 @@ function showShell(): void {
   const ctx: AppContext = {
     pages: PAGES,
     go: (id) => { location.hash = `#/${id}`; },
-    setMode: async (mode) => { await post("/api/mode", { mode }); await refreshStatus(); },
+    setMode: async (mode) => { await post("/api/mode", { mode }); await refreshStatus(); toast(`Switched to ${mode === "demo" ? "Demo" : "Live"} mode`); },
     signOut,
     cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
     setTheme: (p: ThemePref) => { applyTheme(p); syncTheme(); },
   };
 
   // ----- sidebar (desktop and tablet)
-  const railMode = modeControl((m) => ctx.setMode(m), "rail");
+  const STATE_ICON = { demo: "flask", live: "radio", standby: "power" } as const;
+  const STATE_TAG = { demo: "Simulated", live: "On air", standby: "Idle" } as const;
+  const mcBadge = h("div", { class: "mc-badge", "aria-hidden": "true" }, icon("power", 22));
+  const tTitle = h("strong", null, "Connecting");
+  const mcTag = h("span", { class: "mc-tag" }, "Idle");
+  const tDetail = h("span", { class: "mc-detail" }, "");
+  const demoBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("flask", 15), h("span", null, "Demo"));
+  const liveBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("radio", 15), h("span", null, "Live"));
+  const setMode = (mode: "demo" | "live") => () => busy(mode === "demo" ? demoBtn : liveBtn, () => ctx.setMode(mode));
+  demoBtn.onclick = setMode("demo");
+  liveBtn.onclick = setMode("live");
+  const segment = h("div", { class: "mc-switch", role: "group", "aria-label": "Bot mode" }, demoBtn, liveBtn);
+  const tally = h("div", { class: "modecard", "data-state": "standby", role: "status", title: "Bot status" },
+    h("div", { class: "mc-head" }, mcBadge, h("div", { class: "mc-text" }, h("div", { class: "mc-title" }, tTitle, mcTag), tDetail)), segment);
 
   const counts = new Map<string, HTMLElement>();
   const navLinks: HTMLAnchorElement[] = [];
@@ -140,19 +157,19 @@ function showShell(): void {
   const verTag = h("span", { class: "ver", title: "Dashboard version" }, `v${APP_VERSION}`);
   const rail = h("aside", { class: "rail" },
     h("div", { class: "rail-brand" }, logo(30), h("span", { class: "brand" }, "SavahBot"), verTag),
-    railMode.el, nav,
+    tally, nav,
     h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out));
 
   // ----- top bar
-  const tbDot = h("span", { class: "dot" });
+  const tbIco = h("span", { class: "tb-ico", "aria-hidden": "true" }, icon("power", 13));
   const tbTitle = h("span", null, "Connecting");
   const tbDetail = h("span", { class: "muted t-detail" }, "");
-  const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbDot, tbTitle, tbDetail);
+  const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbIco, tbTitle, tbDetail);
   const searchBtn = h("button", { class: "search-btn", type: "button", onclick: () => openPalette(ctx), "aria-label": "Search and jump to" },
     icon("search", 18), h("span", { class: "grow" }, "Search pages and actions"), h("kbd", null, "Ctrl K"));
   const connChip = h("span", { class: "conn-chip down", role: "status" }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
-  const bellBadge = h("span", { class: "badge", hidden: true }, "0");
-  const bell = h("a", { class: "icon-btn", href: "#/notifications", "aria-label": "Notifications", title: "Notifications" }, icon("bell", 20), bellBadge);
+  const bellBadge = h("span", { class: "badge accent", hidden: true }, "0");
+  const bell = h("button", { class: "icon-btn", type: "button", "aria-label": "Notifications", "aria-haspopup": "dialog", "aria-expanded": "false", title: "Notifications", onclick: () => openNotifications(bell) }, icon("bell", 20), bellBadge);
   const topbar = h("header", { class: "topbar" },
     h("span", { class: "tb-brand" }, logo(26)), tbTally, searchBtn, h("span", { class: "tb-spacer" }), connChip, bell);
 
@@ -173,14 +190,21 @@ function showShell(): void {
   const skip = h("a", { class: "skip", href: "#content", onclick: (e: Event) => { e.preventDefault(); content.focus(); } }, "Skip to content");
   mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, content)), tabbar);
 
-  // ----- sheets (every open mode control is updated from the same status)
-  const sheetModes = new Set<ReturnType<typeof modeControl>>();
+  // ----- sheets
+  function modeCards(close: () => void): HTMLElement {
+    const mk = (mode: "demo" | "live", ic: string, title: string, text: string) => {
+      const b = h("button", { class: "mode-card", type: "button", "aria-pressed": String(currentMode() === mode) }, icon(ic, 22), h("strong", null, title), h("span", null, text));
+      b.onclick = () => busy(b as HTMLButtonElement, async () => { await ctx.setMode(mode); close(); });
+      return b;
+    };
+    return h("div", { class: "mode-cards", style: "grid-template-columns:1fr" },
+      mk("demo", "flask", "Demo", "Simulated chat. Nothing is sent to YouTube or Telegram and no quota is used."),
+      mk("live", "zap", "Live", "Real YouTube chat. The bot attaches when your stream starts."));
+  }
   function openModeSheet(): void {
     const holder: { close: () => void } = { close: () => undefined };
-    const ctl = modeControl((m) => ctx.setMode(m), "sheet", () => holder.close());
-    if (lastStatus) ctl.update(lastStatus);
-    sheetModes.add(ctl);
-    holder.close = sheet("Bot mode", ctl.el, () => sheetModes.delete(ctl)).close;
+    const t = tallyState(lastStatus);
+    holder.close = sheet("Bot mode", h("div", { class: "stack" }, h("div", { class: "banner" }, icon("info", 18), h("span", null, `${t.title}: ${t.detail}`)), modeCards(() => holder.close()))).close;
   }
   function openMore(): void {
     const holder: { close: () => void } = { close: () => undefined };
@@ -189,18 +213,15 @@ function showShell(): void {
     const themes: ThemePref[] = ["system", "light", "dark"];
     const themeSeg = h("div", { class: "seg-control", role: "group", "aria-label": "Theme" }, themes.map((t) =>
       h("button", { type: "button", "aria-pressed": String(themePref() === t), onclick: () => { ctx.setTheme(t); holder.close(); } }, icon(THEME_ICON[t], 16), t === "system" ? "Auto" : t[0].toUpperCase() + t.slice(1))));
-    const moreMode = modeControl((m) => ctx.setMode(m), "sheet", () => holder.close());
-    if (lastStatus) moreMode.update(lastStatus);
-    sheetModes.add(moreMode);
     const body = h("div", null,
       h("div", { class: "more-grid" }, rest.map((p) => h("a", { class: "more-item", href: `#/${p.id}`, "aria-current": cur === p.id ? "page" : undefined, onclick: () => holder.close() }, icon(p.icon, 24), p.title))),
-      h("div", { class: "more-section" }, h("h3", null, "Bot mode"), moreMode.el),
+      h("div", { class: "more-section" }, h("h3", null, "Bot mode"), modeCards(() => holder.close())),
       h("div", { class: "more-section" }, h("h3", null, "Theme"), themeSeg),
       h("div", { class: "more-section" },
         h("button", { class: "btn ghost block-btn", type: "button", onclick: () => { holder.close(); openPalette(ctx); } }, icon("search", 16), "Search pages and actions"),
         h("button", { class: "btn ghost block-btn", type: "button", onclick: () => { holder.close(); signOut(); } }, icon("logout", 16), "Sign out"),
         h("p", { class: "muted small", style: "text-align:center" }, `SavahBot dashboard v${APP_VERSION}`)));
-    holder.close = sheet("More", body, () => sheetModes.delete(moreMode)).close;
+    holder.close = sheet("More", body).close;
   }
 
   // ----- routing
@@ -216,12 +237,12 @@ function showShell(): void {
     document.title = `${page.title} · SavahBot`;
     clear(content);
     cleanup = page.render(content, query);
-    if (lastId !== page.id) window.scrollTo(0, 0);     // a new page always opens at the top
+    if (lastId && lastId !== page.id) window.scrollTo(0, 0);
     lastId = page.id;
   };
   window.onhashchange = render;
 
-  // ----- theme icon sync (the one theme control lives in the sidebar and the More sheet)
+  // ----- theme icon sync
   function syncTheme(): void {
     const p = themePref();
     mount(themeIcon, icon(THEME_ICON[p], 18));
@@ -231,14 +252,22 @@ function showShell(): void {
 
   // ----- live status
   let lastStatus: Status | null = null;
+  let shownMode: string | null = null;
+  const currentMode = () => lastStatus?.hub.mode ?? "demo";
   offs.push(onStatus((s) => {
     lastStatus = s;
-    const t = describeState(s);
-    railMode.update(s);
-    sheetModes.forEach((c) => c.update(s));
+    const t = tallyState(s);
+    tally.setAttribute("data-state", t.state);
     tbTally.setAttribute("data-state", t.state);
+    mount(mcBadge, icon(STATE_ICON[t.state], 22));
+    mount(tbIco, icon(STATE_ICON[t.state], 13));
+    mcTag.textContent = STATE_TAG[t.state];
+    tTitle.textContent = t.title;
+    tDetail.textContent = t.detail;
     tbTitle.textContent = t.title;
-    tbDetail.textContent = t.state === "demo" ? "simulated" : t.state === "live" ? "on air" : "waiting for stream";
+    tbDetail.textContent = t.detail;
+    demoBtn.setAttribute("aria-pressed", String(s.hub.mode === "demo"));
+    liveBtn.setAttribute("aria-pressed", String(s.hub.mode === "live"));
     const q = s.youtube.quota;
     const pct = Math.min(100, Math.round(q.fraction * 100));
     quotaText.textContent = s.hub.mode === "demo" ? "YouTube quota: untouched in demo" : `YouTube quota: ${pct}% used today`;
@@ -249,22 +278,26 @@ function showShell(): void {
     badge.textContent = String(s.pending);
     tabBadge.hidden = s.pending === 0;
     tabBadge.textContent = String(s.pending);
-    const unread = s.notifications_unread ?? 0;           // notifications are their own count, separate from moderation
-    bellBadge.hidden = unread === 0;
-    bellBadge.textContent = unread > 99 ? "99+" : String(unread);
-    const nb = counts.get("notifications");
-    if (nb) { nb.hidden = unread === 0; nb.textContent = String(unread); }
+    // the pages were drawn for the previous mode: draw them again so Demo and Live never show each other's data
+    if (shownMode && shownMode !== s.hub.mode) render();
+    shownMode = s.hub.mode;
   }));
-  // The active mode changed (here, on another device, or from the Demo page): redraw the current page from scratch
-  // so nothing from the previous mode stays on screen.
-  offs.push(onModeChange(() => render()));
   offs.push(feed.onConnection((up) => {
     connText.textContent = up ? "Live feed: connected" : "Live feed: reconnecting";
     mount(connIcon, icon(up ? "wifi" : "wifiOff", 16));
     connChip.classList.toggle("down", !up);
     mount(connChip, icon(up ? "wifi" : "wifiOff", 16), h("span", { class: "txt" }, up ? "Live" : "Reconnecting"));
   }));
-  for (const t of ["mode", "stream", "mod_pending", "mod_resolved", "notification"]) offs.push(feed.on(t, () => void refreshStatus()));
+  for (const t of ["mode", "stream", "mod_pending", "mod_resolved"]) offs.push(feed.on(t, () => void refreshStatus()));
+  const syncBell = () => {
+    const n = unreadCount();
+    bellBadge.hidden = n === 0;
+    bellBadge.textContent = n > 9 ? "9+" : String(n);
+    bell.setAttribute("aria-label", n ? `Notifications, ${n} unread` : "Notifications");
+  };
+  offs.push(onNotices(syncBell));
+  syncBell();
+  offs.push(startNotifications(() => lastStatus));
   offs.push(installShortcuts(ctx));
 
   render();

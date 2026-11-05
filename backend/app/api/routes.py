@@ -15,9 +15,7 @@ from starlette.routing import Route
 
 from .. import __version__
 from ..analytics import summary
-from ..autoreply import test_message as autoreply_test
-from ..commands import BUILTIN_NAMES
-from ..commands.catalog import builtin_catalog
+from ..commands import BUILTIN_NAMES, Ctx
 from ..config import BY_NAME
 from ..models import ChatMessage
 from ..moderation import ModInput
@@ -102,11 +100,6 @@ def _demo_filter(c: Any) -> bool:
     return c.cfg.get("bot_mode") == "demo"
 
 
-def _scope(request: Request, c: Any) -> bool | None:
-    """Data is always scoped to the active mode (demo rows in demo, real rows in live). `?scope=all` opts out."""
-    return None if request.query_params.get("scope") == "all" else _demo_filter(c)
-
-
 # ================================================================================= public
 @R.add("/health", ["GET"], public=True)
 async def health(request: Request, c: Any) -> dict:
@@ -175,7 +168,6 @@ async def status(request: Request, c: Any) -> dict:
         "app": c.cfg.get("app_name"), "version": __version__, "timezone": c.cfg.get("owner_timezone"),
         "hub": c.hub.status(), "telegram": c.telegram.status(), "youtube": c.youtube.status(), "demo": c.demo.status(),
         "pending": len(await c.store.pending_actions(_demo_filter(c))), "database": c.db.backend, "uptime": round(time.time() - c.started_at),
-        "notifications_unread": await c.store.unread_notifications(_demo_filter(c)),
         "sse_clients": c.bus.subscriber_count,
     }
 
@@ -216,22 +208,7 @@ async def settings_reset(request: Request, c: Any) -> dict:
 # ================================================================================= commands
 @R.add("/commands", ["GET"])
 async def commands_list(request: Request, c: Any) -> dict:
-    return {"items": await c.store.list_commands(), "builtin": sorted(BUILTIN_NAMES), "levels": list(LEVELS),
-            "catalog": builtin_catalog(c.cfg.get("command_prefix")), "prefix": c.cfg.get("command_prefix")}
-
-
-@R.add("/commands/bulk", ["POST"])
-async def commands_bulk(request: Request, c: Any) -> dict:
-    b = await parse(request, S.BulkIds)
-    if b.action not in ("enable", "disable", "delete"):
-        raise ApiError("Unknown bulk action.", 400)
-    done = 0
-    for id_ in b.ids:
-        if b.action == "delete":
-            done += 1 if await c.store.delete_command(id_) else 0
-        else:
-            done += 1 if await c.store.update_command(id_, enabled=b.action == "enable") else 0
-    return {"changed": done, "items": await c.store.list_commands()}
+    return {"items": await c.store.list_commands(), "builtin": sorted(BUILTIN_NAMES), "levels": list(LEVELS)}
 
 
 @R.add("/commands", ["POST"])
@@ -271,72 +248,71 @@ async def commands_delete(request: Request, c: Any) -> dict:
 
 
 # ================================================================================= timers
-async def _timers_payload(c: Any) -> dict:
-    items = await c.store.list_timers()
-    now = time.time()
-    for t in items:
-        t["progress"] = c.scheduler.progress(t, now)
-    return {"items": items, "stream_live": c.hub.stream_live, "mode": c.hub.mode, "min_gap_seconds": c.scheduler.MIN_GAP}
-
-
 @R.add("/timers", ["GET"])
 async def timers_list(request: Request, c: Any) -> dict:
-    return await _timers_payload(c)
+    return {"items": await c.store.list_timers()}
 
 
 @R.add("/timers", ["POST"])
 async def timers_create(request: Request, c: Any) -> dict:
     b = await parse(request, S.TimerIn)
-    await c.store.create_timer(b.name, b.message, b.interval_seconds, b.min_lines, b.enabled, b.kind, b.trigger_mode, b.run_at)
-    return await _timers_payload(c)
-
-
-@R.add("/timers/bulk", ["POST"])
-async def timers_bulk(request: Request, c: Any) -> dict:
-    b = await parse(request, S.BulkIds)
-    if b.action not in ("enable", "disable", "delete"):
-        raise ApiError("Unknown bulk action.", 400)
-    done = 0
-    for id_ in b.ids:
-        if b.action == "delete":
-            done += 1 if await c.store.delete_timer(id_) else 0
-        else:
-            done += 1 if await c.store.update_timer(id_, enabled=b.action == "enable") else 0
-    return {"changed": done} | await _timers_payload(c)
-
-
-@R.add("/timers/runs", ["GET"])
-async def timers_runs(request: Request, c: Any) -> dict:
-    q = request.query_params
-    timer_id = int(q["timer_id"]) if q.get("timer_id", "").isdigit() else None
-    limit = max(1, min(int(q.get("limit", 50)), 200))
-    names = {t["id"]: t["name"] for t in await c.store.list_timers()}
-    runs = await c.store.timer_runs(timer_id, limit, _scope(request, c))
-    return {"items": [r | {"timer_name": names.get(r["timer_id"], "(deleted)")} for r in runs]}
-
-
-@R.add("/timers/{id:int}/duplicate", ["POST"])
-async def timers_duplicate(request: Request, c: Any) -> dict:
-    t = await c.store.get_timer(request.path_params["id"])
-    need(t is not None, "timer")
-    names = {x["name"] for x in await c.store.list_timers()}
-    base, n = t["name"][:26], 2
-    while f"{base}-{n}" in names:
-        n += 1
-    await c.store.create_timer(f"{base}-{n}", t["message"], t["interval_seconds"], t["min_lines"], False, t["kind"], t["trigger_mode"], t["run_at"])
-    return await _timers_payload(c)
+    lines = b.min_lines if b.min_lines is not None else (5 if b.interval_seconds else 0)
+    await c.store.create_timer(b.name, b.message, b.interval_seconds, lines, b.enabled, b.match_mode, b.max_runs)
+    return {"items": await c.store.list_timers()}
 
 
 @R.add("/timers/{id:int}", ["PATCH"])
 async def timers_update(request: Request, c: Any) -> dict:
     b = await parse(request, S.TimerPatch)
     need(await c.store.update_timer(request.path_params["id"], **b.model_dump(exclude_unset=True)), "timer")
-    return await _timers_payload(c)
+    return {"items": await c.store.list_timers()}
 
 
 @R.add("/timers/{id:int}", ["DELETE"])
 async def timers_delete(request: Request, c: Any) -> dict:
     need(await c.store.delete_timer(request.path_params["id"]), "timer")
+    return {"ok": True}
+
+
+@R.add("/timers/{id:int}/send", ["POST"])
+async def timers_send(request: Request, c: Any) -> dict:
+    """Post a timer's message to chat right now, without touching its schedule."""
+    t = await c.store.get_timer(request.path_params["id"])
+    need(t, "timer")
+    text = await c.hub.commands.renderer.render(t["message"], Ctx(channel=c.hub.commands.channel_fn(), now=time.time()))
+    if not text or not await c.hub.send_chat(text):
+        raise ApiError("Could not send. The chat source is not connected to a live chat.", 409)
+    return {"ok": True, "text": text}
+
+
+# ================================================================================= auto-replies (triggers)
+@R.add("/triggers", ["GET"])
+async def triggers_list(request: Request, c: Any) -> dict:
+    return {"items": await c.store.list_triggers(), "levels": list(LEVELS), "enabled": c.cfg.get("triggers_enabled")}
+
+
+@R.add("/triggers", ["POST"])
+async def triggers_create(request: Request, c: Any) -> dict:
+    b = await parse(request, S.TriggerIn)
+    id_ = await c.store.create_trigger(
+        b.phrase, b.response, b.match_type, b.mention, b.userlevel,
+        b.cooldown if b.cooldown is not None else c.cfg.get("trigger_default_cooldown"),
+        b.user_cooldown if b.user_cooldown is not None else c.cfg.get("trigger_user_cooldown"), b.enabled)
+    return {"item": await c.store.get_trigger(id_)}
+
+
+@R.add("/triggers/{id:int}", ["PATCH"])
+async def triggers_update(request: Request, c: Any) -> dict:
+    id_ = request.path_params["id"]
+    b = await parse(request, S.TriggerPatch)
+    need(await c.store.get_trigger(id_), "auto-reply")
+    await c.store.update_trigger(id_, **b.model_dump(exclude_unset=True))
+    return {"item": await c.store.get_trigger(id_)}
+
+
+@R.add("/triggers/{id:int}", ["DELETE"])
+async def triggers_delete(request: Request, c: Any) -> dict:
+    need(await c.store.delete_trigger(request.path_params["id"]), "auto-reply")
     return {"ok": True}
 
 
@@ -386,30 +362,9 @@ async def blacklist_list(request: Request, c: Any) -> dict:
 @R.add("/blacklist", ["POST"])
 async def blacklist_create(request: Request, c: Any) -> dict:
     b = await parse(request, S.BlacklistIn)
-    await c.store.add_blacklist(b.phrase, b.is_regex, b.weight, b.enabled, b.category)
+    await c.store.add_blacklist(b.phrase, b.is_regex, b.weight, b.enabled)
     await c.hub.reload_blacklist()
     return {"items": await c.store.list_blacklist()}
-
-
-@R.add("/blacklist/import", ["POST"])
-async def blacklist_import(request: Request, c: Any) -> dict:
-    """Bulk import. With dry_run the list is checked and de-duplicated but nothing is written (the import preview)."""
-    b = await parse(request, S.BlacklistImport)
-    items = [i.model_dump() for i in b.items]
-    if b.dry_run:
-        plan = await c.store.preview_blacklist_import(items)
-        return {"dry_run": True, "new": len(plan["new"]), "duplicates": len(plan["duplicates"]), "invalid": plan["invalid"], "sample": plan["new"][:20]}
-    result = await c.store.import_blacklist(items, b.enabled)
-    await c.hub.reload_blacklist()
-    return {"dry_run": False} | result
-
-
-@R.add("/blacklist/bulk", ["POST"])
-async def blacklist_bulk(request: Request, c: Any) -> dict:
-    b = await parse(request, S.BulkIds)
-    changed = await c.store.bulk_blacklist(b.ids, b.action, b.category)
-    await c.hub.reload_blacklist()
-    return {"changed": changed, "items": await c.store.list_blacklist()}
 
 
 @R.add("/blacklist/{id:int}", ["PATCH"])
@@ -437,22 +392,14 @@ async def moderation_test(request: Request, c: Any) -> dict:
 
 @R.add("/moderation/pending", ["GET"])
 async def moderation_pending(request: Request, c: Any) -> dict:
-    return {"items": await c.store.pending_actions(_scope(request, c))}
+    return {"items": await c.store.pending_actions(_demo_filter(c))}
 
 
 @R.add("/moderation/history", ["GET"])
 async def moderation_history(request: Request, c: Any) -> dict:
     q = request.query_params
     limit = max(1, min(int(q.get("limit", 100)), 500))
-    return {"items": await c.store.action_history(limit, q.get("status") or None, _scope(request, c))}
-
-
-@R.add("/moderation/flagged", ["GET"])
-async def moderation_flagged(request: Request, c: Any) -> dict:
-    """Everything the rules flagged or blocked in the active mode. Waiting for you is the subset still pending,
-    so both views are built from the same records and always agree."""
-    items = await c.store.flagged_actions(max(1, min(int(request.query_params.get("limit", 200)), 500)), _scope(request, c))
-    return {"items": items, "pending": sum(1 for a in items if a["status"] == "pending")}
+    return {"items": await c.store.action_history(limit, q.get("status") or None, _demo_filter(c))}
 
 
 @R.add("/moderation/{id:int}/{verb}", ["POST"])
@@ -521,72 +468,17 @@ async def reminders_cancel(request: Request, c: Any) -> dict:
     return {"ok": True}
 
 
-# ================================================================================= notifications (system events; not moderation)
-@R.add("/notifications", ["GET"])
-async def notifications_list(request: Request, c: Any) -> dict:
-    limit = max(1, min(int(request.query_params.get("limit", 100)), 300))
-    unread = request.query_params.get("unread") == "1"
-    scope = _scope(request, c)
-    return {"items": await c.store.list_notifications(limit, scope, unread), "unread": await c.store.unread_notifications(scope)}
-
-
-@R.add("/notifications/read", ["POST"])
-async def notifications_read(request: Request, c: Any) -> dict:
-    b = await parse(request, S.NotificationsRead)
-    n = await c.store.mark_notifications_read(b.ids, _demo_filter(c))
-    return {"changed": n, "unread": await c.store.unread_notifications(_demo_filter(c))}
-
-
-@R.add("/notifications", ["DELETE"])
-async def notifications_clear(request: Request, c: Any) -> dict:
-    return {"cleared": await c.store.clear_notifications(_scope(request, c))}
-
-
-# ================================================================================= auto replies (foundation: stored and testable, not yet active)
-@R.add("/auto-replies", ["GET"])
-async def auto_replies_list(request: Request, c: Any) -> dict:
-    return {"items": await c.store.list_auto_replies(), "active": False, "match_types": list(c.store.AR_MATCH_TYPES),
-            "note": "The bot does not answer automatically yet. Rules are saved and can be tested here."}
-
-
-@R.add("/auto-replies", ["POST"])
-async def auto_replies_create(request: Request, c: Any) -> dict:
-    b = await parse(request, S.AutoReplyIn)
-    await c.store.create_auto_reply(b.name, b.triggers, b.responses, b.match_type, b.case_sensitive, b.category, b.priority, b.enabled)
-    return {"items": await c.store.list_auto_replies()}
-
-
-@R.add("/auto-replies/test", ["POST"])
-async def auto_replies_test(request: Request, c: Any) -> dict:
-    b = await parse(request, S.AutoReplyTest)
-    return {"matches": autoreply_test(await c.store.list_auto_replies(), b.text)}
-
-
-@R.add("/auto-replies/{id:int}", ["PATCH"])
-async def auto_replies_update(request: Request, c: Any) -> dict:
-    b = await parse(request, S.AutoReplyPatch)
-    need(await c.store.update_auto_reply(request.path_params["id"], **b.model_dump(exclude_unset=True)), "rule")
-    return {"items": await c.store.list_auto_replies()}
-
-
-@R.add("/auto-replies/{id:int}", ["DELETE"])
-async def auto_replies_delete(request: Request, c: Any) -> dict:
-    need(await c.store.delete_auto_reply(request.path_params["id"]), "rule")
-    return {"ok": True}
-
-
 # ================================================================================= chat, mode, demo, analytics
 @R.add("/chat/recent", ["GET"])
 async def chat_recent(request: Request, c: Any) -> dict:
-    """Recent chat for the ACTIVE mode only. The in-memory buffer holds both modes, so it is filtered, never trusted as is."""
     limit = max(1, min(int(request.query_params.get("limit", 100)), 500))
-    demo = _scope(request, c)
-    items = [m for m in c.hub.buffer if demo is None or bool(m.get("demo")) == demo][-limit:]
+    want_demo = _demo_filter(c)  # only the chat of the mode you are in; demo and live never mix
+    items = [m for m in c.hub.buffer if bool(m.get("demo")) == want_demo][-limit:]
     if not items:
-        items = [m | {"from_bot": m["level"] == "bot", "reasons": []} for m in await c.store.recent_chat(limit, demo)]
+        items = [m | {"from_bot": m["level"] == "bot", "reasons": []} for m in await c.store.recent_chat(limit, want_demo)]
         for m in items:
             m["text"], m["demo"] = m.pop("body"), bool(m["demo"])
-    return {"items": items, "mode": c.hub.mode, "state": c.hub.state}
+    return {"items": items}
 
 
 @R.add("/chat/send", ["POST"])

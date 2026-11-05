@@ -3,17 +3,14 @@ import { ago, busy, clock, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
 import { icon } from "../icons.js";
 import { ring, sparkline } from "../charts.js";
-import { currentMode, onStatus, status, type Status } from "../state.js";
+import { onStatus, status, type Status } from "../state.js";
 import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./shared.js";
 import type { Page } from "./types.js";
 
 interface Line { author_name: string; text: string; level: string; ts: number; verdict: string | null; score: number | null; reasons?: string[]; demo?: boolean }
 type Filter = "all" | "flagged" | "blocked";
 
-/** The one place a chat line is classified. Counts, filter chips and highlighting all use it, so they cannot disagree.
- *  flagged = the rules noticed it and only logged it. blocked = the rules wanted to delete, time out or ban (these also wait in "Waiting for you" in Suggest mode). */
 const kindOf = (m: Line): Filter | "ok" => (m.verdict === "allow" || !m.verdict ? "ok" : m.verdict === "flag" ? "flagged" : "blocked");
-const inMode = (m: { demo?: boolean }): boolean => Boolean(m.demo) === (currentMode() === "demo");
 
 export const desk: Page = {
   id: "desk",
@@ -53,12 +50,13 @@ export const desk: Page = {
           k !== "ok" ? h("div", { class: "reasons" }, `${m.verdict} (score ${m.score ?? 0})${m.reasons?.length ? ": " + m.reasons.join(", ") : ""}`) : null));
     };
     const visible = (m: Line): boolean => {
-      if (filter !== "all" && kindOf(m) !== filter) return false;
+      if (filter === "flagged" && kindOf(m) === "ok") return false;   // flagged = everything moderation reacted to
+      if (filter === "blocked" && kindOf(m) !== "blocked") return false;
       if (needle && !(`${m.author_name} ${m.text}`.toLowerCase().includes(needle))) return false;
       return true;
     };
     const redraw = () => {
-      refreshCounts();
+      updateCounts();
       list.replaceChildren(...lines.filter(visible).map(lineEl));
       if (!list.childElementCount) list.appendChild(empty("message", lines.length ? "No chat lines match this filter." : "No chat yet. Lines appear here as they arrive."));
       list.scrollTop = list.scrollHeight;
@@ -67,8 +65,8 @@ export const desk: Page = {
     };
     const push = (m: Line) => {
       lines.push(m);
+      queueMicrotask(updateCounts);
       if (lines.length > MAX) lines.shift();
-      refreshCounts();
       if (!visible(m)) return;
       list.querySelector(".empty")?.remove();
       list.appendChild(lineEl(m));
@@ -76,7 +74,6 @@ export const desk: Page = {
       if (stick) list.scrollTop = list.scrollHeight;
     };
     const add = (m: Line) => {
-      if (!inMode(m)) return;                       // never show a line that belongs to the other mode
       arrivals.push(m.ts);
       if (arrivals.length > 4000) arrivals.splice(0, arrivals.length - 4000);
       if (paused) { queue.push(m); updatePause(); return; }
@@ -84,16 +81,10 @@ export const desk: Page = {
     };
 
     // ----- toolbar: filters, search, pause
-    const FILTERS: Filter[] = ["all", "flagged", "blocked"];
-    const countFor = (f: Filter) => (f === "all" ? lines.length : lines.filter((m) => kindOf(m) === f).length);
-    const filterBtns = FILTERS.map((f) =>
-      h("button", { type: "button", "aria-pressed": String(f === filter), onclick: () => setFilter(f) }, f[0].toUpperCase() + f.slice(1), h("span", { class: "n alt", "data-count": f }, "")));
-    const setFilter = (f: Filter) => {
-      filter = f;
-      filterBtns.forEach((b, i) => b.setAttribute("aria-pressed", String(FILTERS[i] === f)));
-      redraw();
-    };
-    const refreshCounts = () => filterBtns.forEach((b, i) => { const n = countFor(FILTERS[i]); const el = b.querySelector(".n") as HTMLElement; el.textContent = String(n); el.hidden = FILTERS[i] === "all" || n === 0; });
+    const count = (f: Filter) => lines.filter((m) => (f === "flagged" ? kindOf(m) !== "ok" : kindOf(m) === "blocked")).length;
+    const updateCounts = () => (["flagged", "blocked"] as Filter[]).forEach((f) => { const n = filterBtns[f === "flagged" ? 1 : 2].querySelector(".n") as HTMLElement; const v = count(f); n.hidden = v === 0; n.textContent = String(v); });
+    const filterBtns = (["all", "flagged", "blocked"] as Filter[]).map((f) =>
+      h("button", { type: "button", "aria-pressed": String(f === filter), onclick: () => { filter = f; filterBtns.forEach((b, i) => b.setAttribute("aria-pressed", String((["all", "flagged", "blocked"] as Filter[])[i] === f))); redraw(); } }, f[0].toUpperCase() + f.slice(1), h("span", { class: "n", hidden: true }, "")));
     const search = h("input", { type: "search", placeholder: "Filter chat", "aria-label": "Filter chat", maxLength: 80 });
     search.addEventListener("input", () => { needle = search.value.trim().toLowerCase(); redraw(); });
     const pauseBtn = h("button", { class: "btn small ghost", type: "button", onclick: () => {
@@ -141,18 +132,13 @@ export const desk: Page = {
       const perMin = arrivals.filter((t) => t >= now - 60).length;
       const buckets: number[] = Array.from({ length: 30 }, () => 0);
       for (const t of arrivals) { const i = 29 - Math.floor((now - t) / 60); if (i >= 0 && i < 30) buckets[i]++; }
-      const flagged = countFor("flagged"), blocked = countFor("blocked");
-      const kpi = (cls: string, ic: string, label: string, value: string, sub?: string, spark?: SVGElement, onpick?: () => void) => {
-        const el = h("div", { class: `kpi ${cls}${onpick ? " pick" : ""}` }, h("div", { class: "kpi-top" }, h("span", null, label), icon(ic, 18)), h("div", { class: "kpi-val" }, value), sub ? h("div", { class: "kpi-sub" }, sub) : null, spark ?? null);
-        if (onpick) { el.tabIndex = 0; el.setAttribute("role", "button"); el.addEventListener("click", onpick); el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onpick(); } }); }
-        return el;
-      };
-      const showChat = (f: Filter) => () => { setFilter(f); chatPane.setAttribute("data-hidden", "false"); tabs.querySelector<HTMLElement>('[data-id="chat"]')?.click(); };
+      const flagged = lines.filter((m) => kindOf(m) !== "ok").length;
+      const kpi = (cls: string, ic: string, label: string, value: string, sub?: string, spark?: SVGElement) =>
+        h("div", { class: `kpi ${cls}` }, h("div", { class: "kpi-top" }, h("span", null, label), icon(ic, 18)), h("div", { class: "kpi-val" }, value), sub ? h("div", { class: "kpi-sub" }, sub) : null, spark ?? null);
       mount(kpis,
         kpi("", "activity", "Chat rate", `${perMin}/min`, "Last 30 minutes below", sparkline(buckets)),
         kpi("", "message", "Chat lines", String(s.hub.lines), "This session"),
-        kpi(flagged ? "warn" : "", "flag", "Flagged", String(flagged), "Logged only. Tap to show", undefined, showChat("flagged")),
-        kpi(blocked ? "bad" : "", "ban", "Blocked", String(blocked), "Delete, timeout or ban. Tap to show", undefined, showChat("blocked")),
+        kpi(flagged ? "warn" : "", "flag", "Flagged", String(flagged), "In the lines on screen"),
         kpi(s.pending ? "warn" : "", "inbox", "Waiting for you", String(s.pending), s.pending ? "Needs a decision" : "All clear"),
         kpi("", "shield", "Moderation", s.hub.mod_mode, `${s.hub.blacklist_size} blocked phrases`));
       mount(health, healthBlock(s));
@@ -174,8 +160,7 @@ export const desk: Page = {
 
     mount(root,
       pageHead("desk", "Desk", "Live chat, moderation requests that need your decision, and the state of the bot.", status?.hub.mode === "demo" ? h("a", { class: "btn ghost", href: "#/demo" }, icon("flask", 16), "Run a scenario") : null),
-      status?.hub.mode === "demo" ? h("div", { class: "banner demo" }, icon("flask", 18), h("span", null, "Demo mode: this chat is simulated. Open Demo to run a scenario."))
-        : status && status.hub.state === "standby" ? h("div", { class: "banner" }, icon("clock", 18), h("span", null, status.youtube.connected ? "Standby: Live mode is on and waiting for your stream to start. Chat appears here once it does." : "Standby: YouTube is not connected yet. Open Setup to connect it.")) : null,
+      status?.hub.mode === "demo" ? h("div", { class: "banner demo" }, icon("flask", 18), h("span", null, "Demo mode: this chat is simulated. Open Demo to run a scenario.")) : null,
       kpis,
       tabs);
 
@@ -197,7 +182,7 @@ export const desk: Page = {
     void loadPending().catch((e) => toast(e.message, "error"));
     renderFacts();
     const offs = [
-      feed.on("chat", (e) => add(e.data)),
+      feed.on("chat", (e) => { if (Boolean(e.data.demo) === (status?.hub.mode === "demo")) add(e.data); }),
       feed.on("mod_pending", () => void loadPending()),
       feed.on("mod_resolved", () => void loadPending()),
       feed.on("mod_expired", () => void loadPending()),

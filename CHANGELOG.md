@@ -2,26 +2,20 @@
 
 ## 1.1.1
 
-Backward compatible: old API calls still work, database changes are additive (new columns and tables only, applied automatically and safely on SQLite and PostgreSQL).
-
-### Fixed
-- **Page opened scrolled to the middle.** Sheets (More, editors) focused their first button, which scrolled the sheet. Focus no longer scrolls, sheets open at the top, new pages always open at the top, and the browser no longer restores a stale scroll offset.
-- **Flagged count with an empty Flagged list.** The count included blocked lines but the filter only showed flag-only lines. Counts, filter chips and highlighting now use one classifier; Flagged and Blocked are separate, tappable cards. Moderation has a Flagged tab built from the same records as Waiting for you (`GET /api/moderation/flagged`).
-- **Demo and Live out of sync.** Chat, pending requests, history, counters and notifications were not separated by mode, and pages were never redrawn on a switch. Now: one backend state (`hub.state`: demo, standby or live), every read is scoped to the active mode, the session line counter resets on a switch, Approve all only touches the active mode, and every page redraws when the mode changes (here, on another device, or from the Demo page).
-- Removed the duplicate theme button from the top bar (theme stays in the sidebar and the More sheet).
-- A real stream-ended notification no longer fires when leaving Demo.
+### Fixes
+- **Sheets open at the top.** The More sheet (and other sheets) no longer scroll to the middle when opened.
+- **Flagged filter.** Flagged on the Desk now shows everything moderation reacted to (it matches the Flagged number); Blocked shows the part that needed action. Both show counts.
+- **Demo and Live no longer mix.** Pages redraw when you switch mode. Chat, waiting approvals, history and the "waiting" count now belong to the mode you are in (backend and dashboard). The chat-line counter restarts on a mode switch.
+- Removed the duplicate theme button from the top bar (it stays in the sidebar and in More).
 
 ### New
-- **Mode control**: Demo, Standby and Live in one component, flat colours, confirmation before going Live that states what moderation will do.
-- **Notifications** are their own page and store (stream, timers, reminders, mode changes), separate from Moderation. The bell and its badge belong to Notifications; Moderation keeps its own Waiting badge.
-- **Moderation**: tabs for Waiting, Flagged, History, Library, Rules and Test. Waiting is a compact, searchable list with expandable rows and progressive loading. Rules lists the real detection signals in categories (spam and flooding, words and phrases, links, suspicious content) with on/off and weight.
-- **Library**: collections (words, phrases, spam, links, suspicious, custom), search, multi-select, bulk enable, disable, move and delete, import with a preview that reports new, duplicate and invalid entries before saving, CSV export.
-- **Timers**: recurring or one-time; time trigger, line trigger or both (both: wait for "and" or "or"); at least one trigger required for recurring; last and next post, lines still needed, run history, duplicate, bulk actions, failure reporting. Existing timers keep their behaviour (both triggers, "and").
-- **Commands**: tabs for Commands, Timers and Auto-replies; templates, bulk actions, usage counts, and a catalog of the built-in commands.
-- **Auto-replies (foundation)**: rules are stored and validated, and a tested matcher (phrase, word, contains; case rules; priority) powers a tester. The bot does **not** answer automatically yet, and the page says so.
+- **Notification center.** The bell now opens its own panel (stream start and end, reminders, failed actions, expired approvals, YouTube and Telegram problems, quota warnings) with unread badge, filters, mark all read and clear. Moderation approvals stay under Moderation.
+- **Timers rebuilt.** A time and a number of chat lines are each optional (at least one is required). When both are set choose "both must happen" or "whichever comes first". Repeat, post once, or post a set number of times. Presets, a plain-language summary, "Post now", and timers that finish switch themselves off. Existing timers keep working unchanged; the database is upgraded automatically on start.
+- **Auto-replies (new foundation).** When a viewer sends an exact phrase, or a message containing a word, the bot answers. Commands always win. Per-rule user level, cooldowns, optional @mention and $(variables). API: `/api/triggers`. Settings: `TRIGGERS_ENABLED`, `TRIGGER_DEFAULT_COOLDOWN`, `TRIGGER_USER_COOLDOWN`.
+- **New status card** with a distinct icon for Demo, Standby and Live (no more orange lamp) and a redesigned Demo / Live switch; the phone status pill matches.
+- Commands page is now tabs: Commands, Auto-replies, Timers.
 
-### API additions
-`/api/moderation/flagged`, `/api/blacklist/import` (with `dry_run`), `/api/blacklist/bulk`, `/api/timers/bulk`, `/api/timers/runs`, `/api/timers/{id}/duplicate`, `/api/commands/bulk`, `/api/notifications` (+ `/read`), `/api/auto-replies` (+ `/test`). `scope=all` on list endpoints opts out of mode scoping. Timer create accepts `kind`, `trigger_mode`, `run_at`, and `interval_seconds` of 0.
+Version bumped to 1.1.1.
 
 ## 1.1.0
 

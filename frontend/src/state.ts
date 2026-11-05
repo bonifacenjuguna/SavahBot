@@ -1,15 +1,11 @@
 import { get } from "./api.js";
 
-export type OpState = "demo" | "standby" | "live";
-
 export interface Status {
   app: string;
   version: string;
   timezone: string;
   hub: {
     mode: "demo" | "live";
-    /** The single operating state the whole UI shows. demo = simulated, live = real chat with a stream, standby = live mode waiting for a stream. */
-    state: OpState;
     source: string | null;
     source_status: Record<string, any>;
     stream_live: boolean;
@@ -38,7 +34,6 @@ export interface Status {
   };
   demo: { state: string; ambient: boolean; scenarios_running: string[]; channel: string };
   pending: number;
-  notifications_unread: number;
   database: string;
   uptime: number;
   sse_clients: number;
@@ -46,18 +41,6 @@ export interface Status {
 
 export let status: Status | null = null;
 const subs = new Set<(s: Status) => void>();
-const modeSubs = new Set<(mode: "demo" | "live", previous: "demo" | "live" | null) => void>();
-let lastMode: "demo" | "live" | null = null;
-
-/** Fires when the active mode (demo or live) changes. Every page re-renders from it, so no page can keep showing the other mode's data. */
-export function onModeChange(fn: (mode: "demo" | "live", previous: "demo" | "live" | null) => void): () => void {
-  modeSubs.add(fn);
-  return () => modeSubs.delete(fn);
-}
-
-/** Always read the mode from here, never from a local copy. */
-export const currentMode = (): "demo" | "live" => status?.hub.mode ?? "demo";
-export const opState = (): OpState | null => status?.hub.state ?? null;
 
 export function onStatus(fn: (s: Status) => void): () => void {
   subs.add(fn);
@@ -67,22 +50,10 @@ export function onStatus(fn: (s: Status) => void): () => void {
 
 export async function refreshStatus(): Promise<Status | null> {
   try {
-    const next = await get<Status>("/api/status");
-    // an older backend does not send `state`: derive the same value so the UI never disagrees with itself
-    next.hub.state ??= next.hub.mode === "demo" ? "demo" : next.hub.stream_live ? "live" : "standby";
-    status = next;
-    const previous = lastMode;
-    lastMode = next.hub.mode;
-    subs.forEach((f) => f(next));
-    if (previous !== null && previous !== next.hub.mode) modeSubs.forEach((f) => f(next.hub.mode, previous));
+    status = await get<Status>("/api/status");
+    subs.forEach((f) => f(status!));
   } catch {
     /* the shell shows the connection state; a failed refresh keeps the last known status */
   }
   return status;
-}
-
-/** Forget everything about the session (sign-out), so a new sign-in never starts from the previous mode. */
-export function resetState(): void {
-  status = null;
-  lastMode = null;
 }

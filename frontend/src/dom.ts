@@ -130,7 +130,7 @@ export function sheet(title: string, body: Node, onClose?: () => void): { close:
     onClose?.();
   };
   const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
-  const panel = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title },
+  const panel = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: -1 },
     h("div", { class: "sheet-grip", "aria-hidden": "true" }),
     h("header", { class: "sheet-head" }, h("h2", null, title), h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: close }, icon("x", 20))),
     h("div", { class: "sheet-body" }, body));
@@ -140,14 +140,13 @@ export function sheet(title: string, body: Node, onClose?: () => void): { close:
   document.body.classList.add("no-scroll");
   openSheets++;
   document.addEventListener("keydown", onKey, true);
-  // Focus must never scroll the panel. Focusing the first button (which on the More sheet is at the very bottom)
-  // used to scroll the sheet to the middle as it opened. Text fields get focus; everything else focuses the panel.
-  const scroller = panel.querySelector(".sheet-body") as HTMLElement;
-  scroller.scrollTop = 0;
-  const field = scroller.querySelector("input:not([type=checkbox]):not([type=radio]), textarea, select") as HTMLElement | null;
-  panel.tabIndex = -1;
-  (field ?? panel).focus({ preventScroll: true });
-  scroller.scrollTop = 0;
+  // Always open at the top. Only text fields get focus, and not on touch screens (it would pop the keyboard and scroll the sheet).
+  const body_ = panel.querySelector(".sheet-body") as HTMLElement;
+  body_.scrollTop = 0;
+  const first = panel.querySelector("input, textarea, select") as HTMLElement | null;
+  const touch = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  (first && !touch ? first : panel).focus({ preventScroll: true });
+  body_.scrollTop = 0;
   return { close };
 }
 
@@ -164,18 +163,4 @@ export function downloadCsv(filename: string, rows: (string | number | null | un
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-}
-
-/** Confirmation dialog that resolves to true or false. Used for risky changes such as switching to Live or deleting in bulk. */
-export function confirmDialog(title: string, message: string, confirmLabel = "Confirm", tone: "primary" | "danger" = "primary"): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const holder: { close: () => void } = { close: () => undefined };
-    const done = (v: boolean) => { if (settled) return; settled = true; resolve(v); holder.close(); };
-    const ok = h("button", { class: `btn ${tone === "danger" ? "danger" : "primary"}`, type: "button", onclick: () => done(true) }, confirmLabel);
-    const body = h("div", { class: "stack tight" }, h("p", null, message),
-      h("div", { class: "row between", style: "justify-content:flex-end" }, h("button", { class: "btn ghost", type: "button", onclick: () => done(false) }, "Cancel"), ok));
-    holder.close = sheet(title, body, () => { if (!settled) { settled = true; resolve(false); } }).close;
-    ok.focus({ preventScroll: true });
-  });
 }
