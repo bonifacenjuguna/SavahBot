@@ -1,179 +1,167 @@
-"""How SavahBot looks in Telegram: HTML cards, meters, menus and date-range words.
+"""Presentation layer for the Telegram bot: HTML formatting, cards and keyboards.
 
-Everything here is pure (no network, no database) so it is easy to test. Telegram HTML only understands a few
-tags (<b>, <i>, <code>, <pre>, <blockquote>), and every piece of text that came from a viewer MUST go through
-`esc()` first: a chat message containing "<" would otherwise make Telegram reject the whole message.
+Everything here is a pure function. Telegram HTML only needs &, < and > escaped, so every piece of user or chat
+content passes through `esc()` before it is placed in a message. Nothing in this module decides what the bot does.
 """
 from __future__ import annotations
 
+import html
 import re
-from datetime import date, datetime, time as dtime, timedelta
-from html import escape
-from zoneinfo import ZoneInfo
+from typing import Any
 
-from ..utils import format_duration, truncate
+from ..utils import truncate
 
-Buttons = list[list[tuple[str, str]]]
+Buttons = "list[list[tuple[str, str]]]"
 
-
-class Rich(str):
-    """Text that is already Telegram HTML (every viewer-written part passed through esc()). Plain str is sent as plain text."""
-
-RULE = "┄" * 14
+BRAND = "SavahBot"
+RULE = "─" * 14
 
 
-def esc(value: object) -> str:
-    return escape(str(value), quote=False)
+def esc(value: Any) -> str:
+    return html.escape(str(value if value is not None else ""), quote=False)
 
 
-def bar(fraction: float, width: int = 10) -> str:
-    """▰▰▰▱▱▱▱▱▱▱ for 0.3. Always `width` characters wide."""
-    f = max(0.0, min(1.0, float(fraction)))
-    filled = round(f * width)
-    return "▰" * filled + "▱" * (width - filled)
+def strip_tags(text: str) -> str:
+    """Plain-text version of a message, used if Telegram refuses the HTML."""
+    return html.unescape(re.sub(r"</?(b|i|u|s|code|pre|blockquote|a)(\s[^>]*)?>", "", text))
 
 
-def card(title: str, rows: list[str], foot: str = "", icon: str = "") -> str:
-    """A titled block: bold heading, a thin rule, one line per row, and an optional muted footer."""
-    out = [f"{icon + ' ' if icon else ''}<b>{esc(title)}</b>", RULE, *rows]
-    if foot:
-        out += ["", f"<i>{foot}</i>"]
-    return "\n".join(out)
+def title(icon: str, text: str, sub: str = "") -> str:
+    return f"{icon} <b>{esc(text)}</b>" + (f"  <i>{esc(sub)}</i>" if sub else "")
 
 
-def kv(icon: str, label: str, value: str) -> str:
-    return f"{icon} <b>{esc(label)}</b>  {value}"
+def kv(label: str, value: str) -> str:
+    """One labelled line. `value` must already be HTML-safe."""
+    return f"▫️ {esc(label)}  {value}"
 
 
 def quote(text: str, limit: int = 160) -> str:
     return f"<blockquote>{esc(truncate(text, limit))}</blockquote>"
 
 
-def mode_dot(value: str) -> str:
-    return {"live": "🔴", "demo": "🧪", "auto": "⚡", "suggest": "🔔", "off": "⚪", "webhook": "🔗", "polling": "🔄"}.get(value, "▫️")
+def dot(on: bool | None) -> str:
+    return "🟢" if on else ("⚪" if on is None else "🔴")
 
 
-# ------------------------------------------------------------------ keyboards
-def home_keyboard(pending: int = 0) -> Buttons:
-    wait = f"⏳ Waiting ({pending})" if pending else "⏳ Waiting"
+# --------------------------------------------------------------------------------------------- keyboards
+def menu_button() -> list[tuple[str, str]]:
+    return [("☰ Menu", "nav:home")]
+
+
+def home_keyboard() -> list[list[tuple[str, str]]]:
     return [
-        [("📊 Status", "m:status"), (wait, "m:pending")],
-        [("📈 Stats", "m:stats"), ("🎛 Modes", "m:modes")],
-        [("🗒 Notes", "m:notes"), ("⏰ Reminders", "m:rem")],
-        [("🕘 Recent actions", "m:history"), ("❔ Help", "m:help")],
+        [("📊 Status", "nav:status"), ("🛡 Waiting", "nav:pending")],
+        [("🎛 Modes", "nav:modes"), ("📈 Stats", "nav:stats")],
+        [("📝 Notes", "nav:notes"), ("⏰ Reminders", "nav:reminders")],
+        [("❔ Help", "nav:help")],
     ]
 
 
-def back_row(extra: list[tuple[str, str]] | None = None) -> list[tuple[str, str]]:
-    return [*(extra or []), ("‹ Menu", "m:home")]
+def back_keyboard(refresh: str | None = None) -> list[list[tuple[str, str]]]:
+    row = [("‹ Menu", "nav:home")]
+    if refresh:
+        row.insert(0, ("↻ Refresh", refresh))
+    return [row]
 
 
-def modes_keyboard(bot_mode: str, mod_mode: str) -> Buttons:
-    tick = lambda cur, v, label: (("✔ " if cur == v else "") + label, f"set:{'bot' if v in ('demo', 'live') else 'mod'}:{v}")
+def modes_keyboard(bot_mode: str, mod_mode: str) -> list[list[tuple[str, str]]]:
+    def mark(current: str, value: str, label: str) -> str:
+        return f"● {label}" if current == value else label
+
     return [
-        [tick(bot_mode, "demo", "🧪 Demo"), tick(bot_mode, "live", "🔴 Live")],
-        [tick(mod_mode, "off", "⚪ Off"), tick(mod_mode, "suggest", "🔔 Suggest"), tick(mod_mode, "auto", "⚡ Auto")],
-        [("‹ Menu", "m:home")],
+        [(mark(bot_mode, "demo", "Demo"), "set:mode:demo"), (mark(bot_mode, "live", "Live"), "set:mode:live")],
+        [(mark(mod_mode, "off", "Mod off"), "set:mod:off"), (mark(mod_mode, "suggest", "Suggest"), "set:mod:suggest"),
+         (mark(mod_mode, "auto", "Auto"), "set:mod:auto")],
+        [("‹ Menu", "nav:home")],
     ]
 
 
-def approval_keyboard(id_: int) -> Buttons:
-    return [[("✅ Approve", f"approve:{id_}"), ("❌ Reject", f"reject:{id_}")]]
+# --------------------------------------------------------------------------------------------- static screens
+def welcome(app_name: str, version: str) -> str:
+    return "\n".join([
+        f"🛡 <b>{esc(app_name)}</b>  <i>v{esc(version)}</i>",
+        "Your live-chat companion: moderation, reminders and quick controls.",
+        "",
+        "Tap a button below, or type a command. <code>/help</code> lists them all.",
+    ])
 
 
-# ------------------------------------------------------------------ date words
-RANGE_HELP = "today, yesterday, week, month, 3d, 12h, 2026-11-05 or 2026-11-01..2026-11-05"
-_DAY = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
-_SPAN = re.compile(r"^(\d{1,3})([dh])$")
+HELP_HTML = "\n".join([
+    f"🛡 <b>{BRAND} commands</b>",
+    "",
+    "📊 <b>Status</b>",
+    "/status  overview",
+    "/stats [hours]  chat and moderation numbers",
+    "/quota  YouTube quota",
+    "",
+    "🎛 <b>Modes</b>",
+    "/mode demo|live  chat source",
+    "/mod off|suggest|auto  moderation mode",
+    "/tgmode webhook|polling  how Telegram reaches the bot",
+    "",
+    "🛡 <b>Moderation</b>",
+    "/pending  requests waiting for you",
+    "/approve &lt;id|all&gt;   /reject &lt;id|all&gt;",
+    "/permit &lt;user&gt; [seconds]  allow links briefly",
+    "",
+    "💬 <b>Chat</b>",
+    "/say &lt;text&gt;  post in the stream chat",
+    "/demo [scenario]  list or run demo scenarios",
+    "",
+    "📝 <b>Notes and reminders</b>",
+    "/note &lt;text&gt;   /notes   /delnote &lt;id&gt;",
+    "/remind &lt;when&gt; &lt;text&gt;   /reminders   /delremind &lt;id&gt;",
+    "<i>when: 30m, 2h, 18:30, tomorrow 09:00, 2026-11-05 14:00, daily 08:00, every 2h</i>",
+])
 
 
-def _day(s: str) -> date | None:
-    m = _DAY.match(s)
-    if not m:
-        return None
-    try:
-        return date(int(m[1]), int(m[2]), int(m[3]))
-    except ValueError:
-        return None
+# --------------------------------------------------------------------------------------------- notices from the hub
+_APPROVAL = re.compile(r"^Approval needed #(\d+): (.+?) for (.+?) \(score (\d+)\)\n“(.*)”\nWhy: (.*?)(\n\(\+.*\))?$", re.S)
+_FLAGGED = re.compile(r"^Flagged (.+?) \(score (\d+)\): (.*)$", re.S)
 
 
-def parse_range(words: list[str], tz_name: str, now: datetime | None = None) -> tuple[float | None, float | None, str, list[str]]:
-    """Finds ONE date word in `words` and returns (since, until, label, the other words).
+def format_notice(text: str) -> str:
+    """Turns the plain notification texts written by the hub and scheduler into a styled card.
 
-    `until` is exclusive and both are epoch seconds in the owner's timezone, so "today" means the owner's today.
-    No date word means no limit: (None, None, "", words).
+    The hub keeps sending plain text (other code and tests depend on it); this only decides how it looks in Telegram.
+    Unknown text is escaped and sent as it is.
     """
-    tz = ZoneInfo(tz_name)
-    now = now or datetime.now(tz)
-    start_of = lambda d: datetime.combine(d, dtime.min, tz).timestamp()
-    today = now.date()
-    for i, w in enumerate(words):
-        lw = w.lower()
-        rest = words[:i] + words[i + 1:]
-        if lw == "today":
-            return start_of(today), None, "today", rest
-        if lw == "yesterday":
-            return start_of(today - timedelta(days=1)), start_of(today), "yesterday", rest
-        if lw == "week":
-            return start_of(today - timedelta(days=6)), None, "the last 7 days", rest
-        if lw == "month":
-            return start_of(today - timedelta(days=29)), None, "the last 30 days", rest
-        m = _SPAN.match(lw)
-        if m and int(m[1]) > 0:
-            n = int(m[1])
-            delta = timedelta(days=n) if m[2] == "d" else timedelta(hours=n)
-            return (now - delta).timestamp(), None, f"the last {n}{m[2]}", rest
-        if ".." in w:
-            a, _, b = w.partition("..")
-            da, db = _day(a), _day(b)
-            if da and db and da <= db:
-                return start_of(da), start_of(db + timedelta(days=1)), f"{da:%d %b} to {db:%d %b %Y}", rest
-        d = _day(w)
-        if d:
-            return start_of(d), start_of(d + timedelta(days=1)), f"{d:%a %d %b %Y}", rest
-    return None, None, "", words
+    m = _APPROVAL.match(text)
+    if m:
+        id_, what, who, score, body, why, extra = m.groups()
+        out = [f"🛡 <b>Approval needed</b>  ·  <code>#{esc(id_)}</code>",
+               f"<b>{esc(what)}</b> for <b>{esc(who)}</b>  ·  score {esc(score)}",
+               quote(body, 200),
+               f"<i>Why:</i> {esc(why) or '—'}"]
+        if extra:
+            out.append(f"<i>{esc(extra.strip())}</i>")
+        return "\n".join(out)
+    m = _FLAGGED.match(text)
+    if m:
+        who, score, body = m.groups()
+        return f"🚩 <b>Flagged</b>  {esc(who)}  ·  score {esc(score)}\n{quote(body, 120)}"
+    if text.startswith("Reminder: "):
+        return f"⏰ <b>Reminder</b>\n{esc(text[len('Reminder: '):])}"
+    if text.startswith("Stream is live"):
+        name = text.partition(":")[2].strip()
+        return "🔴 <b>Stream is live</b>" + (f"\n{esc(name)}" if name else "")
+    if text.startswith("Stream has ended"):
+        return "⚫ <b>Stream ended</b>"
+    if text.startswith("Test message from the dashboard"):
+        return f"✅ <b>Telegram is connected</b>\n{esc(text)}"
+    return esc(text)
 
 
-# ------------------------------------------------------------------ small formatters
-def when(ts: float, tz_name: str, now: datetime | None = None) -> str:
-    tz = ZoneInfo(tz_name)
-    t = datetime.fromtimestamp(ts, tz)
-    today = (now or datetime.now(tz)).date()
-    if t.date() == today:
-        return f"{t:%H:%M}"
-    if t.date() == today - timedelta(days=1):
-        return f"yesterday {t:%H:%M}"
-    return f"{t:%d %b %H:%M}"
+def approval_card(a: dict[str, Any]) -> str:
+    what = a["action"] + (f" {a['duration']}s" if a.get("duration") else "")
+    return "\n".join([
+        f"🛡 <code>#{a['id']}</code>  <b>{esc(what)}</b> for <b>{esc(a['author_name'])}</b>  ·  score {a['score']}",
+        quote(a["body"], 120),
+        f"<i>Why:</i> {esc('; '.join(a['reasons'][:4])) or '—'}",
+    ])
 
 
-def outcome_icon(status: str) -> str:
-    return {"executed": "✅", "approved": "✅", "simulated": "🧪", "rejected": "🚫", "failed": "⚠️", "pending": "⏳", "expired": "⌛"}.get(status, "▫️")
-
-
-def level_icon(level: str) -> str:
-    return {"mod": "🛡", "member": "💎", "regular": "⭐", "bot": "🤖"}.get(level, "")
-
-
-# ------------------------------------------------------------------ notifications built by the hub
-def approval_card(id_: int, r: dict, extra: str = "") -> Rich:
-    what = r["action"] + (f" {format_duration(r['duration'])}" if r.get("duration") else "")
-    rows = [f"{esc(what)} for <b>{esc(r['author_name'])}</b>  ·  score {esc(r['score'])}", quote(r.get("text") or r.get("body") or "", 140)]
-    if r.get("reasons"):
-        rows.append("Why: " + ", ".join(f"<code>{esc(x)}</code>" for x in r["reasons"][:4]))
-    if extra:
-        rows.append(f"<i>{esc(extra)}</i>")
-    return Rich(f"⏳ <b>Approval needed</b> #{id_}\n{RULE}\n" + "\n".join(rows))
-
-
-def stream_card(live: bool, title: str = "") -> Rich:
-    if live:
-        return Rich("🔴 <b>Stream is live</b>" + (f"\n{esc(title)}" if title else ""))
-    return Rich("⚫ <b>Stream has ended</b>")
-
-
-def flag_card(author: str, score: int, text: str) -> Rich:
-    return Rich(f"🚩 <b>Flagged</b> {esc(author)}  ·  score {esc(score)}\n{quote(text, 100)}")
-
-
-def reminder_card(body: str) -> Rich:
-    return Rich(f"⏰ <b>Reminder</b>\n{esc(body)}")
+def bar(fraction: float, width: int = 10) -> str:
+    """Text progress bar: bar(0.3) -> '▰▰▰▱▱▱▱▱▱▱'."""
+    filled = max(0, min(width, round(fraction * width)))
+    return "▰" * filled + "▱" * (width - filled)

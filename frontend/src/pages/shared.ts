@@ -28,6 +28,12 @@ export function empty(iconName: string, text: string): HTMLElement {
   return h("div", { class: "empty" }, icon(iconName, 28), h("span", null, text));
 }
 
+/** Placeholder rows shown while a page loads its first data. Announced to screen readers as a busy region. */
+export function skeleton(rows = 3): HTMLElement {
+  return h("div", { class: "skeleton", role: "status", "aria-busy": "true", "aria-label": "Loading" },
+    Array.from({ length: rows }, () => h("div", { class: "sk-row" }, h("i", { class: "sk-dot" }), h("span", null, h("i", { class: "sk-line" }), h("i", { class: "sk-line short" })))));
+}
+
 export function chipFor(status: string): string {
   return status === "executed" || status === "approved" ? "ok" : status === "failed" || status === "rejected" ? "bad" : status === "pending" ? "warn" : "";
 }

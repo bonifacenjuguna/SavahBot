@@ -2,28 +2,26 @@
 
 ## 1.1.2
 
-### Redesign
-- **More is now a real page.** On phones the More tab opens a full hub instead of a small sheet: a live status card with the Demo/Live switch, searchable Manage and System sections with live counts (notes, reminders, quotes, regulars, setup progress), theme, search, shortcuts and sign out. It works on tablets and desktops too (`#/more`, shortcut `g` then `o`).
-- **Manage and System feel like one place.** Notebook, Community, Insights and Demo (Manage) and Setup and Settings (System) share a switcher at the top, so you can move between them in one tap on any screen size.
-- **Setup rebuilt as a guided stepper.** Overview with a progress ring and a "Next up" button, then Addresses, YouTube, Telegram and Variables as separate steps with their own navigation (a side list on desktop, a scrolling step bar on phones), done/needs-attention marks, Back and Next buttons, and links that open a given step (`#/setup?step=youtube`). The two checks on the YouTube step (Verify access, Run check) sit where they are needed. A "only what is missing" filter was added to Variables.
-- **Desk chat zooms to fill the screen.** Click the chat title bar, the expand button, or press `F`: the card grows from where it sits to fill the workspace (the whole screen on phones) and shrinks back to the same spot with Esc. Expanded, it adds text size controls, a live messages-per-minute pill and the waiting-for-you list beside the chat (a slide-in panel on narrow screens). Respects reduced motion.
-- Notebook: grid or list view, newest/oldest order, copy a note, show when it was written.
-- Community: one search box for quotes and regulars.
+### Dashboard
+- **Moderation history can be filtered by date.** Quick ranges (Today, Yesterday, 7 days, 30 days), a start and end date (the same date twice selects one day), a visible "Showing ..." summary and a Clear button. The range is applied by the server against the stored history (`GET /api/moderation/history?since=&until=`, unix seconds, start inclusive, end exclusive), so it also reaches entries older than the latest 60. Reversed or invalid ranges are rejected with a clear message, and empty results have their own empty state. CSV export follows the active range. The new filter is a reusable component (`frontend/src/datefilter.ts`).
+- **Expandable chat on the desktop Desk.** An Expand button on the Chat card grows the same card into a large centred workspace with a zoom transition; Close, Esc or a click on the backdrop collapse it. History, scroll position, typed text and live updates are untouched because it is the same element. The page behind does not jump, and the control is hidden on narrow screens where the layout is a single column. Respects reduced-motion settings.
+- **Navigation.** Each section shows its group (Operate, Manage, System) above its title, an active marker on the current item, tooltips with a short description, and thin group dividers on the tablet icon rail.
+- **More (phone) redesigned.** Grouped rows with an icon, title and description for every page, a status row that opens the mode switch, and a Preferences group for theme, search and sign out.
+- **Setup guide.** A "next step" card tells you what to do now, the checklist marks the current step and has a Go button for each open step, the YouTube/Telegram/addresses cards are jump targets, troubleshooting tools are collapsed, and loading and error states are explicit.
+- Loading placeholders and clearer load errors on Setup, Settings, Community and Notebook.
+- Larger touch targets on touch screens, a short fade when changing page.
 
-### Search and dates
-- **Date filters** (Any time, Today, Yesterday, 7 days, 30 days, or a custom From/To) now exist in: Moderation history, the Desk chat (searches the saved chat for that range, with a Back to live button), Notifications and Notebook.
-- Moderation history is filtered on the server (outcome, text, dates) and has Load more, so older actions are reachable. New API: `GET /api/moderation/history?since=&until=&q=&status=&offset=` and `GET /api/chat/search?q=&since=&until=&verdict=`. Times are epoch seconds; `until` is exclusive.
+### Telegram bot
+- New look: HTML formatting, consistent cards, quoted chat messages, status bars.
+- New main menu (`/start`, `/menu`) with buttons for Status, Waiting, Modes, Stats, Notes, Reminders and Help. Screens are edited in place and have Refresh and Menu buttons.
+- New **Modes** screen to switch Demo/Live and Off/Suggest/Auto with one tap (same effect as `/mode` and `/mod`).
+- Approval requests, flags, reminders and stream events are formatted as cards. Chat content is always escaped, and if Telegram ever rejects a message's formatting it is re-sent as plain text.
+- All existing commands, the `approve:<id>` / `reject:<id>` buttons, the owner-only rules and `/claim` are unchanged. New commands: `/menu`, `/modes`.
 
-### Telegram
-- Rich cards: bold headings, status meters, quoted chat lines, icons. Approval requests, stream start/end, flags and reminders were restyled.
-- **Tap menu.** `/menu` (or `/start`) opens buttons for Status, Waiting, Stats, Modes, Notes, Reminders, Recent actions and Help. Buttons edit the same message in place, so the chat stays tidy. Demo/Live and Off/Suggest/Auto switch with one tap.
-- New `/find <text> [date]` searches saved chat and `/history [date] [outcome]` lists what the bot did. Date words: `today`, `yesterday`, `week`, `month`, `3d`, `12h`, `2026-11-05`, `2026-11-01..2026-11-05` (in your timezone).
-- Formatting never loses a message: if Telegram rejects the formatted version it is resent as plain text. Anything typed by viewers is escaped.
-- Approve/Reject buttons now read "✅ Approve" and "❌ Reject".
-
-### Technical
-- Version is defined once in `frontend/src/version.ts` and `backend/app/__init__.py`.
-- New styles live in `frontend/src/redesign.css` (palette unchanged). No database changes.
+### Under the hood
+- `Store.action_history(since, until)`; `/api/moderation/history` returns the range it applied.
+- Telegram presentation lives in `backend/app/services/telegram_ui.py`; the hub and scheduler still send plain text.
+- Version bumped to 1.1.2 (backend, dashboard, package metadata, ZIP).
 
 ## 1.1.1
 

@@ -39,7 +39,7 @@ export function nextTheme(p: ThemePref): ThemePref {
 }
 
 // ------------------------------------------------------------------ shortcuts
-export const SHORTCUT_KEYS: Record<string, string> = { desk: "d", moderation: "m", commands: "c", notebook: "n", community: "u", insights: "i", demo: "x", setup: "s", settings: "t", more: "o" };
+export const SHORTCUT_KEYS: Record<string, string> = { desk: "d", moderation: "m", commands: "c", notebook: "n", community: "u", insights: "i", demo: "x", setup: "s", settings: "t" };
 
 export interface AppContext {
   pages: Page[];
@@ -54,11 +54,6 @@ function typing(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
 }
-
-let appCtx: AppContext | null = null;
-/** The shell registers its actions once, so pages (the More page, for one) can change mode or theme without the shell passing them in. */
-export function setAppContext(c: AppContext): void { appCtx = c; }
-export function appContext(): AppContext { if (!appCtx) throw new Error("The app is not ready yet."); return appCtx; }
 
 export function installShortcuts(ctx: AppContext): () => void {
   let pendingG = 0;
