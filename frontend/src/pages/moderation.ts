@@ -1,9 +1,8 @@
 import { del, get, patch, post } from "../api.js";
-import { busy, dateTime, debounce, downloadCsv, h, mount, toast } from "../dom.js";
+import { busy, dateTime, downloadCsv, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
 import { icon } from "../icons.js";
 import { onStatus, status, refreshStatus } from "../state.js";
-import { dateRange, rangeQuery, type RangeValue } from "./kit.js";
 import { actionLabel, approvalList, card, chipFor, empty, pageHead, type Action } from "./shared.js";
 import type { Page } from "./types.js";
 
@@ -36,9 +35,6 @@ export const moderation: Page = {
     let historyItems: Action[] = [];
     let hFilter = "all";
     let hNeedle = "";
-    let hRange: RangeValue = { label: "", active: false };
-    let hMore = false;
-    const PAGE = 60;
     const loadPending = async () => mount(pending, approvalList((await get<{ items: Action[] }>("/api/moderation/pending")).items, async () => { await loadPending(); await loadHistory(); }));
 
     const historyTable = (rows: Action[]): HTMLElement => rows.length
@@ -49,36 +45,31 @@ export const moderation: Page = {
           h("td", { "data-label": "Action" }, actionLabel(a)),
           h("td", { "data-label": "Outcome" }, h("div", null, h("span", { class: `chip ${chipFor(a.status)}` }, a.status), a.error ? h("div", { class: "reasons" }, a.error) : null)),
           h("td", { class: "small muted", "data-label": "Why" }, a.reasons.join(", ") || "-"))))))
-      : empty("history", hRange.active || hNeedle || hFilter !== "all" ? `No actions match${hRange.active ? ` for ${hRange.label.toLowerCase()}` : ""}.` : "No moderation actions yet.");
+      : empty("history", historyItems.length ? "No actions match this filter." : "No moderation actions yet.");
     const historyBody = h("div");
-    const summary = h("div", { class: "muted small hist-summary" });
-    const moreBtn = h("button", { class: "btn small ghost", type: "button", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await fetchHistory(historyItems.length); }) }, icon("arrowDown", 15), "Load more");
     const drawHistory = () => {
-      mount(historyBody, historyTable(historyItems), hMore ? h("div", { class: "body" }, moreBtn) : null);
-      summary.textContent = historyItems.length ? `${historyItems.length} action${historyItems.length === 1 ? "" : "s"}${hRange.active ? ` · ${hRange.label}` : ""}${hMore ? " (more available)" : ""}` : "";
+      const rows = historyItems.filter((a) => (hFilter === "all" || a.status === hFilter) && (!hNeedle || `${a.author_name} ${a.action} ${a.reasons.join(" ")} ${a.body}`.toLowerCase().includes(hNeedle)));
+      mount(historyBody, historyTable(rows));
     };
-    const STATUSES = ["all", "pending", "executed", "simulated", "approved", "rejected", "failed", "expired"];
-    const fetchHistory = async (offset = 0) => {
-      const qs = `limit=${PAGE}&offset=${offset}${hFilter !== "all" ? `&status=${hFilter}` : ""}${hNeedle ? `&q=${encodeURIComponent(hNeedle)}` : ""}${rangeQuery(hRange)}`;
-      const rows = (await get<{ items: Action[] }>(`/api/moderation/history?${qs}`)).items;
-      historyItems = offset ? [...historyItems, ...rows] : rows;
-      hMore = rows.length === PAGE;
+    const statuses = (): string[] => ["all", ...Array.from(new Set(historyItems.map((a) => a.status)))];
+    const filterBar = h("div", { class: "toolbar" });
+    const drawFilters = () => {
+      const search = h("input", { type: "search", placeholder: "Search history", "aria-label": "Search history", value: hNeedle });
+      search.addEventListener("input", () => { hNeedle = search.value.trim().toLowerCase(); drawHistory(); });
+      mount(filterBar,
+        h("div", { class: "scroll-x" }, h("div", { class: "seg-control", role: "group", "aria-label": "Outcome" }, statuses().map((s) =>
+          h("button", { type: "button", "aria-pressed": String(hFilter === s), onclick: () => { hFilter = s; drawFilters(); drawHistory(); } }, s === "all" ? "All" : s)))),
+        h("div", { class: "input-icon" }, icon("search", 16), search),
+        h("button", { class: "btn small ghost", type: "button", onclick: () => downloadCsv("moderation-history.csv", [["When", "Who", "Action", "Duration (s)", "Score", "Outcome", "Reasons", "Message", "Demo"],
+          ...historyItems.map((a) => [new Date(a.ts * 1000).toISOString(), a.author_name, a.action, a.duration, a.score, a.status, a.reasons.join("; "), a.body, a.demo ? "yes" : "no"])]) }, icon("download", 15), "CSV"));
+    };
+    mount(history, filterBar, historyBody);
+    const loadHistory = async () => {
+      historyItems = (await get<{ items: Action[] }>("/api/moderation/history?limit=60")).items;
+      if (!statuses().includes(hFilter)) hFilter = "all";
+      drawFilters();
       drawHistory();
     };
-    const filterBar = h("div", { class: "toolbar" });
-    const reloadHistory = debounce(() => void fetchHistory().catch((e) => toast(e.message, "error")), 250);
-    const dates = dateRange({ label: "History date range" }, (v) => { hRange = v; reloadHistory(); });
-    const search = h("input", { type: "search", placeholder: "Search history", "aria-label": "Search history" });
-    search.addEventListener("input", () => { hNeedle = search.value.trim().toLowerCase(); reloadHistory(); });
-    const drawFilters = () => mount(filterBar,
-      h("div", { class: "scroll-x" }, h("div", { class: "seg-control", role: "group", "aria-label": "Outcome" }, STATUSES.map((s) =>
-        h("button", { type: "button", "aria-pressed": String(hFilter === s), onclick: () => { hFilter = s; drawFilters(); reloadHistory(); } }, s === "all" ? "All" : s)))),
-      h("div", { class: "input-icon" }, icon("search", 16), search),
-      h("button", { class: "btn small ghost", type: "button", onclick: () => downloadCsv("moderation-history.csv", [["When", "Who", "Action", "Duration (s)", "Score", "Outcome", "Reasons", "Message", "Demo"],
-        ...historyItems.map((a) => [new Date(a.ts * 1000).toISOString(), a.author_name, a.action, a.duration, a.score, a.status, a.reasons.join("; "), a.body, a.demo ? "yes" : "no"])]) }, icon("download", 15), "CSV"));
-    drawFilters();
-    mount(history, filterBar, h("div", { class: "toolbar dates-row" }, dates.el, summary), historyBody);
-    const loadHistory = async () => { await fetchHistory(); };
 
     // ----- blocked phrases
     let pNeedle = "";

@@ -1,7 +1,6 @@
 import { del, get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
-import { areaNav } from "./kit.js";
 import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 
@@ -35,13 +34,7 @@ export const community: Page = {
         r.items.length ? h("ul", { class: "list" }, r.items.map((x) => h("li", { class: "row between nowrap" }, h("span", { class: "grow" }, icon("star", 14), " ", h("span", { class: "mono" }, x.ident), x.label ? h("span", { class: "muted" }, `  ${x.label}`) : null),
           h("button", { class: "btn small danger", "aria-label": `Remove ${x.ident}`, onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await del(`/api/regulars/${x.id}`); await loadReg(); }) }, icon("x", 15), "Remove")))) : empty("users", "No regulars yet."));
     };
-    const find = h("input", { type: "search", placeholder: "Search quotes and regulars", "aria-label": "Search quotes and regulars" });
-    find.addEventListener("input", () => {
-      const q = find.value.trim().toLowerCase();
-      root.querySelectorAll(".list > li").forEach((li) => { (li as HTMLElement).hidden = !!q && !(li.textContent ?? "").toLowerCase().includes(q); });
-    });
-    mount(root, pageHead("users", "Community", "The quotes your chat remembers and the viewers you trust."), areaNav("community"),
-      h("div", { class: "toolbar" }, h("div", { class: "input-icon grow" }, icon("search", 16), find)), h("div", { class: "cols even" },
+    mount(root, pageHead("users", "Community", "The quotes your chat remembers and the viewers you trust."), h("div", { class: "cols even" },
       card("quote", "Quotes", quotesBox, { flush: true, actions: countQ }), card("star", "Regulars", regBox, { flush: true, actions: countR })));
     void loadQuotes().catch((e) => toast(e.message, "error"));
     void loadReg().catch((e) => toast(e.message, "error"));
