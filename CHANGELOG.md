@@ -5,6 +5,7 @@
 ### Fixes
 - **Expand no longer lags or freezes the phone.** The chat card used to animate its size and position while live chat kept arriving, forcing a re-layout every frame, and blurred the whole screen behind it. It now appears with a short fade and slide (no blur, no size animation), and chat auto-scroll is batched to once per frame.
 - **One tap to close.** The expand/collapse button works on a single tap in both directions. The hidden double-click on the title bar is removed, and a quick re-tap during the animation can no longer leave the card stuck.
+- **Close button always visible.** On phones the tool row could scroll the expand/close button off the right edge. It is now pinned outside the scrolling tools and reads "Close" when expanded.
 - **Chat card polish.** Rounder, calmer card with a clearer header and input bar, softer rows and larger touch targets for the expand button.
 
 ## 1.1.2

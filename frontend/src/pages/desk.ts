@@ -226,14 +226,14 @@ export const desk: Page = {
     const sizeUp = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Larger text", title: "Larger text", onclick: () => setSize(sizeIdx + 1) }, icon("textSize", 18), h("span", { class: "sz" }, "+"));
     const expandBtn = h("button", { class: "icon-btn expand-btn", type: "button", "aria-label": "Expand the chat to fill the screen", "aria-expanded": "false", title: "Expand chat (F)", onclick: (e: Event) => { e.preventDefault(); zoom.toggle(); } });
     const paintExpand = (open: boolean) => {
-      mount(expandBtn, icon(open ? "collapse" : "expand", 18));
+      mount(expandBtn, icon(open ? "collapse" : "expand", 18), open ? h("span", { class: "close-label" }, "Close") : null);
       expandBtn.setAttribute("aria-expanded", String(open));
       expandBtn.setAttribute("aria-label", open ? "Shrink the chat back" : "Expand the chat to fill the screen");
       expandBtn.title = open ? "Shrink chat (Esc)" : "Expand chat (F)";
     };
     paintExpand(false);
     const chatPane = card("message", "Chat", h("div", { class: "chat-body" }, main, side), { flush: true, cls: "chat-card",
-      actions: h("div", { class: "row nowrap chat-tools" }, ratePill, sizeDown, sizeUp, sideToggle, expandBtn) });
+      actions: h("div", { class: "row nowrap chat-actions" }, h("div", { class: "row nowrap chat-tools" }, ratePill, sizeDown, sizeUp, sideToggle), expandBtn) });
     const setSize = (i: number) => {
       sizeIdx = Math.max(0, Math.min(SIZES.length - 1, i));
       chatPane.style.setProperty("--chat-scale", String(SIZES[sizeIdx]));

@@ -140,7 +140,10 @@
 }
 
 /* ---------- Desk: the chat card that zooms to fill the workspace ---------- */
-.chat-tools { gap: 6px; }
+.chat-actions { gap: 8px; min-width: 0; flex: 0 1 auto; }
+.chat-tools { gap: 6px; min-width: 0; }
+.expand-btn { flex: none; }
+.close-label { display: none; }
 .chat-tools .zoom-only, .zoom-side { display: none; }
 .rate-pill { font: 600 0.78rem var(--mono); padding: 2px 9px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); color: var(--muted); }
 .expand-btn, .chat-tools .icon-btn, .chat-tools .btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
@@ -180,7 +183,12 @@
 @media (max-width: 719px) {
   .chat-card.zoomed { border-radius: 0; }
   .chat-card.zoomed > header { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
-  .chat-card.zoomed .chat-tools { flex-wrap: nowrap; overflow-x: auto; }
+  .chat-card.zoomed > header { flex-wrap: nowrap; }
+  .chat-card.zoomed > header h2 { flex: none; }
+  .chat-card.zoomed .chat-actions { flex: 1; justify-content: flex-end; }
+  .chat-card.zoomed .chat-tools { flex-wrap: nowrap; overflow-x: auto; flex: 0 1 auto; }
+  .chat-card.zoomed .expand-btn { padding: 0 14px; gap: 6px; width: auto; font-weight: 600; border-color: var(--accent); color: var(--accent); }
+  .chat-card.zoomed .close-label { display: inline; }
   .chat-card.zoomed .toolbar { padding: 8px 12px; }
 }
 body.zoom-open .tabbar { z-index: 10; }
