@@ -164,6 +164,8 @@ async def me(request: Request, c: Any) -> dict:
 
 @R.add("/status", ["GET"])
 async def status(request: Request, c: Any) -> dict:
+    # Refresh the Pacific quota day even when the YouTube polling loop is stopped.
+    await c.quota.sync()
     return {
         "app": c.cfg.get("app_name"), "version": __version__, "timezone": c.cfg.get("owner_timezone"),
         "hub": c.hub.status(), "telegram": c.telegram.status(), "youtube": c.youtube.status(), "demo": c.demo.status(),
@@ -537,6 +539,8 @@ async def demo_ambient(request: Request, c: Any) -> dict:
 # ================================================================================= integrations
 @R.add("/youtube/status", ["GET"])
 async def youtube_status(request: Request, c: Any) -> dict:
+    # Status polling must roll the tracker over at midnight Pacific in every bot mode.
+    await c.quota.sync()
     return c.youtube.status() | {"connected": await c.google.connected()}
 
 
