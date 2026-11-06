@@ -8,6 +8,7 @@ from typing import Any
 
 from ..commands import Ctx
 from ..timeparse import next_repeat
+from .telegram_ui import reminder_card
 from ..utils import from_epoch, to_epoch
 
 logger = logging.getLogger("savahbot.scheduler")
@@ -71,20 +72,37 @@ class Scheduler:
                 await self.store.finish_reminder(r["id"], now)
             self.bus.publish("reminder", {"id": r["id"], "text": r["body"]})
             if self.cfg.get("telegram_notify_reminders"):
-                await self.hub._notify(f"Reminder: {r['body']}")
+                await self.hub._notify(reminder_card(r["body"]))
+
+    @staticmethod
+    def timer_due(t: dict, now: float, started: float, lines_since: int) -> bool:
+        """A timer waits for a time, for a number of chat lines, or both.
+
+        With both, match_mode decides: 'all' needs both to be satisfied, 'any' fires on whichever comes first.
+        """
+        by_time = t["interval_seconds"] > 0
+        by_lines = t["min_lines"] > 0
+        time_ok = by_time and now - max(t["last_fired"], started) >= t["interval_seconds"]
+        lines_ok = by_lines and lines_since >= t["min_lines"]
+        if by_time and by_lines:
+            return (time_ok or lines_ok) if t.get("match_mode") == "any" else (time_ok and lines_ok)
+        return time_ok if by_time else lines_ok
 
     async def _timers(self, now: float) -> None:
         if not self.hub.stream_live or self.hub.source is None:
             return
         for t in await self.store.list_timers():
             if not t["enabled"]:
+                self._lines_at.pop(t["id"], None)  # start counting chat lines afresh when it is switched on again
                 continue
-            if t["id"] not in self._lines_at:
-                self._lines_at[t["id"]] = self.hub.lines
-            last = max(t["last_fired"], self._started)
-            if now - last < t["interval_seconds"] or self.hub.lines - self._lines_at[t["id"]] < t["min_lines"]:
+            if t["id"] not in self._lines_at or self.hub.lines < self._lines_at[t["id"]]:
+                self._lines_at[t["id"]] = self.hub.lines  # first look, or the line counter was reset (mode change)
+            if not self.timer_due(t, now, self._started, self.hub.lines - self._lines_at[t["id"]]):
                 continue
             text = await self.hub.commands.renderer.render(t["message"], Ctx(channel=self.hub.commands.channel_fn(), now=now))
             if text and await self.hub.send_chat(text):
                 await self.store.mark_timer_fired(t["id"], now)
                 self._lines_at[t["id"]] = self.hub.lines
+                if t.get("max_runs") and t.get("runs", 0) + 1 >= t["max_runs"]:
+                    await self.store.switch_off_timer(t["id"])  # reached its number of posts (1 = post once)
+                    self.bus.publish("timer_done", {"id": t["id"], "name": t["name"]})

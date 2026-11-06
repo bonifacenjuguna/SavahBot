@@ -155,7 +155,7 @@ def test_pending_list_and_inline_buttons_approve_and_reject():
         await say(c, OWNER, "/pending")
         assert len(fake.sent()) > n_before and "2 waiting" in fake.texts()[-1]
         buttons = [b for b in fake.sent() if b.get("reply_markup")][0]["reply_markup"]["inline_keyboard"][0]
-        assert [b["text"] for b in buttons] == ["Approve", "Reject"]
+        assert [b["text"] for b in buttons] == ["✅ Approve", "❌ Reject"]
 
         pending = await c.store.pending_actions()
         cb = lambda uid, data: {"update_id": 5, "callback_query": {"id": "cq1", "from": {"id": uid}, "data": data,
@@ -229,5 +229,107 @@ def test_unconfigured_telegram_is_harmless():
         await c.telegram.notify("nobody to tell")
         await c.hub.ingest(ChatMessage("demo", "s", "spam", "FREE ROBUX at robux-gift.xyz", "everyone", demo=True))
         assert len(await c.store.pending_actions()) == 1        # approvals still queue for the dashboard
+        await c.stop()
+    run(go())
+
+
+# ------------------------------------------------------------------ 1.1.2: rich messages, menu buttons, dated search
+def test_date_words_become_owner_timezone_ranges():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.services.telegram_ui import parse_range
+    tz = "Africa/Nairobi"
+    now = datetime(2026, 11, 5, 15, 30, tzinfo=ZoneInfo(tz))
+    day = lambda y, m, d: datetime(y, m, d, tzinfo=ZoneInfo(tz)).timestamp()
+    assert parse_range(["giveaway", "today"], tz, now) == (day(2026, 11, 5), None, "today", ["giveaway"])
+    assert parse_range(["yesterday"], tz, now)[:2] == (day(2026, 11, 4), day(2026, 11, 5))
+    assert parse_range(["2026-11-01..2026-11-03", "robux"], tz, now)[:2] == (day(2026, 11, 1), day(2026, 11, 4))   # until is exclusive and covers the whole last day
+    assert parse_range(["2026-11-02"], tz, now)[:2] == (day(2026, 11, 2), day(2026, 11, 3))
+    assert parse_range(["3d"], tz, now)[0] == now.timestamp() - 3 * 86400
+    assert parse_range(["2026-13-45", "hello"], tz, now) == (None, None, "", ["2026-13-45", "hello"])   # an impossible date is just a word
+    assert parse_range(["hello"], tz, now) == (None, None, "", ["hello"])
+
+
+def test_rich_messages_are_html_and_viewer_text_is_escaped():
+    async def go():
+        fake = FakeTelegram()
+        c = await boot(fake)
+        await say(c, OWNER, "/status")
+        assert fake.sent()[-1]["parse_mode"] == "HTML" and "<b>" in fake.texts()[-1]
+        await c.store.add_chat({"platform": "demo", "author_id": "x", "author_name": "<b>evil</b>", "text": "a < b & c", "ts": __import__("time").time(), "demo": True})
+        await say(c, OWNER, "/find today")
+        out = fake.texts()[-1]
+        assert "&lt;b&gt;evil&lt;/b&gt;" in out and "a &lt; b &amp; c" in out and "<b>evil</b>" not in out
+        await say(c, OWNER, "/note use <tags> carefully")            # plain replies stay plain text
+        assert "parse_mode" not in fake.sent()[-1]
+        await c.stop()
+    run(go())
+
+
+def test_find_and_history_filter_by_date_and_explain_themselves():
+    async def go():
+        import time
+        fake = FakeTelegram()
+        c = await boot(fake)
+        now = time.time()
+        await c.store.add_chat({"platform": "demo", "author_id": "a", "author_name": "ann", "text": "old giveaway", "ts": now - 5 * 86400, "demo": True})
+        await c.store.add_chat({"platform": "demo", "author_id": "b", "author_name": "bob", "text": "new giveaway", "ts": now - 60, "demo": True})
+        await say(c, OWNER, "/find giveaway")
+        assert "old giveaway" in fake.texts()[-1] and "new giveaway" in fake.texts()[-1]
+        await say(c, OWNER, "/find giveaway today")
+        assert "new giveaway" in fake.texts()[-1] and "old giveaway" not in fake.texts()[-1]
+        await say(c, OWNER, "/find giveaway 1d")
+        assert "old giveaway" not in fake.texts()[-1]
+        await say(c, OWNER, "/find")
+        assert "Examples" in fake.texts()[-1]
+        await say(c, OWNER, "/find nothing-like-this")
+        assert "No saved chat matches" in fake.texts()[-1]
+        await say(c, OWNER, "/history yesterday")
+        assert "Nothing found" in fake.texts()[-1]
+        await c.stop()
+    run(go())
+
+
+def test_menu_buttons_edit_the_message_in_place_and_switch_modes():
+    async def go():
+        fake = FakeTelegram()
+        c = await boot(fake)
+        await say(c, OWNER, "/menu")
+        kb = fake.sent()[-1]["reply_markup"]["inline_keyboard"]
+        assert any(b["callback_data"] == "m:status" for row in kb for b in row)
+        cb = lambda uid, data: {"update_id": 9, "callback_query": {"id": "q", "from": {"id": uid}, "data": data, "message": {"message_id": 7, "chat": {"id": OWNER}, "text": "x"}}}
+        await c.telegram.handle_update(cb(999, "m:status"))                       # a stranger gets nothing
+        assert not fake.server.calls("/editMessageText")
+        await c.telegram.handle_update(cb(OWNER, "m:status"))
+        edit = fake.server.calls("/editMessageText")[-1]["body"]
+        assert edit["message_id"] == 7 and edit["parse_mode"] == "HTML" and "mode: demo" in edit["text"]
+        await c.telegram.handle_update(cb(OWNER, "set:mod:auto"))
+        assert c.cfg.get("mod_mode") == "auto"
+        assert "✔ ⚡ Auto" in str(fake.server.calls("/editMessageText")[-1]["body"]["reply_markup"])
+        await c.telegram.handle_update(cb(OWNER, "set:bot:live"))
+        assert c.cfg.get("bot_mode") == "live"
+        await c.telegram.handle_update(cb(OWNER, "set:mod:bogus"))                 # junk never changes anything
+        assert c.cfg.get("mod_mode") == "auto"
+        await c.stop()
+    run(go())
+
+
+def test_html_that_telegram_rejects_is_resent_as_plain_text():
+    async def go():
+        fake = FakeTelegram()
+        c = await boot(fake)
+        from app.services.telegram_ui import Rich
+        real = c.telegram.client.call
+        calls = []
+
+        async def flaky(method, params=None, timeout=15.0):
+            calls.append(dict(params or {}))
+            if (params or {}).get("parse_mode") == "HTML":
+                from app.services.telegram import TelegramError
+                raise TelegramError("sendMessage: Bad Request: can't parse entities (HTTP 400)")
+            return await real(method, params, timeout)
+        c.telegram.client.call = flaky
+        await c.telegram.client.send(OWNER, Rich("<b>Hello</b> &amp; welcome"))
+        assert calls[-1].get("parse_mode") is None and calls[-1]["text"] == "Hello & welcome"
         await c.stop()
     run(go())

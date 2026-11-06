@@ -29,7 +29,13 @@ SCHEMA: list[str] = [
     """CREATE TABLE IF NOT EXISTS timers (
         id {PK}, name TEXT NOT NULL UNIQUE, message TEXT NOT NULL, interval_seconds INTEGER NOT NULL,
         min_lines INTEGER NOT NULL DEFAULT 5, enabled INTEGER NOT NULL DEFAULT 1,
-        last_fired {REAL} NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL)""",
+        last_fired {REAL} NOT NULL DEFAULT 0, fired INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL,
+        match_mode TEXT NOT NULL DEFAULT 'all', max_runs INTEGER NOT NULL DEFAULT 0, runs INTEGER NOT NULL DEFAULT 0)""",
+    """CREATE TABLE IF NOT EXISTS triggers (
+        id {PK}, phrase TEXT NOT NULL, match_type TEXT NOT NULL DEFAULT 'exact', response TEXT NOT NULL,
+        mention INTEGER NOT NULL DEFAULT 1, userlevel TEXT NOT NULL DEFAULT 'everyone',
+        cooldown INTEGER NOT NULL DEFAULT 30, user_cooldown INTEGER NOT NULL DEFAULT 60,
+        enabled INTEGER NOT NULL DEFAULT 1, hits INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL)""",
     "CREATE TABLE IF NOT EXISTS quotes (id {PK}, body TEXT NOT NULL, author TEXT NOT NULL DEFAULT '', created {REAL} NOT NULL)",
     "CREATE TABLE IF NOT EXISTS regulars (id {PK}, ident TEXT NOT NULL UNIQUE, label TEXT NOT NULL, created {REAL} NOT NULL)",
     """CREATE TABLE IF NOT EXISTS blacklist (
@@ -57,6 +63,14 @@ SCHEMA: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_chat_ts ON chat_messages (ts)",
     "CREATE INDEX IF NOT EXISTS idx_actions_status ON mod_actions (status, ts)",
     "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (status, due)",
+]
+
+
+# Columns added after 1.0: (table, column, definition). Existing databases get them on start-up.
+MIGRATIONS: list[tuple[str, str, str]] = [
+    ("timers", "match_mode", "TEXT NOT NULL DEFAULT 'all'"),
+    ("timers", "max_runs", "INTEGER NOT NULL DEFAULT 0"),
+    ("timers", "runs", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -90,6 +104,10 @@ class _SQLite:
     async def init_schema(self) -> None:
         for stmt in SCHEMA:
             await self.run(stmt.replace("{PK}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL"), (), "exec")
+        for table, column, definition in MIGRATIONS:
+            have = {r["name"] for r in await self.run(f"PRAGMA table_info({table})", (), "all")}
+            if column not in have:
+                await self.run(f"ALTER TABLE {table} ADD COLUMN {column} {definition}", (), "exec")
 
     async def close(self) -> None:
         with self._lock:
@@ -139,6 +157,8 @@ class _Postgres:
     async def init_schema(self) -> None:
         for stmt in SCHEMA:
             await self.run(stmt.replace("{PK}", "SERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION"), (), "exec")
+        for table, column, definition in MIGRATIONS:
+            await self.run(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}", (), "exec")
 
     async def close(self) -> None:
         if self._pool:

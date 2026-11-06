@@ -1,79 +1,115 @@
-import { del, get, patch, post } from "../api.js";
-import { busy, dateTime, h, mount, toast } from "../dom.js";
+import { get, patch } from "../api.js";
+import { busy, dateTime, debounce, downloadCsv, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
-import { status, refreshStatus } from "../state.js";
 import { icon } from "../icons.js";
-import { actionLabel, approvalList, statusChip, type Action } from "./shared.js";
+import { onStatus, status, refreshStatus } from "../state.js";
+import { dateRange, rangeQuery, type RangeValue } from "./kit.js";
+import { actionLabel, approvalList, card, chipFor, empty, pageHead, type Action } from "./shared.js";
+import { phraseTool, testLab } from "./modtools.js";
 import type { Page } from "./types.js";
 
-interface Phrase { id: number; phrase: string; is_regex: boolean; weight: number; enabled: boolean }
+const MODES: { id: string; icon: string; title: string; text: string }[] = [
+  { id: "off", icon: "list", title: "Off", text: "Only log. Nothing is flagged for action." },
+  { id: "suggest", icon: "bell", title: "Suggest", text: "Ask me first. Requests wait on the Desk." },
+  { id: "auto", icon: "zap", title: "Auto", text: "Act, then tell me what was done." },
+];
 
 export const moderation: Page = {
   id: "moderation",
   title: "Moderation",
-  render(root) {
-    const modeSel = h("select", { "aria-label": "Moderation mode" },
-      [["off", "Off: only log"], ["suggest", "Suggest: ask me first"], ["auto", "Auto: act, then tell me"]].map(([v, l]) => h("option", { value: v, selected: status?.hub.mod_mode === v }, l)));
-    modeSel.onchange = () => busy(modeSel as unknown as HTMLButtonElement, async () => { await patch("/api/settings", { values: { mod_mode: modeSel.value } }); await refreshStatus(); }, "Moderation mode saved");
+  icon: "shield",
+  blurb: "Approvals, history and blocked phrases",
+  render(root, query) {
+    // ----- mode
+    let mode: string = status?.hub.mod_mode ?? "off";
+    const modeBox = h("div", { class: "mode-cards" });
+    const drawMode = () => mount(modeBox, MODES.map((m) => {
+      const b = h("button", { class: "mode-card", type: "button", "aria-pressed": String(mode === m.id) }, icon(m.icon, 22), h("strong", null, m.title), h("span", null, m.text));
+      b.onclick = () => busy(b as HTMLButtonElement, async () => { await patch("/api/settings", { values: { mod_mode: m.id } }); mode = m.id; drawMode(); await refreshStatus(); }, "Moderation mode saved");
+      return b;
+    }));
+    drawMode();
 
-    const pending = h("div"), history = h("div"), phrases = h("div"), tester = h("div");
+    // ----- queue and history
+    const pending = h("div"), history = h("div");
+    let historyItems: Action[] = [];
+    let hFilter = "all";
+    let hNeedle = "";
+    let hRange: RangeValue = { label: "", active: false };
+    let hMore = false;
+    const PAGE = 60;
     const loadPending = async () => mount(pending, approvalList((await get<{ items: Action[] }>("/api/moderation/pending")).items, async () => { await loadPending(); await loadHistory(); }));
-    const loadHistory = async () => {
-      const r = await get<{ items: Action[] }>("/api/moderation/history?limit=60");
-      mount(history, r.items.length
-        ? h("div", { class: "table-wrap" }, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["When", "Who", "Action", "Outcome", "Why"].map((c) => h("th", null, c)))),
-          h("tbody", null, r.items.map((a) => h("tr", null, h("td", { "data-label": "When" }, dateTime(a.ts)), h("td", { "data-label": "Who" }, a.author_name, a.demo ? h("span", { class: "chip" }, "demo") : null),
-            h("td", { "data-label": "Action" }, actionLabel(a)), h("td", { "data-label": "Outcome" }, statusChip(a.status), a.error ? h("div", { class: "reasons" }, a.error) : null),
-            h("td", { class: "small muted", "data-label": "Why" }, a.reasons.join(", ")))))))
-        : h("div", { class: "empty" }, "No moderation actions yet."));
-    };
 
-    const loadPhrases = async () => {
-      const r = await get<{ items: Phrase[] }>("/api/blacklist");
-      const phrase = h("input", { type: "text", placeholder: "Word, phrase or regex", required: true, maxLength: 200 });
-      const regex = h("input", { type: "checkbox" });
-      const weight = h("input", { type: "number", min: 0, max: 100, value: "0", title: "Score added when matched. 0 uses the default." });
-      const add = h("button", { class: "btn primary", type: "submit" }, icon("plus", 14), "Add");
-      mount(phrases,
-        h("form", { class: "body row", onsubmit: (e: Event) => { e.preventDefault(); busy(add, async () => { await post("/api/blacklist", { phrase: phrase.value, is_regex: regex.checked, weight: Number(weight.value) }); await loadPhrases(); }); } },
-          h("div", { class: "grow" }, phrase), h("label", { class: "check" }, regex, "Regex"), h("div", { style: "width:90px" }, weight), add),
-        r.items.length ? h("ul", { class: "list" }, r.items.map((p) => h("li", { class: "row between" },
-          h("span", null, h("span", { class: p.enabled ? "mono" : "mono muted" }, p.phrase), " ", p.is_regex ? h("span", { class: "chip" }, "regex") : null, p.weight ? h("span", { class: "chip" }, `+${p.weight}`) : null),
-          h("span", { class: "row" },
-            h("label", { class: "check small" }, h("input", { type: "checkbox", checked: p.enabled, onchange: (e: Event) => void patch(`/api/blacklist/${p.id}`, { enabled: (e.target as HTMLInputElement).checked }).catch((x) => toast(x.message, "error")) }), "On"),
-            h("button", { class: "btn small danger", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await del(`/api/blacklist/${p.id}`); await loadPhrases(); }) }, icon("trash", 14), "Remove")))))
-          : h("div", { class: "empty" }, "No blocked phrases."));
+    const historyTable = (rows: Action[]): HTMLElement => rows.length
+      ? h("div", { class: "table-wrap" }, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["When", "Who", "Action", "Outcome", "Why"].map((c) => h("th", null, c)))),
+        h("tbody", null, rows.map((a) => h("tr", null,
+          h("td", { "data-label": "When" }, dateTime(a.ts)),
+          h("td", { "data-label": "Who" }, h("span", null, a.author_name, a.demo ? h("span", { class: "chip", style: "margin-left:6px" }, "demo") : null)),
+          h("td", { "data-label": "Action" }, actionLabel(a)),
+          h("td", { "data-label": "Outcome" }, h("div", null, h("span", { class: `chip ${chipFor(a.status)}` }, a.status), a.error ? h("div", { class: "reasons" }, a.error) : null)),
+          h("td", { class: "small muted", "data-label": "Why" }, a.reasons.join(", ") || "-"))))))
+      : empty("history", hRange.active || hNeedle || hFilter !== "all" ? `No actions match${hRange.active ? ` for ${hRange.label.toLowerCase()}` : ""}.` : "No moderation actions yet.");
+    const historyBody = h("div");
+    const summary = h("div", { class: "muted small hist-summary" });
+    const moreBtn = h("button", { class: "btn small ghost", type: "button", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await fetchHistory(historyItems.length); }) }, icon("arrowDown", 15), "Load more");
+    const drawHistory = () => {
+      mount(historyBody, historyTable(historyItems), hMore ? h("div", { class: "body" }, moreBtn) : null);
+      summary.textContent = historyItems.length ? `${historyItems.length} action${historyItems.length === 1 ? "" : "s"}${hRange.active ? ` · ${hRange.label}` : ""}${hMore ? " (more available)" : ""}` : "";
     };
+    const STATUSES = ["all", "pending", "executed", "simulated", "approved", "rejected", "failed", "expired"];
+    const fetchHistory = async (offset = 0) => {
+      const qs = `limit=${PAGE}&offset=${offset}${hFilter !== "all" ? `&status=${hFilter}` : ""}${hNeedle ? `&q=${encodeURIComponent(hNeedle)}` : ""}${rangeQuery(hRange)}`;
+      const rows = (await get<{ items: Action[] }>(`/api/moderation/history?${qs}`)).items;
+      historyItems = offset ? [...historyItems, ...rows] : rows;
+      hMore = rows.length === PAGE;
+      drawHistory();
+    };
+    const filterBar = h("div", { class: "toolbar" });
+    const reloadHistory = debounce(() => void fetchHistory().catch((e) => toast(e.message, "error")), 250);
+    const dates = dateRange({ label: "History date range" }, (v) => { hRange = v; reloadHistory(); });
+    const search = h("input", { type: "search", placeholder: "Search history", "aria-label": "Search history" });
+    search.addEventListener("input", () => { hNeedle = search.value.trim().toLowerCase(); reloadHistory(); });
+    const drawFilters = () => mount(filterBar,
+      h("div", { class: "scroll-x" }, h("div", { class: "seg-control", role: "group", "aria-label": "Outcome" }, STATUSES.map((s) =>
+        h("button", { type: "button", "aria-pressed": String(hFilter === s), onclick: () => { hFilter = s; drawFilters(); reloadHistory(); } }, s === "all" ? "All" : s)))),
+      h("div", { class: "input-icon" }, icon("search", 16), search),
+      h("button", { class: "btn small ghost", type: "button", onclick: () => downloadCsv("moderation-history.csv", [["When", "Who", "Action", "Duration (s)", "Score", "Outcome", "Reasons", "Message", "Demo"],
+        ...historyItems.map((a) => [new Date(a.ts * 1000).toISOString(), a.author_name, a.action, a.duration, a.score, a.status, a.reasons.join("; "), a.body, a.demo ? "yes" : "no"])]) }, icon("download", 15), "CSV"));
+    drawFilters();
+    mount(history, filterBar, h("div", { class: "toolbar dates-row" }, dates.el, summary), historyBody);
+    const loadHistory = async () => { await fetchHistory(); };
 
-    const text = h("textarea", { placeholder: "Paste a chat message to see how it would score", maxLength: 1000 });
-    const level = h("select", null, ["everyone", "member", "regular", "mod"].map((l) => h("option", { value: l }, l)));
-    const result = h("div", { class: "small" });
-    const test = h("button", { class: "btn primary", type: "submit" }, "Score it");
-    mount(tester, h("form", { class: "body stack", onsubmit: (e: Event) => {
-      e.preventDefault();
-      busy(test, async () => {
-        const r = await post<{ verdict: any; note: string }>("/api/moderation/test", { text: text.value, level: level.value });
-        const v = r.verdict;
-        mount(result, h("p", null, h("strong", null, `Score ${v.score}: ${v.action}`), v.duration ? ` (${v.duration}s)` : "", v.exempt ? " (exempt)" : ""),
-          v.signals.length ? h("ul", null, v.signals.map((s: any) => h("li", null, `${s.name} +${s.weight}`, s.detail ? ` (${s.detail})` : ""))) : h("p", { class: "muted" }, "No signals fired."),
-          h("p", { class: "muted" }, r.note));
-      });
-    } }, text, h("div", { class: "row" }, h("label", { class: "field" }, "Chatter level", level), test), result));
+    // ----- rules: the two tools live in modtools.ts
+    const phrasesTool = phraseTool();
+    const lab = testLab({ block: (text) => { current = "phrases"; applyTabs(); phrasesTool.prefill(text); } });
+
+    // ----- layout and narrow-screen tabs
+    const queueCard = card("inbox", "Waiting for you", pending, { flush: true });
+    const historyCard = card("history", "History", history, { flush: true });
+    const panes: Record<string, HTMLElement[]> = { queue: [queueCard], history: [historyCard], phrases: [lab.el, phrasesTool.el] };
+    const ids = Object.keys(panes);
+    const names: Record<string, string> = { queue: "Queue", history: "History", phrases: "Rules" };
+    let current = query.get("tab") === "rules" ? "phrases" : "queue";
+    const tabs = h("div", { class: "seg-control pane-tabs", role: "tablist" }, ids.map((id) => h("button", { type: "button", role: "tab", "data-id": id, onclick: () => { current = id; applyTabs(); } }, names[id])));
+    const applyTabs = () => {
+      for (const [id, els] of Object.entries(panes)) els.forEach((el) => { el.classList.add("pane"); el.setAttribute("data-hidden", String(id !== current)); });
+      Array.from(tabs.children).forEach((b) => b.setAttribute("aria-selected", String(b.getAttribute("data-id") === current)));
+    };
+    applyTabs();
 
     mount(root,
-      h("div", { class: "page-head" }, h("h1", null, "Moderation"), h("label", { class: "field" }, "Mode", modeSel)),
+      pageHead("shield", "Moderation", "Decide what the bot does, review what it did, and tune what it looks for."),
+      card("sliders", "Mode", h("div", { class: "body" }, modeBox)),
+      h("div", { style: "height:20px" }),
+      tabs,
       h("div", { class: "cols" },
-        h("div", { class: "stack" },
-          h("section", { class: "block flush" }, h("header", null, h("h2", null, "Waiting for you")), pending),
-          h("section", { class: "block flush" }, h("header", null, h("h2", null, "History")), history)),
-        h("div", { class: "stack" },
-          h("section", { class: "block flush" }, h("header", null, h("h2", null, "Blocked phrases"), h("span", { class: "muted small" }, "Matches survive spacing, symbols and look-alike letters")), phrases),
-          h("section", { class: "block flush" }, h("header", null, h("h2", null, "Try a message")), tester))),
-    );
+        h("div", { class: "stack" }, queueCard, historyCard),
+        h("div", { class: "stack" }, lab.el, phrasesTool.el)));
+
     const all = () => Promise.all([loadPending(), loadHistory()]).catch((e) => toast(e.message, "error"));
     void all();
-    void loadPhrases().catch((e) => toast(e.message, "error"));
-    const offs = [feed.on("mod_pending", all), feed.on("mod_resolved", all)];
+    void phrasesTool.load().catch((e) => toast(e.message, "error"));
+    const offs = [feed.on("mod_pending", all), feed.on("mod_resolved", all), onStatus((st) => { if (st.hub.mod_mode !== mode) { mode = st.hub.mod_mode; drawMode(); } })];
     return () => offs.forEach((f) => f());
   },
 };

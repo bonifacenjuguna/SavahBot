@@ -36,6 +36,7 @@ class Store:
     def __init__(self, db: Database) -> None:
         self.db = db
         self._regulars: set[str] = set()
+        self._trigger_cache: list[dict] | None = None
 
     # ------------------------------------------------------------------ generic
     async def _update(self, table: str, id_: int, allowed: tuple[str, ...], fields: dict[str, Any]) -> bool:
@@ -110,32 +111,142 @@ class Store:
             r["enabled"] = bool(r["enabled"])
         return r
 
+    @staticmethod
+    def _check_timer(interval_seconds: int, min_lines: int, match_mode: str, max_runs: int, message: str | None = None) -> None:
+        """A timer needs a time, a number of chat lines, or both. A time is at least 60 seconds."""
+        if interval_seconds < 0 or (0 < interval_seconds < 60):
+            raise ValidationFailed("Interval must be at least 60 seconds, or 0 to post by chat lines only.")
+        if interval_seconds > 86400:
+            raise ValidationFailed("Interval can be at most 24 hours.")
+        if min_lines < 0 or min_lines > 1000:
+            raise ValidationFailed("Chat lines must be between 0 and 1000.")
+        if interval_seconds == 0 and min_lines == 0:
+            raise ValidationFailed("Set a time, a number of chat lines, or both.")
+        if match_mode not in ("all", "any"):
+            raise ValidationFailed("match_mode must be 'all' or 'any'.")
+        if max_runs < 0 or max_runs > 1000:
+            raise ValidationFailed("Number of posts must be between 0 (keep repeating) and 1000.")
+        if message is not None and not message.strip():
+            raise ValidationFailed("Message cannot be empty.")
+
     async def list_timers(self) -> list[dict]:
         return [self._timer(r) for r in await self.db.fetchall("SELECT * FROM timers ORDER BY name")]
 
-    async def create_timer(self, name: str, message: str, interval_seconds: int, min_lines: int = 5, enabled: bool = True) -> int:
+    async def get_timer(self, id_: int) -> dict | None:
+        return self._timer(await self.db.fetchone("SELECT * FROM timers WHERE id = ?", (id_,)))
+
+    async def create_timer(self, name: str, message: str, interval_seconds: int = 0, min_lines: int = 0, enabled: bool = True,
+                           match_mode: str = "all", max_runs: int = 0) -> int:
         name = clean_name(name, prefix="")
-        if interval_seconds < 60:
-            raise ValidationFailed("Interval must be at least 60 seconds.")
-        if not message.strip():
-            raise ValidationFailed("Message cannot be empty.")
+        min_lines = max(0, min_lines)
+        self._check_timer(interval_seconds, min_lines, match_mode, max_runs, message)
         return await self.db.insert(
-            "INSERT INTO timers (name, message, interval_seconds, min_lines, enabled, created) VALUES (?, ?, ?, ?, ?, ?)",
-            (name, message.strip(), interval_seconds, max(0, min_lines), int(enabled), time.time()),
+            "INSERT INTO timers (name, message, interval_seconds, min_lines, enabled, created, match_mode, max_runs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (name, message.strip(), interval_seconds, min_lines, int(enabled), time.time(), match_mode, max_runs),
         )
 
     async def update_timer(self, id_: int, **fields: Any) -> bool:
-        if "interval_seconds" in fields and fields["interval_seconds"] < 60:
-            raise ValidationFailed("Interval must be at least 60 seconds.")
+        current = await self.get_timer(id_)
+        if current is None:
+            return False
+        merged = current | fields
+        self._check_timer(int(merged["interval_seconds"]), int(merged["min_lines"]), merged["match_mode"], int(merged["max_runs"]),
+                          merged["message"] if "message" in fields else None)
+        if "name" in fields:
+            fields["name"] = clean_name(fields["name"], prefix="")
+        if "message" in fields:
+            fields["message"] = fields["message"].strip()
         if "enabled" in fields:
             fields["enabled"] = int(bool(fields["enabled"]))
-        return await self._update("timers", id_, ("name", "message", "interval_seconds", "min_lines", "enabled"), fields)
+            if fields["enabled"] and not current["enabled"]:
+                fields["runs"] = 0  # a limited timer starts counting again each time it is switched on
+        await self._update("timers", id_, ("name", "message", "interval_seconds", "min_lines", "enabled", "match_mode", "max_runs", "runs"), fields)
+        return True
 
     async def delete_timer(self, id_: int) -> bool:
         return await self._delete("timers", id_)
 
     async def mark_timer_fired(self, id_: int, ts: float) -> None:
-        await self.db.execute("UPDATE timers SET last_fired = ?, fired = fired + 1 WHERE id = ?", (ts, id_))
+        await self.db.execute("UPDATE timers SET last_fired = ?, fired = fired + 1, runs = runs + 1 WHERE id = ?", (ts, id_))
+
+    async def switch_off_timer(self, id_: int) -> None:
+        await self.db.execute("UPDATE timers SET enabled = 0 WHERE id = ?", (id_,))
+
+    # ------------------------------------------------------------------ auto-replies (triggers)
+    TRIGGER_MATCHES = ("exact", "word")
+
+    @staticmethod
+    def phrase_key(text: str) -> str:
+        """Case and spacing do not matter when comparing a viewer's message with a trigger phrase."""
+        return " ".join((text or "").split()).casefold()
+
+    @staticmethod
+    def _trigger(r: dict | None) -> dict | None:
+        if r:
+            r["enabled"] = bool(r["enabled"])
+            r["mention"] = bool(r["mention"])
+        return r
+
+    async def list_triggers(self) -> list[dict]:
+        return [self._trigger(r) for r in await self.db.fetchall("SELECT * FROM triggers ORDER BY phrase")]
+
+    async def get_trigger(self, id_: int) -> dict | None:
+        return self._trigger(await self.db.fetchone("SELECT * FROM triggers WHERE id = ?", (id_,)))
+
+    async def enabled_triggers(self) -> list[dict]:
+        """Enabled triggers, longest phrase first, cached until a trigger is created, changed or deleted."""
+        if self._trigger_cache is None:
+            rows = [self._trigger(r) for r in await self.db.fetchall("SELECT * FROM triggers WHERE enabled = 1")]
+            self._trigger_cache = sorted(rows, key=lambda r: -len(self.phrase_key(r["phrase"])))
+        return self._trigger_cache
+
+    async def _check_trigger(self, fields: dict[str, Any], ignore_id: int | None = None) -> None:
+        if "phrase" in fields:
+            if not self.phrase_key(fields["phrase"]):
+                raise ValidationFailed("Phrase cannot be empty.")
+            if len(fields["phrase"]) > 200:
+                raise ValidationFailed("Phrase can be at most 200 characters.")
+        if "response" in fields and not fields["response"].strip():
+            raise ValidationFailed("Reply cannot be empty.")
+        if "match_type" in fields and fields["match_type"] not in self.TRIGGER_MATCHES:
+            raise ValidationFailed(f"Match must be one of {', '.join(self.TRIGGER_MATCHES)}.")
+        if "userlevel" in fields:
+            fields["userlevel"] = valid_level(fields["userlevel"])
+
+    async def create_trigger(self, phrase: str, response: str, match_type: str = "exact", mention: bool = True, userlevel: str = "everyone",
+                             cooldown: int = 30, user_cooldown: int = 60, enabled: bool = True) -> int:
+        fields = {"phrase": phrase.strip(), "response": response.strip(), "match_type": match_type, "userlevel": userlevel}
+        await self._check_trigger(fields)
+        key = self.phrase_key(phrase)
+        for t in await self.list_triggers():
+            if self.phrase_key(t["phrase"]) == key and t["match_type"] == match_type:
+                raise ValidationFailed("There is already an auto-reply for that phrase.")
+        id_ = await self.db.insert(
+            "INSERT INTO triggers (phrase, match_type, response, mention, userlevel, cooldown, user_cooldown, enabled, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (fields["phrase"], match_type, fields["response"], int(mention), fields["userlevel"], max(0, cooldown), max(0, user_cooldown), int(enabled), time.time()))
+        self._trigger_cache = None
+        return id_
+
+    async def update_trigger(self, id_: int, **fields: Any) -> bool:
+        await self._check_trigger(fields)
+        for k in ("enabled", "mention"):
+            if k in fields:
+                fields[k] = int(bool(fields[k]))
+        if "phrase" in fields:
+            fields["phrase"] = fields["phrase"].strip()
+        if "response" in fields:
+            fields["response"] = fields["response"].strip()
+        ok = await self._update("triggers", id_, ("phrase", "match_type", "response", "mention", "userlevel", "cooldown", "user_cooldown", "enabled"), fields)
+        self._trigger_cache = None
+        return ok
+
+    async def delete_trigger(self, id_: int) -> bool:
+        ok = await self._delete("triggers", id_)
+        self._trigger_cache = None
+        return ok
+
+    async def bump_trigger(self, id_: int) -> None:
+        await self.db.execute("UPDATE triggers SET hits = hits + 1 WHERE id = ?", (id_,))
 
     # ------------------------------------------------------------------ quotes
     async def list_quotes(self) -> list[dict]:
@@ -290,8 +401,11 @@ class Store:
              m["ts"], m.get("score", 0), m.get("verdict", "allow"), int(m.get("demo", False))),
         )
 
-    async def recent_chat(self, limit: int = 100) -> list[dict]:
-        rows = await self.db.fetchall("SELECT * FROM chat_messages ORDER BY ts DESC, id DESC LIMIT ?", (limit,))
+    async def recent_chat(self, limit: int = 100, demo: bool | None = None) -> list[dict]:
+        if demo is None:
+            rows = await self.db.fetchall("SELECT * FROM chat_messages ORDER BY ts DESC, id DESC LIMIT ?", (limit,))
+        else:
+            rows = await self.db.fetchall("SELECT * FROM chat_messages WHERE demo = ? ORDER BY ts DESC, id DESC LIMIT ?", (int(demo), limit))
         return list(reversed(rows))
 
     async def chat_since(self, since: float, limit: int = 20000) -> list[dict]:
@@ -299,6 +413,29 @@ class Store:
             "SELECT ts, author_id, author_name, level, verdict, score, demo FROM chat_messages WHERE ts >= ? ORDER BY ts LIMIT ?",
             (since, limit),
         )
+
+    async def search_chat(self, q: str | None = None, since: float | None = None, until: float | None = None,
+                          verdict: str | None = None, demo: bool | None = None, limit: int = 200) -> list[dict]:
+        """Stored chat, newest last, filtered by text, by date range and by what moderation did. Kept for chat_retention_days."""
+        where, params = [], []
+        if q:
+            where.append("(lower(body) LIKE ? ESCAPE '\\' OR lower(author_name) LIKE ? ESCAPE '\\')")
+            params += [self._like(q)] * 2
+        if since is not None:
+            where.append("ts >= ?")
+            params.append(since)
+        if until is not None:
+            where.append("ts < ?")
+            params.append(until)
+        if verdict == "flagged":
+            where.append("verdict IS NOT NULL AND verdict <> 'allow'")
+        elif verdict == "blocked":
+            where.append("verdict IS NOT NULL AND verdict NOT IN ('allow', 'flag')")
+        if demo is not None:
+            where.append("demo = ?")
+            params.append(int(demo))
+        sql = "SELECT * FROM chat_messages" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY ts DESC, id DESC LIMIT ?"
+        return list(reversed(await self.db.fetchall(sql, (*params, limit))))
 
     async def clear_demo_data(self) -> None:
         await self.db.execute("DELETE FROM chat_messages WHERE demo = 1")
@@ -325,20 +462,43 @@ class Store:
     async def get_action(self, id_: int) -> dict | None:
         return self._action(await self.db.fetchone("SELECT * FROM mod_actions WHERE id = ?", (id_,)))
 
-    async def pending_actions(self) -> list[dict]:
-        return [self._action(r) for r in await self.db.fetchall("SELECT * FROM mod_actions WHERE status = 'pending' ORDER BY ts")]
+    async def pending_actions(self, demo: bool | None = None) -> list[dict]:
+        if demo is None:
+            rows = await self.db.fetchall("SELECT * FROM mod_actions WHERE status = 'pending' ORDER BY ts")
+        else:
+            rows = await self.db.fetchall("SELECT * FROM mod_actions WHERE status = 'pending' AND demo = ? ORDER BY ts", (int(demo),))
+        return [self._action(r) for r in rows]
 
     async def pending_for_author(self, platform: str, author_id: str) -> dict | None:
         return self._action(await self.db.fetchone(
             "SELECT * FROM mod_actions WHERE status = 'pending' AND platform = ? AND author_id = ? "
             "AND action IN ('timeout', 'ban') ORDER BY ts DESC LIMIT 1", (platform, author_id)))
 
-    async def action_history(self, limit: int = 100, status: str | None = None) -> list[dict]:
+    @staticmethod
+    def _like(q: str) -> str:
+        """Escapes %, _ and \\ so a search for "50%" matches the text and not a wildcard."""
+        return "%" + q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+    async def action_history(self, limit: int = 100, status: str | None = None, demo: bool | None = None,
+                             since: float | None = None, until: float | None = None, q: str | None = None, offset: int = 0) -> list[dict]:
+        where, params = [], []
         if status:
-            rows = await self.db.fetchall("SELECT * FROM mod_actions WHERE status = ? ORDER BY ts DESC LIMIT ?", (status, limit))
-        else:
-            rows = await self.db.fetchall("SELECT * FROM mod_actions ORDER BY ts DESC LIMIT ?", (limit,))
-        return [self._action(r) for r in rows]
+            where.append("status = ?")
+            params.append(status)
+        if demo is not None:
+            where.append("demo = ?")
+            params.append(int(demo))
+        if since is not None:
+            where.append("ts >= ?")
+            params.append(since)
+        if until is not None:
+            where.append("ts < ?")
+            params.append(until)
+        if q:
+            where.append("(lower(author_name) LIKE ? ESCAPE '\\' OR lower(body) LIKE ? ESCAPE '\\' OR lower(action) LIKE ? ESCAPE '\\' OR lower(reasons) LIKE ? ESCAPE '\\')")
+            params += [self._like(q)] * 4
+        sql = "SELECT * FROM mod_actions" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY ts DESC LIMIT ? OFFSET ?"
+        return [self._action(r) for r in await self.db.fetchall(sql, (*params, limit, max(0, offset)))]
 
     async def actions_since(self, since: float) -> list[dict]:
         return [self._action(r) for r in await self.db.fetchall("SELECT * FROM mod_actions WHERE ts >= ? ORDER BY ts", (since,))]

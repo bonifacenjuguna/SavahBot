@@ -3,9 +3,9 @@
 A personal, owner-only moderation and utility bot for YouTube live chat, controlled from a web dashboard and from Telegram.
 
 - **Backend** (`backend/`): Python 3.13, Starlette + uvicorn, PostgreSQL (SQLite for local use). Runs on Railway.
-- **Dashboard** (`frontend/`): Vite + TypeScript, no framework. Runs on Vercel.
+- **Dashboard** (`frontend/`): Vite + TypeScript, no framework, responsive for phone, tablet and desktop, installable as an app. Runs on Vercel.
 - **Telegram**: webhook or polling, switchable at any time from the dashboard or with `/tgmode`.
-- **Demo mode**: simulated chat and nine scenarios (raid, link spammer, caps flood, bot timing, disguised words, ...). Nothing is sent to YouTube or Telegram and no quota is used. Switch between Demo and Live in the sidebar; the lamp at the top shows which one you are in (amber = demo, red = on air, grey = standby).
+- **Demo mode**: simulated chat and nine scenarios (raid, link spammer, caps flood, bot timing, disguised words, ...). Nothing is sent to YouTube or Telegram and no quota is used. Switch between Demo and Live in the sidebar; the status card at the top shows which one you are in (flask = demo, red broadcast icon = on air, power icon = standby). Switching mode redraws every page, so Demo and Live data never mix.
 
 There is no AI in this version. Moderation is a set of explainable algorithms, each of which shows up as a named signal with a weight, so you can always see why a message scored what it did.
 
@@ -92,25 +92,6 @@ If no target channel is set, SavahBot stops with a configuration error instead o
 
 ---
 
-## The dashboard on every screen (1.1)
-
-The dashboard adapts to the device. The colours and accent are unchanged.
-
-| Screen | Layout |
-|---|---|
-| **Desktop** (1200 px and wider) | Full side rail with labels, a search box and the Demo / Live switch. |
-| **Tablet** (768 to 1199 px) | Compact icon rail. Landscape tablets get the three-column Overview. |
-| **Phone** (under 768 px) | Top bar with the on-air state and the Demo / Live switch, a bottom tab bar (Overview, Desk, Moderation, Insights, More), and a *More* sheet for the rest. Tables become stacked cards, controls are touch-sized, and the Desk splits into Chat and Waiting tabs. |
-
-What is new in 1.1:
-- **Overview** (new home page): headline numbers with trend lines, a chat-activity chart with hover or touch details and CSV download, a YouTube quota gauge, action outcomes, who is waiting for a decision, system health (stream, YouTube, Telegram, database, live feed, uptime), recent actions and top chatters.
-- **Insights** now has the same charts plus breakdowns of action types and chatter levels. Choose a range from the last hour to seven days.
-- **Desk**: search the chat, filter it (All, Flagged, Blocked, Staff), see who is staff or a member by their badge, and a *new messages* button when you have scrolled up.
-- **Command palette**: press `Ctrl K` (or `Cmd K`, or `/`) on a keyboard, or tap the search icon on a phone, to jump to any page or switch Demo / Live, change the theme or sign out.
-- **Theme**: follow the device, or force light or dark (button in the side rail, or in *More* on a phone).
-- **Installable app**: on a phone or tablet use *Add to Home Screen* (or *Install app* in the browser menu). It opens full screen with the SavahBot icon.
-- All icons are inline SVG. There are no emoji or icon fonts, and no new dependencies.
-
 ## Moderation
 
 Every chat message is normalised (Unicode folding, look-alike letters, leetspeak, zero-width characters, stretched letters) and scored from 0 to 100 by independent signals:
@@ -133,7 +114,9 @@ Score maps to flag, delete, timeout or ban, and repeat offenders climb a timeout
 
 - Custom commands with variables: `$(user) $(touser) $(args) $(1) $(count) $(countdown ...) $(uptime) $(time) $(date) $(random 1 100) $(choose a|b) $(math 2+2) $(quote) $(urlfetch https://...)`. `$(math)` is parsed safely (never `eval`) and `$(urlfetch)` blocks private networks and redirects.
 - Per-command user level and cooldowns, aliases, a live preview, and built-ins (`!commands !addcom !editcom !delcom !permit !quote !addquote !uptime`).
-- Timers post only while the stream is live and after enough chat lines since the last post.
+- Timers post only while the stream is live. Each timer waits for a time, a number of chat lines, or both (both must happen, or whichever comes first), and can repeat, post once, or post a set number of times. "Post now" sends one immediately.
+- Auto-replies answer when a viewer sends an exact phrase (or contains a word). They never override `!commands`, have cooldowns and a user level, and can be switched off with `TRIGGERS_ENABLED`.
+- The bell is the notification center (stream start, reminders, failures, quota warnings). Moderation approvals live under Moderation.
 - Notes and reminders (`30m`, `2h30m`, `18:30`, `tomorrow 09:00`, `daily 08:00`, `every 2h`), delivered to Telegram and the Desk.
 - Insights: activity timeline, top chatters, which signals fire most, and action outcomes.
 

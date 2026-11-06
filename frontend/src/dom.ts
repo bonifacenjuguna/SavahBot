@@ -1,3 +1,5 @@
+import { icon } from "./icons.js";
+
 export type Child = Node | string | number | null | undefined | false | Child[];
 type Props = Record<string, unknown> | null;
 
@@ -33,22 +35,36 @@ export function mount(el: Element, ...kids: Child[]): void {
 }
 
 let toastHost: HTMLElement | null = null;
-export function toast(message: string, kind: "ok" | "error" = "ok"): void {
+function host(): HTMLElement {
   if (!toastHost) {
     toastHost = h("div", { class: "toasts", role: "status", "aria-live": "polite" });
     document.body.appendChild(toastHost);
   }
-  const t = h("div", { class: `toast ${kind}` }, message);
-  toastHost.appendChild(t);
+  return toastHost;
+}
+export function toast(message: string, kind: "ok" | "error" = "ok"): void {
+  const t = h("div", { class: `toast ${kind}` }, icon(kind === "error" ? "alert" : "check", 18), h("span", { class: "grow" }, message));
+  host().appendChild(t);
+  while (host().childElementCount > 4) host().firstElementChild?.remove();
   setTimeout(() => t.remove(), kind === "error" ? 6000 : 3000);
+}
+
+/** A toast with one button, e.g. "Note deleted" with Undo. It stays a little longer so there is time to tap it. */
+export function toastAction(message: string, label: string, run: () => void | Promise<unknown>, ms = 7000): void {
+  const t = h("div", { class: "toast ok has-action" }, icon("check", 18), h("span", { class: "grow" }, message));
+  const b = h("button", { class: "toast-act", type: "button" }, label);
+  b.addEventListener("click", () => {
+    b.disabled = true;
+    Promise.resolve().then(run).catch((e: unknown) => toast(e instanceof Error ? e.message : String(e), "error")).finally(() => t.remove());
+  });
+  t.appendChild(b);
+  host().appendChild(t);
+  while (host().childElementCount > 4) host().firstElementChild?.remove();
+  setTimeout(() => t.remove(), ms);
 }
 
 export function clock(ts: number): string {
   return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-export function shortTime(ts: number): string {
-  return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 export function dateTime(ts: number): string {
@@ -99,7 +115,7 @@ export function busy(btn: HTMLButtonElement, action: () => Promise<unknown>, okM
 }
 
 export function copyButton(text: string, label = "Copy"): HTMLButtonElement {
-  const b = h("button", { class: "btn small ghost", type: "button" }, label);
+  const b = h("button", { class: "btn small ghost", type: "button" }, icon("copy", 15), label);
   b.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -109,4 +125,59 @@ export function copyButton(text: string, label = "Copy"): HTMLButtonElement {
     }
   });
   return b;
+}
+
+/** Button that holds an icon and (optionally) a text label. */
+export function iconButton(name: string, label: string, onclick: (e: Event) => void, cls = "btn small ghost", showLabel = true): HTMLButtonElement {
+  return h("button", { class: cls, type: "button", onclick, "aria-label": label, title: label }, icon(name, 16), showLabel ? h("span", null, label) : null);
+}
+
+let openSheets = 0;
+
+/** Modal panel: bottom sheet on phones, centred dialog on larger screens. Esc and the backdrop close it. */
+export function sheet(title: string, body: Node, onClose?: () => void): { close: () => void } {
+  const previous = document.activeElement as HTMLElement | null;
+  const overlay = h("div", { class: "overlay" });
+  const close = () => {
+    if (!overlay.isConnected) return;
+    overlay.remove();
+    document.removeEventListener("keydown", onKey, true);
+    if (--openSheets <= 0) { openSheets = 0; document.body.classList.remove("no-scroll"); }
+    previous?.focus?.();
+    onClose?.();
+  };
+  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  const panel = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: -1 },
+    h("div", { class: "sheet-grip", "aria-hidden": "true" }),
+    h("header", { class: "sheet-head" }, h("h2", null, title), h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: close }, icon("x", 20))),
+    h("div", { class: "sheet-body" }, body));
+  overlay.appendChild(panel);
+  overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  document.body.classList.add("no-scroll");
+  openSheets++;
+  document.addEventListener("keydown", onKey, true);
+  // Always open at the top. Only text fields get focus, and not on touch screens (it would pop the keyboard and scroll the sheet).
+  const body_ = panel.querySelector(".sheet-body") as HTMLElement;
+  body_.scrollTop = 0;
+  const first = panel.querySelector("input, textarea, select") as HTMLElement | null;
+  const touch = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  (first && !touch ? first : panel).focus({ preventScroll: true });
+  body_.scrollTop = 0;
+  return { close };
+}
+
+/** Downloads rows as a CSV file (client side only). */
+export function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]): void {
+  const esc = (v: string | number | null | undefined) => {
+    let t = v === null || v === undefined ? "" : String(v);
+    if (/^[=+\-@]/.test(t)) t = "'" + t; // stop spreadsheet formula injection
+    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const blob = new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = h("a", { href: URL.createObjectURL(blob), download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
