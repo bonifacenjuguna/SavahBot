@@ -25,7 +25,7 @@ export interface Status {
     last_error: string;
     last_poll: number | null;
     polls: number;
-    quota: { used: number; daily: number; remaining: number; fraction: number; day: string; reset_tz: string };
+    quota: { used: number; daily: number; remaining: number; fraction: number; day: string; reset_tz: string; resets_at?: number; resets_in?: number; estimate?: boolean };
     redirect_uri: string;
     account: { channel_id: string; title: string; handle: string } | null;
     target: { channel_id: string; title: string } | null;

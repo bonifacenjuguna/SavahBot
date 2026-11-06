@@ -1,12 +1,17 @@
 import "./styles.css";
+import "./redesign.css";
+import "./manage.css";
 import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
-import { computeSteps, hasProblem, loadSetup, onSetup, setupInfo, type SetupSection } from "./progress.js";
+import { resetClock } from "./pages/kit.js";
+
+let resetTimer = 0;
 import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
-import { THEME_ICON, applyTheme, initTheme, installShortcuts, nextTheme, openPalette, themePref, type AppContext, type ThemePref } from "./ui.js";
+import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
+import { APP_VERSION } from "./version.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -14,13 +19,14 @@ import { notebook } from "./pages/notebook.js";
 import { community } from "./pages/community.js";
 import { insights } from "./pages/insights.js";
 import { demo } from "./pages/demo.js";
+import { more } from "./pages/more.js";
 import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
 import type { Page } from "./pages/types.js";
 
-export const APP_VERSION = "1.1.2";
+export { APP_VERSION };
 
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings];
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings, more];
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Operate", ids: ["desk", "moderation", "commands"] },
   { title: "Manage", ids: ["notebook", "community", "insights", "demo"] },
@@ -114,6 +120,7 @@ function showShell(): void {
     cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
     setTheme: (p: ThemePref) => { applyTheme(p); syncTheme(); },
   };
+  setAppContext(ctx);
 
   // ----- sidebar (desktop and tablet)
   const STATE_ICON = { demo: "flask", live: "radio", standby: "power" } as const;
@@ -133,61 +140,18 @@ function showShell(): void {
 
   const counts = new Map<string, HTMLElement>();
   const navLinks: HTMLAnchorElement[] = [];
-  const GROUP_KEY = "savahbot.navgroups";
-  const collapsed = new Set<string>((() => { try { return JSON.parse(localStorage.getItem(GROUP_KEY) ?? "[]"); } catch { return []; } })());
-  const groupEls = new Map<string, HTMLElement>();
-  const demoTag = h("span", { class: "tag demo", hidden: true }, "On");
-  const setupTag = h("span", { class: "count", hidden: true }, "");
-  const extras: Record<string, HTMLElement> = { demo: demoTag, setup: setupTag };
   const nav = h("nav", { class: "nav", "aria-label": "Sections" },
-    NAV_GROUPS.map((g) => {
-      const items = h("div", { class: "nav-items" }, g.ids.map((id) => {
+    NAV_GROUPS.flatMap((g) => [
+      h("div", { class: "nav-title" }, g.title),
+      ...g.ids.map((id) => {
         const p = PAGES.find((x) => x.id === id)!;
         const badge = h("span", { class: "count", hidden: true }, "");
         counts.set(p.id, badge);
-        const a = h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), extras[p.id] ?? null, badge);
+        const a = h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), badge);
         navLinks.push(a);
         return a;
-      }));
-      const head = h("button", { class: "nav-title", type: "button", "aria-expanded": String(!collapsed.has(g.title)) }, h("span", null, g.title), icon("chevronDown", 14));
-      const wrap = h("div", { class: `nav-group${collapsed.has(g.title) ? " collapsed" : ""}` }, head, items);
-      head.onclick = () => {
-        const now = !wrap.classList.contains("collapsed");
-        wrap.classList.toggle("collapsed", now);
-        head.setAttribute("aria-expanded", String(!now));
-        if (now) collapsed.add(g.title); else collapsed.delete(g.title);
-        try { localStorage.setItem(GROUP_KEY, JSON.stringify([...collapsed])); } catch { /* ignore */ }
-      };
-      groupEls.set(g.title, wrap);
-      return wrap;
-    }));
-
-  // "Finish setup" nudge: disappears once everything is connected
-  const nudgeBar = h("i", null);
-  const nudgeText = h("span", { class: "small" }, "");
-  const nudgeCount = h("strong", null, "");
-  const nudgeBtn = h("a", { class: "btn small primary block-btn", href: "#/setup" }, "Continue", icon("chevronRight", 14));
-  const nudge = h("div", { class: "nudge", hidden: true }, h("div", { class: "row between nowrap" }, h("span", { class: "nudge-title" }, icon("plug", 16), "Finish setup"), nudgeCount), h("div", { class: "progress on-dark" }, nudgeBar), nudgeText, nudgeBtn);
-  let setupTodo = 0;
-  let setupNext: SetupSection = "overview";
-  const syncSetup = () => {
-    const info = setupInfo();
-    if (!info) return;
-    const steps = computeSteps(info, lastStatus);
-    const done = steps.filter((x) => x.done).length;
-    const next = steps.find((x) => !x.done);
-    setupTodo = steps.length - done;
-    setupNext = next?.section ?? "overview";
-    const problem = hasProblem(lastStatus);
-    nudge.hidden = setupTodo === 0;
-    nudgeCount.textContent = `${done}/${steps.length}`;
-    nudgeBar.style.width = `${(done / steps.length) * 100}%`;
-    nudgeText.textContent = next ? `Next: ${next.title}` : "";
-    nudgeBtn.setAttribute("href", `#/setup?section=${setupNext}`);
-    setupTag.hidden = setupTodo === 0 && !problem;
-    setupTag.textContent = problem ? "!" : String(setupTodo);
-    setupTag.classList.toggle("bad", problem);
-  };
+      }),
+    ]));
 
   const quotaText = h("span", { class: "txt" }, "");
   const meterBar = h("i", null);
@@ -201,7 +165,7 @@ function showShell(): void {
   const verTag = h("span", { class: "ver", title: "Dashboard version" }, `v${APP_VERSION}`);
   const rail = h("aside", { class: "rail" },
     h("div", { class: "rail-brand" }, logo(30), h("span", { class: "brand" }, "SavahBot"), verTag),
-    tally, nav, nudge,
+    tally, nav,
     h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out));
 
   // ----- top bar
@@ -227,7 +191,7 @@ function showShell(): void {
       tabLinks.push(a);
       return a;
     }),
-    h("button", { class: "tab", type: "button", id: "tab-more", onclick: () => openMore() }, icon("menu", 22), "More"));
+    h("a", { class: "tab", href: "#/more", id: "tab-more", "data-id": "more" }, icon("menu", 22), "More"));
   const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
@@ -243,59 +207,13 @@ function showShell(): void {
     };
     return h("div", { class: "mode-cards", style: "grid-template-columns:1fr" },
       mk("demo", "flask", "Demo", "Simulated chat. Nothing is sent to YouTube or Telegram and no quota is used."),
-      mk("live", "radio", "Live", "Real YouTube chat. The bot attaches when your stream starts."));
+      mk("live", "zap", "Live", "Real YouTube chat. The bot attaches when your stream starts."));
   }
   function openModeSheet(): void {
     const holder: { close: () => void } = { close: () => undefined };
     const t = tallyState(lastStatus);
     holder.close = sheet("Bot mode", h("div", { class: "stack" }, h("div", { class: "banner" }, icon("info", 18), h("span", null, `${t.title}: ${t.detail}`)), modeCards(() => holder.close()))).close;
   }
-  function openMore(): void {
-    const holder: { close: () => void } = { close: () => undefined };
-    const cur = route().id;
-    const t = tallyState(lastStatus);
-    const STATE_TAGS = { demo: "Simulated", live: "On air", standby: "Idle" } as const;
-    const STATE_ICONS = { demo: "flask", live: "radio", standby: "power" } as const;
-    const pick = (mode: "demo" | "live") => (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await ctx.setMode(mode); holder.close(); });
-    const dBtn = h("button", { type: "button", "aria-pressed": String(currentMode() === "demo"), onclick: pick("demo") }, icon("flask", 15), h("span", null, "Demo"));
-    const lBtn = h("button", { type: "button", "aria-pressed": String(currentMode() === "live"), onclick: pick("live") }, icon("radio", 15), h("span", null, "Live"));
-    const statusCard = h("div", { class: "modecard light", "data-state": t.state, role: "status" },
-      h("div", { class: "mc-head" }, h("div", { class: "mc-badge" }, icon(STATE_ICONS[t.state], 22)), h("div", { class: "mc-text" }, h("div", { class: "mc-title" }, h("strong", null, t.title), h("span", { class: "mc-tag" }, STATE_TAGS[t.state])), h("span", { class: "mc-detail" }, t.detail))),
-      h("div", { class: "mc-switch", role: "group", "aria-label": "Bot mode" }, dBtn, lBtn));
-
-    const trailing = (id: string): Node => {
-      if (id === "demo" && currentMode() === "demo") return h("span", { class: "chip accent" }, "On");
-      if (id === "setup") {
-        if (hasProblem(lastStatus)) return h("span", { class: "chip bad" }, "Problem");
-        if (setupTodo) return h("span", { class: "chip warn" }, `${setupTodo} to do`);
-        if (setupInfo()) return h("span", { class: "chip ok" }, icon("check", 12), "Ready");
-      }
-      return icon("chevronRight", 18);
-    };
-    const group = (title: string, ids: string[]) => h("section", { class: "list-group" }, h("div", { class: "group-title" }, title),
-      h("div", { class: "list-card" }, ids.map((id) => {
-        const p = PAGES.find((x) => x.id === id)!;
-        return h("a", { class: "list-row", href: id === "setup" ? `#/setup?section=${setupNext}` : `#/${p.id}`, "aria-current": cur === p.id ? "page" : undefined, onclick: () => holder.close() },
-          h("span", { class: "lr-ico" }, icon(p.icon, 20)), h("span", { class: "lr-text" }, h("strong", null, p.title), h("span", { class: "small muted" }, p.blurb)), h("span", { class: "lr-end" }, trailing(id)));
-      })));
-    const themes: ThemePref[] = ["system", "light", "dark"];
-    const themeSeg = h("div", { class: "seg-control", role: "group", "aria-label": "Theme" }, themes.map((x) =>
-      h("button", { type: "button", "aria-pressed": String(themePref() === x), onclick: () => { ctx.setTheme(x); holder.close(); } }, icon(THEME_ICON[x], 16), x === "system" ? "Auto" : x[0].toUpperCase() + x.slice(1))));
-    const rowBtn = (ic: string, title: string, text: string, fn: () => void, cls = "") => h("button", { class: `list-row ${cls}`, type: "button", onclick: fn },
-      h("span", { class: "lr-ico" }, icon(ic, 20)), h("span", { class: "lr-text" }, h("strong", null, title), h("span", { class: "small muted" }, text)), h("span", { class: "lr-end" }, icon("chevronRight", 18)));
-    const body = h("div", { class: "more" },
-      statusCard,
-      group("Manage", ["notebook", "community", "demo"]),
-      group("System", ["setup", "settings"]),
-      h("section", { class: "list-group" }, h("div", { class: "group-title" }, "Appearance"), h("div", { class: "list-card pad" }, themeSeg)),
-      h("section", { class: "list-group" }, h("div", { class: "group-title" }, "Shortcuts"), h("div", { class: "list-card" },
-        rowBtn("search", "Search", "Jump to any page or action", () => { holder.close(); openPalette(ctx); }),
-        rowBtn("refresh", "Refresh status", "Check the bot, YouTube and Telegram again", () => { void refreshStatus().then(() => toast("Status refreshed")); }),
-        rowBtn("logout", "Sign out", "Ends this session on this device", () => { holder.close(); signOut(); }, "danger"))),
-      h("p", { class: "muted small", style: "text-align:center" }, `SavahBot dashboard v${APP_VERSION}`));
-    holder.close = sheet("More", body).close;
-  }
-
   // ----- routing
   let cleanup: (() => void) | void;
   let lastId = "";
@@ -305,8 +223,8 @@ function showShell(): void {
     const page = PAGES.find((p) => p.id === id) ?? PAGES[0];
     for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+    // More stays lit for every page that lives behind it (Notebook, Community, Setup and so on)
     if (TAB_IDS.includes(page.id)) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
-    for (const g of NAV_GROUPS) if (g.ids.includes(page.id)) { const el = groupEls.get(g.title); if (el?.classList.contains("collapsed")) el.querySelector<HTMLElement>(".nav-title")?.click(); }
     document.title = `${page.title} · SavahBot`;
     clear(content);
     cleanup = page.render(content, query);
@@ -335,8 +253,6 @@ function showShell(): void {
     mount(mcBadge, icon(STATE_ICON[t.state], 22));
     mount(tbIco, icon(STATE_ICON[t.state], 13));
     mcTag.textContent = STATE_TAG[t.state];
-    demoTag.hidden = s.hub.mode !== "demo";
-    syncSetup();
     tTitle.textContent = t.title;
     tDetail.textContent = t.detail;
     tbTitle.textContent = t.title;
@@ -347,6 +263,11 @@ function showShell(): void {
     const pct = Math.min(100, Math.round(q.fraction * 100));
     quotaText.textContent = s.hub.mode === "demo" ? "YouTube quota: untouched in demo" : `YouTube quota: ${pct}% used today`;
     meterBar.style.width = `${s.hub.mode === "demo" ? 0 : pct}%`;
+    const rc = resetClock(q.resets_at, s.timezone);
+    meter.title = rc && s.hub.mode !== "demo" ? `YouTube API quota used today. It resets at ${rc.clock} ${rc.place} time, which is midnight Pacific.` : "YouTube API quota used today";
+    // Refresh the moment the reset passes, so the number drops to 0 without waiting for the next poll.
+    window.clearTimeout(resetTimer);
+    if (q.resets_at) resetTimer = window.setTimeout(() => void refreshStatus(), Math.max(1000, (q.resets_at - Date.now() / 1000) * 1000 + 2000));
     meter.classList.toggle("hot", pct >= 75);
     const badge = counts.get("moderation")!;
     badge.hidden = s.pending === 0;
@@ -373,10 +294,6 @@ function showShell(): void {
   offs.push(onNotices(syncBell));
   syncBell();
   offs.push(startNotifications(() => lastStatus));
-  offs.push(onSetup(syncSetup));
-  void loadSetup();
-  const setupTimer = window.setInterval(() => void loadSetup(), 60000);
-  offs.push(() => window.clearInterval(setupTimer));
   offs.push(installShortcuts(ctx));
 
   render();

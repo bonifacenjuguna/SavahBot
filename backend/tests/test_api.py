@@ -162,6 +162,19 @@ async def test_timers_quotes_regulars_blacklist(api):
 
 
 @e2e
+async def test_score_ladder_and_quota_reset_moment_reach_the_dashboard(api):
+    """1.1.5: the phrase list and the message tester show where a score lands; the Desk shows when quota resets in the owner's own clock."""
+    st, b = await api.call("GET", "/api/blacklist")
+    assert st == 200 and set(b["thresholds"]) == {"flag", "delete", "timeout", "ban", "default_weight"}
+    assert b["thresholds"]["flag"] < b["thresholds"]["delete"] < b["thresholds"]["timeout"] <= b["thresholds"]["ban"]
+    st, b = await api.call("POST", "/api/moderation/test", {"text": "hello everyone"})
+    assert st == 200 and b["thresholds"]["delete"] == 55 and b["mode"] in ("off", "suggest", "auto")
+    st, b = await api.call("GET", "/api/status")
+    q = b["youtube"]["quota"]
+    assert q["resets_at"] > 0 and 0 < q["resets_in"] <= 25 * 3600
+
+
+@e2e
 async def test_notes_and_reminders(api):
     st, b = await api.call("POST", "/api/notes", {"body": "Plan the raid", "tags": ["ideas"], "pinned": True})
     assert st == 200 and b["items"][0]["body"] == "Plan the raid"

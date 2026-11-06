@@ -35,15 +35,32 @@ export function mount(el: Element, ...kids: Child[]): void {
 }
 
 let toastHost: HTMLElement | null = null;
-export function toast(message: string, kind: "ok" | "error" = "ok"): void {
+function host(): HTMLElement {
   if (!toastHost) {
     toastHost = h("div", { class: "toasts", role: "status", "aria-live": "polite" });
     document.body.appendChild(toastHost);
   }
+  return toastHost;
+}
+export function toast(message: string, kind: "ok" | "error" = "ok"): void {
   const t = h("div", { class: `toast ${kind}` }, icon(kind === "error" ? "alert" : "check", 18), h("span", { class: "grow" }, message));
-  toastHost.appendChild(t);
-  while (toastHost.childElementCount > 4) toastHost.firstElementChild?.remove();
+  host().appendChild(t);
+  while (host().childElementCount > 4) host().firstElementChild?.remove();
   setTimeout(() => t.remove(), kind === "error" ? 6000 : 3000);
+}
+
+/** A toast with one button, e.g. "Note deleted" with Undo. It stays a little longer so there is time to tap it. */
+export function toastAction(message: string, label: string, run: () => void | Promise<unknown>, ms = 7000): void {
+  const t = h("div", { class: "toast ok has-action" }, icon("check", 18), h("span", { class: "grow" }, message));
+  const b = h("button", { class: "toast-act", type: "button" }, label);
+  b.addEventListener("click", () => {
+    b.disabled = true;
+    Promise.resolve().then(run).catch((e: unknown) => toast(e instanceof Error ? e.message : String(e), "error")).finally(() => t.remove());
+  });
+  t.appendChild(b);
+  host().appendChild(t);
+  while (host().childElementCount > 4) host().firstElementChild?.remove();
+  setTimeout(() => t.remove(), ms);
 }
 
 export function clock(ts: number): string {

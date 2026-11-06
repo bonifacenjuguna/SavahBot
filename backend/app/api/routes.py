@@ -354,9 +354,15 @@ async def regulars_delete(request: Request, c: Any) -> dict:
 
 
 # ================================================================================= blacklist + moderation
+
+def _thresholds(c: Any) -> dict:
+    """The score ladder, so the dashboard can show where a phrase or a message lands (flag, delete, timeout, ban)."""
+    return {"flag": c.cfg.get("mod_score_flag"), "delete": c.cfg.get("mod_score_delete"), "timeout": c.cfg.get("mod_score_timeout"),
+            "ban": c.cfg.get("mod_score_ban"), "default_weight": c.cfg.get("mod_blacklist_weight")}
+
 @R.add("/blacklist", ["GET"])
 async def blacklist_list(request: Request, c: Any) -> dict:
-    return {"items": await c.store.list_blacklist()}
+    return {"items": await c.store.list_blacklist(), "thresholds": _thresholds(c)}
 
 
 @R.add("/blacklist", ["POST"])
@@ -387,7 +393,8 @@ async def moderation_test(request: Request, c: Any) -> dict:
     b = await parse(request, S.ModTest)
     level = b.level if b.level in (*LEVELS, "bot") else "everyone"
     v = c.engine.evaluate(ModInput("test", "tester", "tester", b.text, level), stateless=True)
-    return {"verdict": v.to_dict(), "note": "Content rules only. Rate, repeat, raid and timing checks need real chat history."}
+    return {"verdict": v.to_dict(), "thresholds": _thresholds(c), "mode": c.cfg.get("mod_mode"),
+            "note": "Content rules only. Rate, repeat, raid and timing checks need real chat history."}
 
 
 @R.add("/moderation/pending", ["GET"])
@@ -395,11 +402,24 @@ async def moderation_pending(request: Request, c: Any) -> dict:
     return {"items": await c.store.pending_actions(_demo_filter(c))}
 
 
+def _epoch(raw: str | None, name: str) -> float | None:
+    """Reads a since/until query value: epoch seconds. Empty means no limit."""
+    if raw in (None, ""):
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        raise ApiError(f"'{name}' must be a time in epoch seconds.", 422) from None
+
+
 @R.add("/moderation/history", ["GET"])
 async def moderation_history(request: Request, c: Any) -> dict:
     q = request.query_params
     limit = max(1, min(int(q.get("limit", 100)), 500))
-    return {"items": await c.store.action_history(limit, q.get("status") or None, _demo_filter(c))}
+    items = await c.store.action_history(limit, q.get("status") or None, _demo_filter(c), since=_epoch(q.get("since"), "since"),
+                                         until=_epoch(q.get("until"), "until"), q=(q.get("q") or "").strip()[:100] or None,
+                                         offset=max(0, int(q.get("offset", 0))))
+    return {"items": items}
 
 
 @R.add("/moderation/{id:int}/{verb}", ["POST"])
@@ -481,6 +501,21 @@ async def chat_recent(request: Request, c: Any) -> dict:
     return {"items": items}
 
 
+@R.add("/chat/search", ["GET"])
+async def chat_search(request: Request, c: Any) -> dict:
+    """Search the stored chat by text, date range (since/until, epoch seconds) and moderation outcome."""
+    q = request.query_params
+    verdict = q.get("verdict") if q.get("verdict") in ("flagged", "blocked") else None
+    limit = max(1, min(int(q.get("limit", 200)), 500))
+    rows = await c.store.search_chat((q.get("q") or "").strip()[:100] or None, _epoch(q.get("since"), "since"), _epoch(q.get("until"), "until"),
+                                     verdict, _demo_filter(c), limit)
+    items = []
+    for m in rows:
+        m["text"], m["demo"] = m.pop("body"), bool(m["demo"])
+        items.append(m | {"from_bot": m["level"] == "bot", "reasons": []})
+    return {"items": items, "retention_days": c.cfg.get("chat_retention_days")}
+
+
 @R.add("/chat/send", ["POST"])
 async def chat_send(request: Request, c: Any) -> dict:
     b = await parse(request, S.ChatSend)
@@ -538,6 +573,14 @@ async def demo_ambient(request: Request, c: Any) -> dict:
 @R.add("/youtube/status", ["GET"])
 async def youtube_status(request: Request, c: Any) -> dict:
     return c.youtube.status() | {"connected": await c.google.connected()}
+
+
+@R.add("/youtube/quota", ["POST"])
+async def youtube_quota_set(request: Request, c: Any) -> dict:
+    """YouTube does not tell apps how much quota is left, so SavahBot keeps an estimate. This corrects it (0 restarts the count)."""
+    body = await parse(request, S.QuotaSet)
+    await c.quota.set_used(body.used)
+    return {"ok": True, "quota": c.quota.status()}
 
 
 @R.add("/youtube/diagnostics", ["GET"])

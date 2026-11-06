@@ -142,6 +142,36 @@ def test_quota_pacing_spreads_the_read_budget_over_the_stream():
     run(go())
 
 
+def test_quota_reset_moment_is_midnight_pacific_and_survives_the_clock_change():
+    """1.1.5: the dashboard shows the reset in the owner's own clock, so the backend hands over the exact moment."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    async def go():
+        db = Database(":memory:")
+        await db.connect()
+        clock = {"t": 1793613600.0}                              # 2026-11-02 10:00 UTC = 02:00 Pacific (standard time, UTC-8)
+        q = QuotaTracker(StaticConfig(), Store(db), now_fn=lambda: clock["t"])
+        at = q.resets_at()
+        assert datetime.fromtimestamp(at, ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M") == "2026-11-03 00:00"
+        assert datetime.fromtimestamp(at, ZoneInfo("Africa/Nairobi")).strftime("%H:%M") == "11:00"   # midnight PST is 11:00 in Nairobi
+        assert q.resets_in() == at - int(clock["t"]) == 22 * 3600
+        assert q.status()["resets_at"] == at
+        # In summer Pacific Time is UTC-7, so the same reset lands an hour earlier in Nairobi.
+        clock["t"] = datetime(2026, 7, 10, 12, 0, tzinfo=ZoneInfo("UTC")).timestamp()
+        summer = q.resets_at()
+        assert datetime.fromtimestamp(summer, ZoneInfo("Africa/Nairobi")).strftime("%H:%M") == "10:00"
+        # The night the clocks go back (2026-11-01, 25 hours long): the next reset is still local midnight, not 24 hours later.
+        clock["t"] = datetime(2026, 11, 1, 12, 0, tzinfo=ZoneInfo("America/Los_Angeles")).timestamp()
+        assert datetime.fromtimestamp(q.resets_at(), ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M") == "2026-11-02 00:00"
+        # After the reset moment the count is back to zero without anything having to run.
+        clock["t"] = 1793613600.0
+        await q.spend(500)
+        clock["t"] = at + 5
+        assert q.used == 0 and q.resets_in() > 23 * 3600
+    run(go())
+
+
 def test_quota_day_rolls_over_at_pacific_midnight():
     async def go():
         db = Database(":memory:")

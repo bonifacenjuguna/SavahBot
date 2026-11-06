@@ -1,18 +1,70 @@
 # Changelog
 
+## 1.1.5
+
+### Quota
+- **Resets on Pacific Time, shown in your time.** YouTube resets the daily quota at midnight Pacific, which moves with daylight saving. The backend now sends the exact reset moment (`quota.resets_at`) and the Desk shows it on your own clock, e.g. "11:00 AM Nairobi time (in 5h 12m)". It is 11:00 in Nairobi while the US is on standard time and 10:00 in summer. The count drops to 0 by itself: the dashboard refreshes the moment the reset passes.
+- **"Fix count" removed** from Bot status. (`POST /api/youtube/quota` still exists for scripts.) The side-bar quota meter now says when it resets.
+
+### Moderation tools, rebuilt
+- **Try a message** is now a test lab. It scores as you type, shows a verdict (Allowed, Flagged, Would be deleted, timed out or banned), a score ladder with your flag, delete, timeout and ban limits, and each check that fired in plain words. It says what would happen in your current moderation mode, lets you pick who sent it (viewer, member, regular, mod), has example messages, and offers **Block this phrase** when a message slips through.
+- **Blocked phrases**: one clear add box, phrase or pattern, and what a match should do (Standard, Flag, Delete, Time out). **Add several at once**, two **starter packs** of common spam lines, filters (All, On, Off, Patterns), search, a switch per phrase, **Undo** after removing, and **Copy every phrase**.
+- API: `GET /api/blacklist` and `POST /api/moderation/test` now include `thresholds` (and `mode` on the test).
+
+### Manage
+- **Notebook**: a real composer (auto-growing, tag suggestions, Ctrl+Enter), templates (Stream plan, Ideas, Shout-outs), **checklists** (start a line with `[ ]`; tick boxes save instantly with a progress bar), links become clickable, **edit in place**, **Undo** after delete, pinned notes in their own section, tags filter, date filter behind one button. Reminders get a **Next up** card, live countdowns, and sit in their own tab on phones.
+- **Community**: a quote spotlight with **Another**, one-tap copy of `!quote N`, avatars for regulars, **Add several regulars at once**, a two-tap confirm for deletes (quote numbers are used in chat, so they have no Undo), counts, and real search.
+- **Insights**: change versus the period before on Messages and Flagged, **What stood out** (plain sentences), **Busiest hours**, ranked chatters with avatars and share, and readable names everywhere ("Blocked phrase", "Viewers", "What the bot did").
+- **Demo**: scenarios grouped by what they test, each with what you should see and how long it takes, a running indicator, an "Open Desk" shortcut, a calmer background-chat switch, and a confirmed Clean up. The page no longer flickers while it polls.
+- **Command palette** gains New note, Set a reminder, Add a quote and Test a message.
+
+### Technical
+- New: `pages/widgets.ts`, `pages/modtools.ts`, `manage.css`. `toastAction` (a toast with Undo) in `dom.ts`.
+- Tests added for the reset moment (including the clock-change night) and for the new API fields.
+- Version bumped to 1.1.5.
+
+## 1.1.4
+
+### Fixes
+- **YouTube quota that never reset.** The number shown could stay at yesterday's total whenever the bot was idle, because the daily roll-over only happened inside the live loop. It is now worked out from the current Pacific-time day every time it is read, so it drops to 0 at the reset. The Desk status card shows "Resets in 5h 12m".
+- **Quota used with no stream.** While live mode waited for a stream, SavahBot kept looking for it. The search budget for other channels was kept only in memory, so every restart gave it a fresh allowance. It is now stored in the database. Defaults are gentler: own-channel check every 180s (was 90s), search for another channel every 900s (was 600s) and at most 10% of the daily quota (was 25%). Set `YOUTUBE_VIDEO_ID` to skip searching completely. The YouTube loop only runs in live mode, so Demo never adds to the count.
+- **Quota is an estimate, and now says so.** YouTube gives apps no way to read the real remaining quota (only the Google Cloud Console shows it), so SavahBot counts what it spends. The card says "(estimate)" and has a **Fix count** button to type the number from the Console, or start again from 0. API: `POST /api/youtube/quota {"used": n}`.
+- **Chat no longer shows the bot's internals.** Moderated lines used to print the verdict, the score and the exact rule matches (including blacklist words). The feed now shows a small label such as "Blocked · banned phrase, link". Full details stay on the Moderation page.
+- **More tab icon** is now the three-line menu instead of the same grid as Desk.
+
+## 1.1.3
+
+### Fixes
+- **Expand no longer lags or freezes the phone.** The chat card used to animate its size and position while live chat kept arriving, forcing a re-layout every frame, and blurred the whole screen behind it. It now appears with a short fade and slide (no blur, no size animation), and chat auto-scroll is batched to once per frame.
+- **One tap to close.** The expand/collapse button works on a single tap in both directions. The hidden double-click on the title bar is removed, and a quick re-tap during the animation can no longer leave the card stuck.
+- **Close button always visible.** On phones the tool row could scroll the expand/close button off the right edge. It is now pinned outside the scrolling tools and reads "Close" when expanded.
+- **Expanded chat now really closes.** Closing tried to move the waiting list inside itself, which throws and stopped the card from closing (the icon flipped but the card stayed). Fixed, and closing can no longer be blocked by an error. The Close button keeps its icon and label side by side on phones.
+- **Chat card polish.** Rounder, calmer card with a clearer header and input bar, softer rows and larger touch targets for the expand button.
+
 ## 1.1.2
 
-### Setup, redesigned
-- The Setup page is now split into its own sections with its own navigation: **Overview** (progress ring and the next step), **Addresses**, **YouTube**, **Telegram**, **Checks** and **Variables**. A side menu on desktop, swipeable pills on phones, each with a status dot (done, to do, problem) and counts.
-- Overview shows what to do next with one button. Telegram has step-by-step claim instructions. YouTube shows the signed-in account, the target channel and quota side by side. Variables can be filtered to the missing ones, and tapping a name copies it.
-- Opening Setup after returning from Google sign-in lands on the YouTube section.
+### Redesign
+- **More is now a real page.** On phones the More tab opens a full hub instead of a small sheet: a live status card with the Demo/Live switch, searchable Manage and System sections with live counts (notes, reminders, quotes, regulars, setup progress), theme, search, shortcuts and sign out. It works on tablets and desktops too (`#/more`, shortcut `g` then `o`).
+- **Manage and System feel like one place.** Notebook, Community, Insights and Demo (Manage) and Setup and Settings (System) share a switcher at the top, so you can move between them in one tap on any screen size.
+- **Setup rebuilt as a guided stepper.** Overview with a progress ring and a "Next up" button, then Addresses, YouTube, Telegram and Variables as separate steps with their own navigation (a side list on desktop, a scrolling step bar on phones), done/needs-attention marks, Back and Next buttons, and links that open a given step (`#/setup?step=youtube`). The two checks on the YouTube step (Verify access, Run check) sit where they are needed. A "only what is missing" filter was added to Variables.
+- **Desk chat zooms to fill the screen.** Click the chat title bar, the expand button, or press `F`: the card grows from where it sits to fill the workspace (the whole screen on phones) and shrinks back to the same spot with Esc. Expanded, it adds text size controls, a live messages-per-minute pill and the waiting-for-you list beside the chat (a slide-in panel on narrow screens). Respects reduced motion.
+- Notebook: grid or list view, newest/oldest order, copy a note, show when it was written.
+- Community: one search box for quotes and regulars.
 
-### Navigation
-- **More (phone):** rebuilt as a hub. A status card with the Demo / Live switch, then Manage and System as proper list rows with a short description and live hints (Setup shows "1 to do" or "Problem", Demo shows "On"), then Appearance and Shortcuts (search, refresh, sign out).
-- **Sidebar (desktop):** Operate, Manage and System groups can be collapsed (remembered). Setup shows how many steps are left, Demo shows an "On" tag, and a "Finish setup" card appears until everything is connected. The count matches the Setup page.
-- Live icon is now the broadcast icon everywhere.
+### Search and dates
+- **Date filters** (Any time, Today, Yesterday, 7 days, 30 days, or a custom From/To) now exist in: Moderation history, the Desk chat (searches the saved chat for that range, with a Back to live button), Notifications and Notebook.
+- Moderation history is filtered on the server (outcome, text, dates) and has Load more, so older actions are reachable. New API: `GET /api/moderation/history?since=&until=&q=&status=&offset=` and `GET /api/chat/search?q=&since=&until=&verdict=`. Times are epoch seconds; `until` is exclusive.
 
-Version bumped to 1.1.2.
+### Telegram
+- Rich cards: bold headings, status meters, quoted chat lines, icons. Approval requests, stream start/end, flags and reminders were restyled.
+- **Tap menu.** `/menu` (or `/start`) opens buttons for Status, Waiting, Stats, Modes, Notes, Reminders, Recent actions and Help. Buttons edit the same message in place, so the chat stays tidy. Demo/Live and Off/Suggest/Auto switch with one tap.
+- New `/find <text> [date]` searches saved chat and `/history [date] [outcome]` lists what the bot did. Date words: `today`, `yesterday`, `week`, `month`, `3d`, `12h`, `2026-11-05`, `2026-11-01..2026-11-05` (in your timezone).
+- Formatting never loses a message: if Telegram rejects the formatted version it is resent as plain text. Anything typed by viewers is escaped.
+- Approve/Reject buttons now read "✅ Approve" and "❌ Reject".
+
+### Technical
+- Version is defined once in `frontend/src/version.ts` and `backend/app/__init__.py`.
+- New styles live in `frontend/src/redesign.css` (palette unchanged). No database changes.
 
 ## 1.1.1
 

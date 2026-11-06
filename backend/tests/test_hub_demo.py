@@ -219,7 +219,7 @@ def test_reminders_fire_once_and_repeating_ones_reschedule():
         await s.scheduler.tick(now=500.0)
         got = [e for e in drain() if e["type"] == "reminder"]
         assert {e["data"]["text"] for e in got} == {"stretch", "water"}
-        assert [t for t, _ in s.notes] == ["Reminder: stretch", "Reminder: water"]
+        assert [("stretch" in t, "water" in t) for t, _ in s.notes] == [(True, False), (False, True)] and all("Reminder" in t for t, _ in s.notes)
         pending = await s.store.list_reminders("pending")
         assert [r["id"] for r in pending] == [b] and pending[0]["due"] == 3700.0
         await s.scheduler.tick(now=600.0)

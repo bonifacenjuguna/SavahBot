@@ -39,7 +39,7 @@ export function nextTheme(p: ThemePref): ThemePref {
 }
 
 // ------------------------------------------------------------------ shortcuts
-export const SHORTCUT_KEYS: Record<string, string> = { desk: "d", moderation: "m", commands: "c", notebook: "n", community: "u", insights: "i", demo: "x", setup: "s", settings: "t" };
+export const SHORTCUT_KEYS: Record<string, string> = { desk: "d", moderation: "m", commands: "c", notebook: "n", community: "u", insights: "i", demo: "x", setup: "s", settings: "t", more: "o" };
 
 export interface AppContext {
   pages: Page[];
@@ -54,6 +54,11 @@ function typing(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
 }
+
+let appCtx: AppContext | null = null;
+/** The shell registers its actions once, so pages (the More page, for one) can change mode or theme without the shell passing them in. */
+export function setAppContext(c: AppContext): void { appCtx = c; }
+export function appContext(): AppContext { if (!appCtx) throw new Error("The app is not ready yet."); return appCtx; }
 
 export function installShortcuts(ctx: AppContext): () => void {
   let pendingG = 0;
@@ -98,6 +103,10 @@ export function openPalette(ctx: AppContext): void {
   const items: Item[] = [
     ...ctx.pages.map((p): Item => ({ group: "Go to", label: p.title, hint: p.blurb, icon: p.icon, run: () => ctx.go(p.id), keywords: p.id })),
     { group: "Actions", label: live ? "Switch to Demo mode" : "Switch to Live mode", icon: live ? "flask" : "zap", run: () => ctx.setMode(live ? "demo" : "live"), keywords: "mode demo live" },
+    { group: "Quick add", label: "New note", icon: "notebook", run: () => { location.hash = "#/notebook?compose=1"; }, keywords: "note write checklist" },
+    { group: "Quick add", label: "Set a reminder", icon: "bell", run: () => { location.hash = "#/notebook?pane=reminders"; }, keywords: "remind timer" },
+    { group: "Quick add", label: "Add a quote", icon: "quote", run: () => { location.hash = "#/community?add=quote"; }, keywords: "quote community" },
+    { group: "Quick add", label: "Test a message against the rules", icon: "gauge", run: () => { location.hash = "#/moderation?tab=rules"; }, keywords: "score moderation test try" },
     { group: "Actions", label: "Refresh status", icon: "refresh", run: async () => { await refreshStatus(); toast("Status refreshed"); }, keywords: "reload" },
     { group: "Appearance", label: "Theme: follow system", icon: "monitor", run: () => ctx.setTheme("system"), keywords: "theme appearance" },
     { group: "Appearance", label: "Theme: light", icon: "sun", run: () => ctx.setTheme("light"), keywords: "theme appearance" },

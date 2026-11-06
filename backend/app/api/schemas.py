@@ -156,3 +156,7 @@ class AmbientIn(_In):
 class ModTest(_In):
     text: str = Field(max_length=1000)
     level: str = "everyone"
+
+
+class QuotaSet(_In):
+    used: int = Field(ge=0, le=1_000_000)
