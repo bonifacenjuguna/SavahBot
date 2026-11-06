@@ -1,77 +1,70 @@
 import { post } from "../api.js";
-import { busy, dateTime, duration, h, type Child } from "../dom.js";
-import { icon } from "../icons.js";
+import { busy, dateTime, duration, h, shortTime } from "../dom.js";
+import { compact, sparkline, type Tone } from "../charts.js";
+import { icon, type IconName } from "../icons.js";
 
 export interface Action {
   id: number; ts: number; author_name: string; action: string; duration: number | null; score: number; reasons: string[];
   status: string; body: string; error: string; demo: boolean;
 }
 
+/** Shape of GET /api/analytics. */
+export interface Summary {
+  hours: number; bucket_seconds: number;
+  totals: Record<string, number>;
+  timeline: { t: number; messages: number; flagged: number }[];
+  top_chatters: { name: string; messages: number }[];
+  actions_by_type: Record<string, number>; outcomes: Record<string, number>;
+  signals: { name: number | string; count: number }[]; levels: Record<string, number>;
+}
+
+export const RANGES: [number, string][] = [[1, "Last hour"], [6, "Last 6 hours"], [24, "Last 24 hours"], [72, "Last 3 days"], [168, "Last 7 days"]];
+
+/** Axis and tooltip time: clock time for short ranges, date and time for long ones. */
+export const bucketLabel = (hours: number, t: number): string => (hours <= 24 ? shortTime(t) : dateTime(t));
+
+/** Statuses of a moderation action, as a coloured chip. */
+export function statusChip(status: string): HTMLElement {
+  return h("span", { class: `chip ${status === "executed" ? "ok" : status === "failed" ? "bad" : status === "pending" ? "warn" : ""}` }, status);
+}
+
 export function actionLabel(a: Action): string {
   return a.action === "timeout" && a.duration ? `timeout ${duration(a.duration)}` : a.action;
 }
 
-/** Standard page heading: icon tile, title, optional description and right-aligned actions. */
-export function pageHead(iconName: string, title: string, description?: string, actions?: Child): HTMLElement {
-  return h("div", { class: "page-head" },
-    h("div", { class: "ph-main" }, h("span", { class: "ph-icon" }, icon(iconName, 22)), h("div", null, h("h1", null, title), description ? h("p", null, description) : null)),
-    actions ? h("div", { class: "ph-actions" }, actions) : null);
-}
-
-/** A titled card. `body` goes under the header; use `flush` when the body supplies its own padding. */
-export function card(iconName: string | null, title: string, body: Child, opts: { flush?: boolean; actions?: Child; cls?: string } = {}): HTMLElement {
-  return h("section", { class: `block${opts.flush ? " flush" : ""}${opts.cls ? " " + opts.cls : ""}` },
-    h("header", null, h("h2", null, iconName ? icon(iconName, 18) : null, title), opts.actions ?? null), body);
-}
-
-export function empty(iconName: string, text: string): HTMLElement {
-  return h("div", { class: "empty" }, icon(iconName, 28), h("span", null, text));
-}
-
-export function chipFor(status: string): string {
-  return status === "executed" || status === "approved" ? "ok" : status === "failed" || status === "rejected" ? "bad" : status === "pending" ? "warn" : "";
-}
-
-/** Two-pane switcher for narrow screens. Panes stay visible side by side on wide screens (CSS). */
-export function paneTabs(labels: { id: string; label: string; badge?: () => number }[], panes: Record<string, HTMLElement>, initial: string): HTMLElement {
-  let current = initial;
-  const wrap = h("div", { class: "seg-control pane-tabs", role: "tablist" });
-  const apply = () => {
-    for (const [id, el] of Object.entries(panes)) { el.classList.add("pane"); el.setAttribute("data-hidden", String(id !== current)); }
-    for (const b of Array.from(wrap.children)) b.setAttribute("aria-selected", String(b.getAttribute("data-id") === current));
-  };
-  for (const l of labels) {
-    const n = h("span", { class: "n", hidden: true }, "");
-    const b = h("button", { type: "button", role: "tab", "data-id": l.id, onclick: () => { current = l.id; apply(); } }, l.label, n);
-    (b as any).__n = n;
-    wrap.appendChild(b);
-  }
-  apply();
-  (wrap as any).refreshBadges = () => {
-    labels.forEach((l, i) => {
-      const n = (wrap.children[i] as any).__n as HTMLElement;
-      const v = l.badge?.() ?? 0;
-      n.hidden = v <= 0;
-      n.textContent = String(v);
-    });
-  };
-  return wrap;
-}
-
 export function approvalList(items: Action[], reload: () => Promise<void> | void): HTMLElement {
-  if (!items.length) return h("div", { class: "empty" }, icon("check", 28), h("span", null, "Nothing is waiting. Requests appear here when the bot wants to delete, time out or ban someone."));
+  if (!items.length) return h("div", { class: "empty" }, "Nothing is waiting. Requests appear here when the bot wants to delete, time out or ban someone.");
   const decide = (id: number, verb: "approve" | "reject") => (e: Event) =>
     busy(e.currentTarget as HTMLButtonElement, async () => { await post(`/api/moderation/${id}/${verb}`); await reload(); });
   const all = (verb: "approve" | "reject") => (e: Event) =>
     busy(e.currentTarget as HTMLButtonElement, async () => { await post(`/api/moderation/${verb}-all`); await reload(); });
   return h("ul", { class: "list" },
-    items.length > 1 ? h("li", { class: "row" }, h("button", { class: "btn small primary", onclick: all("approve") }, icon("check", 15), "Approve all"), h("button", { class: "btn small ghost", onclick: all("reject") }, icon("x", 15), "Reject all")) : null,
+    items.length > 1 ? h("li", { class: "row" }, h("button", { class: "btn small primary", onclick: all("approve") }, icon("check", 14), "Approve all"), h("button", { class: "btn small ghost", onclick: all("reject") }, icon("x", 14), "Reject all")) : null,
     items.map((a) =>
       h("li", { class: "approval" },
         h("div", { class: "row between" }, h("strong", null, a.author_name), h("span", { class: "chip warn" }, `${actionLabel(a)} · score ${a.score}`)),
         a.body ? h("q", null, a.body) : null,
         h("div", { class: "reasons" }, a.reasons.join(", ")),
-        h("div", { class: "row" }, h("button", { class: "btn small primary", onclick: decide(a.id, "approve") }, icon("check", 15), "Approve"),
-          h("button", { class: "btn small ghost", onclick: decide(a.id, "reject") }, icon("x", 15), "Reject"), h("span", { class: "muted small" }, dateTime(a.ts))))),
+        h("div", { class: "row" }, h("button", { class: "btn small primary", onclick: decide(a.id, "approve") }, icon("check", 14), "Approve"),
+          h("button", { class: "btn small ghost", onclick: decide(a.id, "reject") }, icon("x", 14), "Reject"), h("span", { class: "muted small" }, dateTime(a.ts))))),
   );
+}
+
+/** A headline number with an optional trend line. Becomes a link when `href` is given. */
+export function kpi(ic: IconName, label: string, value: number, t: Tone, trend?: number[], href?: string): HTMLElement {
+  return h(href ? "a" : "div", { class: `kpi ${t}`, href },
+    h("div", { class: "kpi-top" }, icon(ic, 18), h("span", null, label)),
+    h("b", null, compact(value)),
+    trend ? sparkline(trend, t) : h("span", { class: "spark-gap" }));
+}
+
+/** Download a timeline as CSV (built in the browser; nothing is sent anywhere). */
+export function downloadCsv(s: Summary): void {
+  const rows = ["time,messages,flagged", ...s.timeline.map((b) => `${new Date(b.t * 1000).toISOString()},${b.messages},${b.flagged}`)];
+  const url = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+  const a = h("a", { href: url, download: `savahbot-activity-${s.hours}h.csv` });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

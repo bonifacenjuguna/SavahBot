@@ -1,145 +1,132 @@
-/** Small dependency-free SVG charts. Colours come from CSS variables so light and dark themes both work. */
+/** Small dependency-free SVG charts. Colours come from the CSS palette (variables), so light and dark themes just work. */
 import { h } from "./dom.js";
 
 const NS = "http://www.w3.org/2000/svg";
-function s(tag: string, attrs: Record<string, string | number> = {}, text?: string): SVGElement {
+type Attrs = Record<string, string | number>;
+
+function s<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Attrs = {}): SVGElementTagNameMap[K] {
   const e = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-  if (text !== undefined) e.textContent = text;
   return e;
 }
 
-export const SERIES = ["s1", "s2", "s3", "s4", "s5", "s6"];
+/** The palette names a chart may use. */
+export type Tone = "accent" | "demo" | "ok" | "bad" | "standby" | "warn";
+const tone = (t: Tone) => `var(--${t === "accent" ? "accent" : t})`;
 
-/** Tiny trend line with a soft area fill. Stretches to its container. */
-export function sparkline(values: number[], cls = "s1"): SVGElement {
-  const w = 100, hgt = 32;
-  const svg = s("svg", { viewBox: `0 0 ${w} ${hgt}`, preserveAspectRatio: "none", class: `spark ${cls}`, "aria-hidden": "true" });
-  const data = values.length > 1 ? values : [0, 0];
+export function compact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(Math.round(n));
+}
+
+/** A tiny trend line for a stat card. */
+export function sparkline(values: number[], t: Tone = "accent"): SVGElement {
+  const svg = s("svg", { viewBox: "0 0 100 30", preserveAspectRatio: "none", class: "spark", "aria-hidden": "true", focusable: "false" });
+  const data = values.length ? values : [0];
   const max = Math.max(...data, 1);
-  const step = w / (data.length - 1);
-  const pts = data.map((v, i) => [i * step, hgt - 2 - (v / max) * (hgt - 6)] as const);
-  const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`).join("");
-  svg.appendChild(s("path", { d: `${line}L${w} ${hgt}L0 ${hgt}Z`, class: "spark-area" }));
-  svg.appendChild(s("path", { d: line, class: "spark-line", "vector-effect": "non-scaling-stroke" }));
+  const pts = data.map((v, i) => `${data.length > 1 ? (i / (data.length - 1)) * 100 : 50},${28 - (v / max) * 26}`);
+  const line = s("polyline", { points: pts.join(" "), fill: "none", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+  line.style.stroke = tone(t);
+  line.style.vectorEffect = "non-scaling-stroke";
+  svg.appendChild(line);
   return svg;
 }
 
-export interface Point { t: number; a: number; b: number }
+export interface BarRow { label: string; total: number; flagged: number }
 
-function niceMax(v: number): number {
-  if (v <= 4) return 4;
-  const p = Math.pow(10, Math.floor(Math.log10(v)));
-  for (const m of [1, 2, 2.5, 5, 10]) if (v <= m * p) return m * p;
-  return 10 * p;
-}
-
-/** Responsive area chart: series A as a filled area, series B (a share of A) as an overlaid area. Hover or touch for details. */
-export function areaChart(points: Point[], opts: { labelA: string; labelB: string; fmt: (t: number) => string; ariaLabel: string }): HTMLElement {
-  const wrap = h("div", { class: "chart", role: "img", "aria-label": opts.ariaLabel });
-  const tip = h("div", { class: "chart-tip", hidden: true });
-  wrap.appendChild(tip);
-  let svg: SVGElement | null = null;
-
-  const draw = () => {
-    const width = Math.max(240, Math.floor(wrap.clientWidth));
-    const height = width < 480 ? 190 : 240;
-    const m = { l: 34, r: 8, t: 10, b: 24 };
-    const iw = width - m.l - m.r, ih = height - m.t - m.b;
-    svg?.remove();
-    const g = s("svg", { viewBox: `0 0 ${width} ${height}`, width, height, class: "chart-svg" });
-    const maxA = niceMax(Math.max(...points.map((p) => p.a), 1));
-    const x = (i: number) => m.l + (points.length > 1 ? (i / (points.length - 1)) * iw : iw / 2);
-    const y = (v: number) => m.t + ih - (v / maxA) * ih;
-
-    for (let k = 0; k <= 4; k++) {
-      const v = (maxA / 4) * k, yy = y(v);
-      g.appendChild(s("line", { x1: m.l, x2: width - m.r, y1: yy, y2: yy, class: "grid" }));
-      g.appendChild(s("text", { x: m.l - 6, y: yy + 4, "text-anchor": "end", class: "axis" }, String(Math.round(v * 10) / 10)));
+/**
+ * Column chart: one column per time bucket, the flagged share drawn in the demo/amber tone at the foot of each column.
+ * Hover or touch shows the exact numbers. A text summary is available to screen readers.
+ */
+export function columnChart(rows: BarRow[], opts: { tip: (r: BarRow) => string; xLabel: (r: BarRow) => string; summary: string }): HTMLElement {
+  const n = Math.max(rows.length, 1);
+  const max = Math.max(...rows.map((r) => r.total), 1);
+  const svg = s("svg", { viewBox: `0 0 ${n} 100`, preserveAspectRatio: "none", class: "cols-svg", "aria-hidden": "true", focusable: "false" });
+  rows.forEach((r, i) => {
+    const th = (r.total / max) * 100;
+    const bar = s("rect", { x: i + 0.14, y: 100 - th, width: 0.72, height: Math.max(th, r.total ? 0.8 : 0) });
+    bar.style.fill = tone("accent");
+    svg.appendChild(bar);
+    if (r.flagged) {
+      const fh = Math.min(th, (r.flagged / Math.max(r.total, 1)) * th);
+      const f = s("rect", { x: i + 0.14, y: 100 - fh, width: 0.72, height: fh });
+      f.style.fill = tone("demo");
+      svg.appendChild(f);
     }
-    const ticks = Math.min(width < 480 ? 3 : 6, points.length);
-    for (let k = 0; k < ticks && points.length > 1; k++) {
-      const i = Math.round((k / Math.max(1, ticks - 1)) * (points.length - 1));
-      g.appendChild(s("text", { x: x(i), y: height - 6, "text-anchor": k === 0 ? "start" : k === ticks - 1 ? "end" : "middle", class: "axis" }, opts.fmt(points[i].t)));
-    }
-    const path = (key: "a" | "b") => points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p[key]).toFixed(1)}`).join("");
-    if (points.length) {
-      const base = m.t + ih;
-      g.appendChild(s("path", { d: `${path("a")}L${x(points.length - 1)} ${base}L${x(0)} ${base}Z`, class: "area-a" }));
-      g.appendChild(s("path", { d: path("a"), class: "line-a" }));
-      g.appendChild(s("path", { d: `${path("b")}L${x(points.length - 1)} ${base}L${x(0)} ${base}Z`, class: "area-b" }));
-      g.appendChild(s("path", { d: path("b"), class: "line-b" }));
-    }
-    const cursor = s("line", { y1: m.t, y2: m.t + ih, class: "cursor", visibility: "hidden" });
-    const dot = s("circle", { r: 4, class: "dot", visibility: "hidden" });
-    g.appendChild(cursor);
-    g.appendChild(dot);
-
-    const move = (ev: PointerEvent) => {
-      if (!points.length) return;
-      const rect = g.getBoundingClientRect();
-      const px = ((ev.clientX - rect.left) / rect.width) * width;
-      const i = Math.max(0, Math.min(points.length - 1, Math.round(((px - m.l) / iw) * (points.length - 1))));
-      const p = points[i];
-      cursor.setAttribute("x1", String(x(i))); cursor.setAttribute("x2", String(x(i))); cursor.setAttribute("visibility", "visible");
-      dot.setAttribute("cx", String(x(i))); dot.setAttribute("cy", String(y(p.a))); dot.setAttribute("visibility", "visible");
-      tip.hidden = false;
-      tip.replaceChildren(h("strong", null, opts.fmt(p.t)), h("div", null, `${opts.labelA}: ${p.a}`), h("div", null, `${opts.labelB}: ${p.b}`));
-      const tw = tip.offsetWidth;
-      tip.style.left = `${Math.max(4, Math.min(width - tw - 4, x(i) - tw / 2))}px`;
-    };
-    const leave = () => { cursor.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.hidden = true; };
-    g.addEventListener("pointermove", move);
-    g.addEventListener("pointerdown", move);
-    g.addEventListener("pointerleave", leave);
-    wrap.insertBefore(g, tip);
-    svg = g;
-  };
-
-  let last = 0;
-  const ro = new ResizeObserver(() => { const w = wrap.clientWidth; if (w && Math.abs(w - last) > 1) { last = w; draw(); } });
-  ro.observe(wrap);
-  queueMicrotask(() => { if (!last && wrap.clientWidth) { last = wrap.clientWidth; draw(); } });
-  return wrap;
-}
-
-export interface Slice { name: string; value: number }
-
-/** Donut with a centre total and a legend. */
-export function donut(slices: Slice[], opts: { center: string; sub: string; ariaLabel: string }): HTMLElement {
-  const total = slices.reduce((a, b) => a + b.value, 0);
-  const size = 140, r = 52, c = 2 * Math.PI * r;
-  const svg = s("svg", { viewBox: `0 0 ${size} ${size}`, class: "donut-svg", role: "img", "aria-label": opts.ariaLabel });
-  svg.appendChild(s("circle", { cx: 70, cy: 70, r, class: "donut-track", fill: "none", "stroke-width": 18 }));
-  let offset = 0;
-  slices.forEach((sl, i) => {
-    if (!total || !sl.value) return;
-    const len = (sl.value / total) * c;
-    const gap = slices.filter((x) => x.value).length > 1 ? 2 : 0;
-    svg.appendChild(s("circle", { cx: 70, cy: 70, r, fill: "none", "stroke-width": 18, class: `seg ${SERIES[i % SERIES.length]}`, "stroke-dasharray": `${Math.max(0, len - gap)} ${c}`, "stroke-dashoffset": -offset, transform: "rotate(-90 70 70)" }));
-    offset += len;
   });
-  svg.appendChild(s("text", { x: 70, y: 72, "text-anchor": "middle", class: "donut-num" }, opts.center));
-  svg.appendChild(s("text", { x: 70, y: 90, "text-anchor": "middle", class: "donut-sub" }, opts.sub));
-  const legend = h("ul", { class: "legend" }, slices.map((sl, i) =>
-    h("li", null, h("i", { class: `sw ${SERIES[i % SERIES.length]}` }), h("span", { class: "grow" }, sl.name), h("b", null, String(sl.value)), h("span", { class: "muted small pct" }, total ? `${Math.round((sl.value / total) * 100)}%` : "0%"))));
-  return h("div", { class: "donut" }, svg as unknown as Node, legend);
+  const marker = h("div", { class: "marker", hidden: true });
+  const tip = h("div", { class: "tip", hidden: true, role: "presentation" });
+  const plot = h("div", { class: "plot" }, h("div", { class: "gridlines", "aria-hidden": "true" }, h("i"), h("i"), h("i")), svg, marker, tip);
+  const show = (clientX: number) => {
+    const box = plot.getBoundingClientRect();
+    const i = Math.min(n - 1, Math.max(0, Math.floor(((clientX - box.left) / box.width) * n)));
+    marker.hidden = tip.hidden = false;
+    marker.style.left = `${((i + 0.5) / n) * 100}%`;
+    marker.style.width = `${100 / n}%`;
+    tip.textContent = rows[i] ? opts.tip(rows[i]) : "";
+    const x = ((i + 0.5) / n) * 100;
+    tip.style.left = `${Math.min(86, Math.max(14, x))}%`;
+  };
+  plot.addEventListener("pointermove", (e) => show(e.clientX));
+  plot.addEventListener("pointerdown", (e) => show(e.clientX));
+  plot.addEventListener("pointerleave", () => { marker.hidden = tip.hidden = true; });
+
+  const labels = h("div", { class: "xlabels", "aria-hidden": "true" });
+  const stops = Math.min(5, rows.length);
+  for (let k = 0; k < stops; k++) labels.appendChild(h("span", null, rows.length ? opts.xLabel(rows[Math.round((k / Math.max(stops - 1, 1)) * (rows.length - 1))]) : ""));
+  return h("div", { class: "chart", role: "img", "aria-label": opts.summary },
+    h("div", { class: "yaxis", "aria-hidden": "true" }, h("span", null, compact(max)), h("span", null, compact(max / 2)), h("span", null, "0")),
+    plot, labels);
 }
 
-/** Circular progress. */
-export function ring(fraction: number, label: string, sub: string, state: "" | "hot" = ""): HTMLElement {
-  const size = 96, r = 38, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, fraction));
-  const svg = s("svg", { viewBox: `0 0 ${size} ${size}`, class: `ring-svg ${state}`, role: "img", "aria-label": `${label}: ${sub}` });
-  svg.appendChild(s("circle", { cx: 48, cy: 48, r, fill: "none", "stroke-width": 9, class: "ring-track" }));
-  svg.appendChild(s("circle", { cx: 48, cy: 48, r, fill: "none", "stroke-width": 9, class: "ring-fill", "stroke-linecap": "round", "stroke-dasharray": `${f * c} ${c}`, transform: "rotate(-90 48 48)" }));
-  svg.appendChild(s("text", { x: 48, y: 53, "text-anchor": "middle", class: "ring-num" }, label));
-  return h("div", { class: "ring" }, svg as unknown as Node);
+export interface Slice { label: string; value: number; tone: Tone }
+
+function ring(parts: { value: number; t: Tone }[], total: number, track = true): SVGElement {
+  const svg = s("svg", { viewBox: "0 0 42 42", class: "ring", "aria-hidden": "true", focusable: "false" });
+  if (track) {
+    const bg = s("circle", { cx: 21, cy: 21, r: 15.915, fill: "none", "stroke-width": 6 });
+    bg.style.stroke = "var(--line)";
+    svg.appendChild(bg);
+  }
+  let offset = 25;
+  for (const p of parts) {
+    if (p.value <= 0 || total <= 0) continue;
+    const len = (p.value / total) * 100;
+    const c = s("circle", { cx: 21, cy: 21, r: 15.915, fill: "none", "stroke-width": 6, "stroke-dasharray": `${len} ${100 - len}`, "stroke-dashoffset": offset });
+    c.style.stroke = tone(p.t);
+    svg.appendChild(c);
+    offset -= len;
+  }
+  return svg;
 }
 
-/** Horizontal bars (HTML so long names wrap and stay readable on phones). */
-export function hbars(rows: { name: string; count: number }[], cls = "s1"): HTMLElement {
+/** Proportions with a legend. */
+export function donut(slices: Slice[], centre: string): HTMLElement {
+  const total = slices.reduce((a, b) => a + b.value, 0);
+  return h("div", { class: "donut" },
+    h("div", { class: "donut-fig", role: "img", "aria-label": total ? slices.map((x) => `${x.label} ${x.value}`).join(", ") : "No data yet" },
+      ring(slices.map((x) => ({ value: x.value, t: x.tone })), total),
+      h("div", { class: "donut-mid" }, h("b", null, compact(total)), h("span", null, centre))),
+    total
+      ? h("ul", { class: "legend" }, slices.map((x) => h("li", null, h("i", { class: `sw ${x.tone}` }), h("span", { class: "grow" }, x.label), h("b", null, String(x.value)), h("span", { class: "muted small" }, `${Math.round((x.value / total) * 100)}%`))))
+      : h("p", { class: "muted small" }, "Nothing to show yet."));
+}
+
+/** One value against a limit, for example today's YouTube quota. */
+export function gauge(fraction: number, centre: string): HTMLElement {
+  const pct = Math.max(0, Math.min(1, fraction));
+  const t: Tone = pct >= 0.9 ? "bad" : pct >= 0.75 ? "demo" : "accent";
+  return h("div", { class: "gauge", role: "img", "aria-label": `${Math.round(pct * 100)} percent used` },
+    ring([{ value: pct * 100, t }], 100), h("div", { class: "donut-mid" }, h("b", null, `${Math.round(pct * 100)}%`), h("span", null, centre)));
+}
+
+/** Ranked horizontal bars (existing look, now with the number on the right). */
+export function hbars(rows: { name: string; count: number }[], t: Tone = "accent"): HTMLElement {
   if (!rows.length) return h("div", { class: "empty" }, "Nothing to show yet.");
   const max = Math.max(...rows.map((r) => r.count), 1);
-  return h("div", { class: "hbars" }, rows.map((r) =>
-    h("div", { class: "hbar" }, h("span", { class: "name small" }, r.name), h("span", { class: "track" }, h("i", { class: cls, style: `width:${Math.max(2, (r.count / max) * 100)}%` })), h("span", { class: "num small" }, String(r.count)))));
+  return h("div", { class: "hbars" }, rows.map((r) => h("div", { class: "hbar" },
+    h("span", { class: "small", title: r.name }, r.name),
+    h("i", { class: `fill ${t}`, style: `width:${Math.max(3, (r.count / max) * 100)}%` }),
+    h("span", { class: "small muted" }, String(r.count)))));
 }

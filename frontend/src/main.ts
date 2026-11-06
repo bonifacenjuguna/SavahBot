@@ -1,17 +1,12 @@
 import "./styles.css";
-import "./redesign.css";
-import "./manage.css";
 import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
-import { busy, clear, h, mount, sheet, toast } from "./dom.js";
+import { busy, clear, h, mount, toast } from "./dom.js";
 import * as feed from "./events.js";
-import { icon, logo } from "./icons.js";
+import { icon, logo, type IconName } from "./icons.js";
+import { closePalette, openPalette, type PaletteItem } from "./palette.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
-import { resetClock } from "./pages/kit.js";
-
-let resetTimer = 0;
-import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
-import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
-import { APP_VERSION } from "./version.js";
+import { applyTheme, getTheme, nextTheme, setTheme, themeLabel } from "./theme.js";
+import { overview } from "./pages/overview.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -19,30 +14,28 @@ import { notebook } from "./pages/notebook.js";
 import { community } from "./pages/community.js";
 import { insights } from "./pages/insights.js";
 import { demo } from "./pages/demo.js";
-import { more } from "./pages/more.js";
 import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
 import type { Page } from "./pages/types.js";
 
-export { APP_VERSION };
-
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings, more];
-const NAV_GROUPS: { title: string; ids: string[] }[] = [
-  { title: "Operate", ids: ["desk", "moderation", "commands"] },
-  { title: "Manage", ids: ["notebook", "community", "insights", "demo"] },
-  { title: "System", ids: ["setup", "settings"] },
-];
-const TAB_IDS = ["desk", "moderation", "commands", "insights"];
+const PAGES: Page[] = [overview, desk, moderation, commands, notebook, community, insights, demo, setup, settings];
+const PAGE_ICONS: Record<string, IconName> = {
+  overview: "overview", desk: "desk", moderation: "shield", commands: "commands", notebook: "notebook", community: "users",
+  insights: "chart", demo: "flask", setup: "plug", settings: "sliders",
+};
+/** Pages that get a tab on phones. Everything else lives behind "More". */
+const TABS = ["overview", "desk", "moderation", "insights"];
+const DEFAULT_PAGE = "overview";
 const root = document.getElementById("app")!;
 let statusTimer: number | undefined;
-let shellCleanup: (() => void) | null = null;
+let shellUp = false;
 
-initTheme();
+applyTheme();
 
 function route(): { id: string; query: URLSearchParams } {
   const raw = location.hash.replace(/^#\/?/, "");
   const [path, qs] = raw.split("?");
-  return { id: path || "desk", query: new URLSearchParams(qs ?? "") };
+  return { id: path || DEFAULT_PAGE, query: new URLSearchParams(qs ?? "") };
 }
 
 function tallyState(s: Status | null): { state: "live" | "demo" | "standby"; title: string; detail: string } {
@@ -52,25 +45,21 @@ function tallyState(s: Status | null): { state: "live" | "demo" | "standby"; tit
   return { state: "standby", title: "Standby", detail: s.youtube.connected ? "Waiting for a live stream" : "YouTube not connected" };
 }
 
-function signOut(): void {
-  setToken("");
-  showLogin();
-}
-
 // ------------------------------------------------------------------------------------------------ login
 function showLogin(): void {
-  shellCleanup?.();
-  shellCleanup = null;
+  shellUp = false;
+  closePalette();
   feed.stop();
   window.clearInterval(statusTimer);
   const needsBase = !apiBase();
   const pass = h("input", { type: "password", autocomplete: "current-password", required: true, id: "pw" });
   const base = h("input", { type: "url", placeholder: "https://your-app.up.railway.app", value: apiBase(), id: "base" });
   const err = h("p", { class: "small", style: "color:var(--bad)", role: "alert" });
-  const btn = h("button", { class: "btn primary", type: "submit" }, icon("lock", 16), "Sign in");
+  const btn = h("button", { class: "btn primary block-btn", type: "submit" }, icon("lock", 16), "Sign in");
   const form = h(
     "form",
     {
+      class: "login-card",
       onsubmit: (e: Event) => {
         e.preventDefault();
         err.textContent = "";
@@ -82,8 +71,7 @@ function showLogin(): void {
           .finally(() => (btn.disabled = false));
       },
     },
-    h("div", { class: "mobile-logo" }, logo(44)),
-    h("div", { class: "head" }, h("h1", null, "Sign in")),
+    h("div", { class: "login-mark" }, logo(40), h("h1", null, "SavahBot")),
     h("p", { class: "muted" }, "Owner sign-in. The password is the OWNER_PASSWORD variable, or the one printed once in the Railway logs on first start."),
     h("label", { class: "field" }, "Password", pass),
     needsBase
@@ -91,224 +79,180 @@ function showLogin(): void {
       : h("details", null, h("summary", { class: "small muted" }, "Backend address"), h("label", { class: "field" }, "Address", base)),
     err,
     btn,
-    h("p", { class: "muted small" }, `SavahBot dashboard v${APP_VERSION}`),
   );
-  const brand = h("aside", { class: "login-brand" },
-    h("div", { class: "row nowrap mark" }, logo(40), h("span", { class: "brand", style: "font-size:1.3rem" }, "SavahBot")),
-    h("div", { class: "stack" },
-      h("h2", null, "Your chat, under control."),
-      h("p", null, "A private moderation and utility bot for YouTube live chat, run from this dashboard and from Telegram."),
-      h("ul", { class: "login-points" },
-        [["shield", "Explainable moderation: every score shows its signals."], ["flask", "Demo mode: simulated chat, nothing sent, no quota used."], ["chart", "Live charts of chat activity and moderation."]]
-          .map(([i, t]) => h("li", null, icon(i, 20), h("span", null, t))))),
-    h("span", { class: "small" }, `v${APP_VERSION}`));
-  mount(root, h("main", { class: "login" }, brand, h("div", { class: "login-pane" }, form)));
+  const points: [IconName, string, string][] = [
+    ["shield", "Moderation you control", "Suggest, approve or let it act on its own."],
+    ["chart", "Live insights", "Chat activity, triggers and quota at a glance."],
+    ["smartphone", "Works on every screen", "Phone, tablet and desktop, with an installable app."],
+  ];
+  const side = h("aside", { class: "login-side" },
+    h("div", { class: "login-mark" }, logo(56)),
+    h("h2", null, "Calm, accountable chat moderation."),
+    h("ul", null, points.map(([ic, title, text]) => h("li", null, icon(ic, 22), h("div", null, h("strong", null, title), h("p", null, text))))));
+  mount(root, h("main", { class: "login" }, side, form));
   pass.focus();
 }
 
 // ------------------------------------------------------------------------------------------------ shell
 function showShell(): void {
-  shellCleanup?.();
-  const offs: (() => void)[] = [];
+  shellUp = true;
+  const updaters: ((s: Status) => void)[] = [];
+  const themePainters: (() => void)[] = [];
+  const cycleTheme = () => { setTheme(nextTheme()); themePainters.forEach((f) => f()); };
 
-  // ----- shared actions
-  const ctx: AppContext = {
-    pages: PAGES,
-    go: (id) => { location.hash = `#/${id}`; },
-    setMode: async (mode) => { await post("/api/mode", { mode }); await refreshStatus(); toast(`Switched to ${mode === "demo" ? "Demo" : "Live"} mode`); },
-    signOut,
-    cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
-    setTheme: (p: ThemePref) => { applyTheme(p); syncTheme(); },
+  // Tally: the lamp and the one-line state. Built twice (side rail, phone top bar) and kept in step.
+  const makeTally = (withDetail: boolean) => {
+    const lamp = h("div", { class: "lamp", "aria-hidden": "true" });
+    const title = h("strong", null, "Connecting");
+    const detail = h("span", { class: "detail" }, "");
+    const el = h("div", { class: "tally", "data-state": "standby", role: "status" }, lamp, title, withDetail ? detail : null);
+    updaters.push((s) => {
+      const t = tallyState(s);
+      el.setAttribute("data-state", t.state);
+      el.title = `${t.title}: ${t.detail}`;
+      title.textContent = t.title;
+      detail.textContent = t.detail;
+    });
+    return el;
   };
-  setAppContext(ctx);
 
-  // ----- sidebar (desktop and tablet)
-  const STATE_ICON = { demo: "flask", live: "radio", standby: "power" } as const;
-  const STATE_TAG = { demo: "Simulated", live: "On air", standby: "Idle" } as const;
-  const mcBadge = h("div", { class: "mc-badge", "aria-hidden": "true" }, icon("power", 22));
-  const tTitle = h("strong", null, "Connecting");
-  const mcTag = h("span", { class: "mc-tag" }, "Idle");
-  const tDetail = h("span", { class: "mc-detail" }, "");
-  const demoBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("flask", 15), h("span", null, "Demo"));
-  const liveBtn = h("button", { type: "button", "aria-pressed": "false" }, icon("radio", 15), h("span", null, "Live"));
-  const setMode = (mode: "demo" | "live") => () => busy(mode === "demo" ? demoBtn : liveBtn, () => ctx.setMode(mode));
-  demoBtn.onclick = setMode("demo");
-  liveBtn.onclick = setMode("live");
-  const segment = h("div", { class: "mc-switch", role: "group", "aria-label": "Bot mode" }, demoBtn, liveBtn);
-  const tally = h("div", { class: "modecard", "data-state": "standby", role: "status", title: "Bot status" },
-    h("div", { class: "mc-head" }, mcBadge, h("div", { class: "mc-text" }, h("div", { class: "mc-title" }, tTitle, mcTag), tDetail)), segment);
+  const makeSegment = () => {
+    const demoBtn = h("button", { type: "button", "aria-pressed": "false", title: "Demo mode" }, icon("flask", 16), h("span", { class: "label" }, "Demo"));
+    const liveBtn = h("button", { type: "button", "aria-pressed": "false", title: "Live mode" }, icon("broadcast", 16), h("span", { class: "label" }, "Live"));
+    const setMode = (mode: "demo" | "live") => () => busy(mode === "demo" ? demoBtn : liveBtn, async () => { await post("/api/mode", { mode }); await refreshStatus(); });
+    demoBtn.onclick = setMode("demo");
+    liveBtn.onclick = setMode("live");
+    updaters.push((s) => {
+      demoBtn.setAttribute("aria-pressed", String(s.hub.mode === "demo"));
+      liveBtn.setAttribute("aria-pressed", String(s.hub.mode === "live"));
+    });
+    return h("div", { class: "segment", role: "group", "aria-label": "Bot mode" }, demoBtn, liveBtn);
+  };
 
-  const counts = new Map<string, HTMLElement>();
-  const navLinks: HTMLAnchorElement[] = [];
+  const makeThemeButton = (withLabel = false) => {
+    const b = h("button", { class: "icon-btn", type: "button" });
+    const paint = () => {
+      const t = getTheme();
+      mount(b, icon(t === "system" ? "monitor" : t === "light" ? "sun" : "moon", 18), withLabel ? h("span", { class: "label" }, themeLabel(t)) : null);
+      b.title = themeLabel(t);
+      b.setAttribute("aria-label", themeLabel(t));
+    };
+    b.onclick = cycleTheme;
+    themePainters.push(paint);
+    paint();
+    return b;
+  };
+
+  const signOut = () => { setToken(""); showLogin(); };
+  const goTo = (id: string) => () => { location.hash = `#/${id}`; };
+  const quickSearch = () => openPalette(paletteItems());
+
+  const badges: HTMLElement[] = [];
+  const badge = () => { const b = h("span", { class: "count", hidden: true }, ""); badges.push(b); return b; };
+
+  // --- side rail (tablet and desktop)
   const nav = h("nav", { class: "nav", "aria-label": "Sections" },
-    NAV_GROUPS.flatMap((g) => [
-      h("div", { class: "nav-title" }, g.title),
-      ...g.ids.map((id) => {
-        const p = PAGES.find((x) => x.id === id)!;
-        const badge = h("span", { class: "count", hidden: true }, "");
-        counts.set(p.id, badge);
-        const a = h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), badge);
-        navLinks.push(a);
-        return a;
-      }),
-    ]));
-
-  const quotaText = h("span", { class: "txt" }, "");
+    PAGES.map((p) => h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.title }, icon(PAGE_ICONS[p.id], 20), h("span", { class: "label" }, p.title), p.id === "moderation" ? badge() : null)));
+  const quotaText = h("span", { class: "label" }, "");
   const meterBar = h("i", null);
   const meter = h("div", { class: "meter", title: "YouTube API quota used today" }, meterBar);
-  const connText = h("span", { class: "txt" }, "Live feed: connecting");
-  const connIcon = h("span", { class: "ico-slot" }, icon("wifiOff", 16));
-  const themeIcon = h("span", { class: "ico-slot" });
-  const themeText = h("span", { class: "txt" }, "");
-  const themeBtn = h("button", { class: "rail-btn", type: "button", onclick: () => ctx.cycleTheme(), title: "Change theme" }, themeIcon, themeText);
-  const out = h("button", { class: "rail-btn", type: "button", onclick: signOut, title: "Sign out" }, icon("logout", 18), h("span", { class: "txt" }, "Sign out"));
-  const verTag = h("span", { class: "ver", title: "Dashboard version" }, `v${APP_VERSION}`);
+  const connText = h("span", { class: "label" }, "Live feed: connecting");
+  const connDot = h("i", { class: "dot" });
+  const version = h("span", { class: "ver" }, "");
   const rail = h("aside", { class: "rail" },
-    h("div", { class: "rail-brand" }, logo(30), h("span", { class: "brand" }, "SavahBot"), verTag),
-    tally, nav,
-    h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out));
+    h("div", { class: "brand" }, logo(30), h("span", { class: "label" }, "SavahBot"), version),
+    makeTally(true), makeSegment(),
+    h("button", { class: "searchbtn", type: "button", onclick: quickSearch, "aria-label": "Search pages and actions" }, icon("search", 18), h("span", { class: "label" }, "Search"), h("kbd", { class: "label" }, "Ctrl K")),
+    nav,
+    h("div", { class: "rail-foot" }, quotaText, meter, h("div", { class: "row tight" }, connDot, connText),
+      h("div", { class: "foot-actions" }, makeThemeButton(true),
+        h("button", { class: "icon-btn", type: "button", onclick: signOut, title: "Sign out", "aria-label": "Sign out" }, icon("logout", 18), h("span", { class: "label" }, "Sign out")))));
 
-  // ----- top bar
-  const tbIco = h("span", { class: "tb-ico", "aria-hidden": "true" }, icon("power", 13));
-  const tbTitle = h("span", null, "Connecting");
-  const tbDetail = h("span", { class: "muted t-detail" }, "");
-  const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbIco, tbTitle, tbDetail);
-  const searchBtn = h("button", { class: "search-btn", type: "button", onclick: () => openPalette(ctx), "aria-label": "Search and jump to" },
-    icon("search", 18), h("span", { class: "grow" }, "Search pages and actions"), h("kbd", null, "Ctrl K"));
-  const connChip = h("span", { class: "conn-chip down", role: "status" }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
-  const bellBadge = h("span", { class: "badge accent", hidden: true }, "0");
-  const bell = h("button", { class: "icon-btn", type: "button", "aria-label": "Notifications", "aria-haspopup": "dialog", "aria-expanded": "false", title: "Notifications", onclick: () => openNotifications(bell) }, icon("bell", 20), bellBadge);
+  // --- phone top bar
   const topbar = h("header", { class: "topbar" },
-    h("span", { class: "tb-brand" }, logo(26)), tbTally, searchBtn, h("span", { class: "tb-spacer" }), connChip, bell);
+    h("a", { class: "topbrand", href: `#/${DEFAULT_PAGE}`, "aria-label": "SavahBot home" }, logo(26)),
+    makeTally(false), h("div", { class: "grow" }), makeSegment(),
+    h("button", { class: "icon-btn", type: "button", onclick: quickSearch, title: "Search", "aria-label": "Search pages and actions" }, icon("search", 20)));
 
-  // ----- phone tab bar
-  const tabLinks: HTMLElement[] = [];
-  const tabBadge = h("span", { class: "badge", hidden: true }, "0");
-  const tabbar = h("nav", { class: "tabbar", "aria-label": "Main" },
-    TAB_IDS.map((id) => {
-      const p = PAGES.find((x) => x.id === id)!;
-      const a = h("a", { class: "tab", href: `#/${p.id}`, "data-id": p.id }, icon(p.icon, 22), p.title, id === "moderation" ? tabBadge : null);
-      tabLinks.push(a);
-      return a;
-    }),
-    h("a", { class: "tab", href: "#/more", id: "tab-more", "data-id": "more" }, icon("menu", 22), "More"));
-  const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
+  // --- phone bottom tabs and the More sheet
+  const sheet = h("div", { class: "sheet", hidden: true });
+  const moreBtn = h("button", { type: "button", class: "tab", "aria-expanded": "false", "aria-controls": "more-sheet", "data-more": "1" }, icon("more", 22), h("span", null, "More"));
+  const closeSheet = () => { sheet.hidden = true; moreBtn.setAttribute("aria-expanded", "false"); };
+  const openSheet = () => { sheet.hidden = false; moreBtn.setAttribute("aria-expanded", "true"); };
+  moreBtn.onclick = () => (sheet.hidden ? openSheet() : closeSheet());
+  const tabbar = h("nav", { class: "tabbar", "aria-label": "Main sections" },
+    TABS.map((id) => { const p = PAGES.find((x) => x.id === id)!; return h("a", { class: "tab", href: `#/${id}`, "data-id": id }, icon(PAGE_ICONS[id], 22), h("span", null, p.title), id === "moderation" ? badge() : null); }),
+    moreBtn);
+  const sheetQuota = h("p", { class: "muted small" }, "");
+  const sheetPanel = h("div", { class: "sheet-panel", id: "more-sheet", role: "dialog", "aria-label": "More sections" },
+    h("div", { class: "sheet-grip", "aria-hidden": "true" }),
+    h("div", { class: "sheet-grid" }, PAGES.filter((p) => !TABS.includes(p.id)).map((p) => h("a", { href: `#/${p.id}`, "data-id": p.id, onclick: closeSheet }, icon(PAGE_ICONS[p.id], 22), h("span", null, p.title)))),
+    sheetQuota,
+    h("div", { class: "row between" }, makeThemeButton(true), h("button", { class: "btn ghost", type: "button", onclick: signOut }, icon("logout", 16), "Sign out")));
+  mount(sheet, h("div", { class: "sheet-scrim", onclick: closeSheet }), sheetPanel);
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
-  const skip = h("a", { class: "skip", href: "#content", onclick: (e: Event) => { e.preventDefault(); content.focus(); } }, "Skip to content");
-  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, content)), tabbar);
+  mount(root, h("div", { class: "shell" }, rail, topbar, content, tabbar, sheet));
 
-  // ----- sheets
-  function modeCards(close: () => void): HTMLElement {
-    const mk = (mode: "demo" | "live", ic: string, title: string, text: string) => {
-      const b = h("button", { class: "mode-card", type: "button", "aria-pressed": String(currentMode() === mode) }, icon(ic, 22), h("strong", null, title), h("span", null, text));
-      b.onclick = () => busy(b as HTMLButtonElement, async () => { await ctx.setMode(mode); close(); });
-      return b;
-    };
-    return h("div", { class: "mode-cards", style: "grid-template-columns:1fr" },
-      mk("demo", "flask", "Demo", "Simulated chat. Nothing is sent to YouTube or Telegram and no quota is used."),
-      mk("live", "zap", "Live", "Real YouTube chat. The bot attaches when your stream starts."));
+  function paletteItems(): PaletteItem[] {
+    return [
+      ...PAGES.map((p) => ({ id: `go-${p.id}`, label: p.title, hint: "Go to page", icon: PAGE_ICONS[p.id], run: goTo(p.id) })),
+      { id: "demo", label: "Switch to demo mode", hint: "Simulated chat", icon: "flask" as IconName, run: () => void post("/api/mode", { mode: "demo" }).then(refreshStatus).catch((e) => toast(e.message, "error")) },
+      { id: "live", label: "Switch to live mode", hint: "YouTube", icon: "broadcast" as IconName, run: () => void post("/api/mode", { mode: "live" }).then(refreshStatus).catch((e) => toast(e.message, "error")) },
+      { id: "theme", label: "Change theme", hint: themeLabel(), icon: "sun" as IconName, run: cycleTheme },
+      { id: "refresh", label: "Refresh status", icon: "refresh" as IconName, run: () => void refreshStatus() },
+      { id: "out", label: "Sign out", icon: "logout" as IconName, run: signOut },
+    ];
   }
-  function openModeSheet(): void {
-    const holder: { close: () => void } = { close: () => undefined };
-    const t = tallyState(lastStatus);
-    holder.close = sheet("Bot mode", h("div", { class: "stack" }, h("div", { class: "banner" }, icon("info", 18), h("span", null, `${t.title}: ${t.detail}`)), modeCards(() => holder.close()))).close;
-  }
-  // ----- routing
+
   let cleanup: (() => void) | void;
-  let lastId = "";
   const render = () => {
     cleanup?.();
+    closeSheet();
     const { id, query } = route();
     const page = PAGES.find((p) => p.id === id) ?? PAGES[0];
-    for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
-    for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
-    // More stays lit for every page that lives behind it (Notebook, Community, Setup and so on)
-    if (TAB_IDS.includes(page.id)) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
+    root.querySelectorAll("[data-id]").forEach((a) => (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
+    moreBtn.classList.toggle("on", !TABS.includes(page.id));
     document.title = `${page.title} · SavahBot`;
     clear(content);
+    window.scrollTo(0, 0);
     cleanup = page.render(content, query);
-    if (lastId && lastId !== page.id) window.scrollTo(0, 0);
-    lastId = page.id;
   };
   window.onhashchange = render;
 
-  // ----- theme icon sync
-  function syncTheme(): void {
-    const p = themePref();
-    mount(themeIcon, icon(THEME_ICON[p], 18));
-    themeText.textContent = `Theme: ${p === "system" ? "auto" : p}`;
-  }
-  syncTheme();
-
-  // ----- live status
-  let lastStatus: Status | null = null;
-  let shownMode: string | null = null;
-  const currentMode = () => lastStatus?.hub.mode ?? "demo";
-  offs.push(onStatus((s) => {
-    lastStatus = s;
-    const t = tallyState(s);
-    tally.setAttribute("data-state", t.state);
-    tbTally.setAttribute("data-state", t.state);
-    mount(mcBadge, icon(STATE_ICON[t.state], 22));
-    mount(tbIco, icon(STATE_ICON[t.state], 13));
-    mcTag.textContent = STATE_TAG[t.state];
-    tTitle.textContent = t.title;
-    tDetail.textContent = t.detail;
-    tbTitle.textContent = t.title;
-    tbDetail.textContent = t.detail;
-    demoBtn.setAttribute("aria-pressed", String(s.hub.mode === "demo"));
-    liveBtn.setAttribute("aria-pressed", String(s.hub.mode === "live"));
+  const offStatus = onStatus((s) => {
+    updaters.forEach((f) => f(s));
     const q = s.youtube.quota;
     const pct = Math.min(100, Math.round(q.fraction * 100));
-    quotaText.textContent = s.hub.mode === "demo" ? "YouTube quota: untouched in demo" : `YouTube quota: ${pct}% used today`;
+    const text = s.hub.mode === "demo" ? "YouTube quota: untouched in demo" : `YouTube quota: ${pct}% used today`;
+    quotaText.textContent = text;
+    sheetQuota.textContent = text;
     meterBar.style.width = `${s.hub.mode === "demo" ? 0 : pct}%`;
-    const rc = resetClock(q.resets_at, s.timezone);
-    meter.title = rc && s.hub.mode !== "demo" ? `YouTube API quota used today. It resets at ${rc.clock} ${rc.place} time, which is midnight Pacific.` : "YouTube API quota used today";
-    // Refresh the moment the reset passes, so the number drops to 0 without waiting for the next poll.
-    window.clearTimeout(resetTimer);
-    if (q.resets_at) resetTimer = window.setTimeout(() => void refreshStatus(), Math.max(1000, (q.resets_at - Date.now() / 1000) * 1000 + 2000));
     meter.classList.toggle("hot", pct >= 75);
-    const badge = counts.get("moderation")!;
-    badge.hidden = s.pending === 0;
-    badge.textContent = String(s.pending);
-    tabBadge.hidden = s.pending === 0;
-    tabBadge.textContent = String(s.pending);
-    // the pages were drawn for the previous mode: draw them again so Demo and Live never show each other's data
-    if (shownMode && shownMode !== s.hub.mode) render();
-    shownMode = s.hub.mode;
-  }));
-  offs.push(feed.onConnection((up) => {
-    connText.textContent = up ? "Live feed: connected" : "Live feed: reconnecting";
-    mount(connIcon, icon(up ? "wifi" : "wifiOff", 16));
-    connChip.classList.toggle("down", !up);
-    mount(connChip, icon(up ? "wifi" : "wifiOff", 16), h("span", { class: "txt" }, up ? "Live" : "Reconnecting"));
-  }));
-  for (const t of ["mode", "stream", "mod_pending", "mod_resolved"]) offs.push(feed.on(t, () => void refreshStatus()));
-  const syncBell = () => {
-    const n = unreadCount();
-    bellBadge.hidden = n === 0;
-    bellBadge.textContent = n > 9 ? "9+" : String(n);
-    bell.setAttribute("aria-label", n ? `Notifications, ${n} unread` : "Notifications");
-  };
-  offs.push(onNotices(syncBell));
-  syncBell();
-  offs.push(startNotifications(() => lastStatus));
-  offs.push(installShortcuts(ctx));
+    version.textContent = `v${s.version}`;
+    badges.forEach((b) => { b.hidden = s.pending === 0; b.textContent = String(s.pending); });
+  });
+  const offConn = feed.onConnection((up) => { connText.textContent = up ? "Live feed: connected" : "Live feed: reconnecting"; connDot.className = up ? "dot up" : "dot"; });
+  const offEvents = ["mode", "stream", "mod_pending", "mod_resolved"].map((t) => feed.on(t, () => void refreshStatus()));
 
   render();
   void refreshStatus();
   statusTimer = window.setInterval(() => void refreshStatus(), 15000);
   feed.start();
-
-  const stopShell = () => {
-    cleanup?.();
-    cleanup = undefined;
-    offs.forEach((f) => f());
-    window.onhashchange = null;
-  };
-  shellCleanup = stopShell;
+  loggedOut.addEventListener("out", () => { offStatus(); offConn(); offEvents.forEach((f) => f()); }, { once: true });
 }
+
+// Ctrl/Cmd+K (or "/" outside a text field) opens the palette. Ignored on the sign-in screen.
+document.addEventListener("keydown", (e) => {
+  if (!shellUp) return;
+  const typing = (e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable]");
+  if ((e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey)) || (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey)) {
+    e.preventDefault();
+    document.querySelector<HTMLButtonElement>(".searchbtn")?.click();
+  } else if (e.key === "Escape") {
+    document.querySelector<HTMLElement>(".sheet:not([hidden]) .sheet-scrim")?.click();
+  }
+});
 
 function boot(): void {
   if (!hasToken()) return showLogin();

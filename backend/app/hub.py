@@ -16,7 +16,6 @@ from typing import Any, Awaitable, Callable, Protocol
 from .commands import CommandEngine
 from .events import EventBus
 from .models import ChatMessage
-from .services.telegram_ui import approval_card, approval_keyboard, flag_card, stream_card
 from .moderation import ACTION_RANK, ModerationEngine, ModInput, Verdict
 from .store import Store
 from .utils import split_csv, truncate
@@ -81,8 +80,6 @@ class Hub:
                 except Exception:
                     logger.exception("Stopping %s failed", self.source.name)
                 self.stream_state(False)
-            if self.source is not wanted:
-                self.lines = 0  # the "chat lines this session" counter belongs to one mode
             self.source = wanted
             if wanted is not None:
                 try:
@@ -111,7 +108,8 @@ class Hub:
         self._stream_started = time.time() if live and not was_live else (self._stream_started if live else None)
         self.bus.publish("stream", {"live": live, "title": self.stream_title})
         if self.mode == "live" and self.cfg.get("telegram_notify_stream_events"):
-            self._spawn(self._notify(stream_card(live, title)))
+            text = f"Stream is live: {title}" if live else "Stream has ended."
+            self._spawn(self._notify(text))
 
     def uptime(self) -> float | None:
         return time.time() - self._stream_started if self.stream_live and self._stream_started else None
@@ -179,8 +177,7 @@ class Hub:
         self.lines += 1
         if ACTION_RANK.get(msg.verdict, -1) < ACTION_RANK["delete"]:
             try:
-                replies = await self.commands.handle(msg) or await self.commands.handle_triggers(msg)
-                for reply in replies:
+                for reply in await self.commands.handle(msg):
                     await self.send_chat(reply)
             except Exception:
                 logger.exception("Command handling failed")
@@ -203,7 +200,7 @@ class Hub:
             await self.store.create_action(record | {"status": "logged"})
             self.bus.publish("mod_logged", {"author": msg.author_name, "action": "flag", "score": v.score})
             if self.cfg.get("mod_notify_on_flag"):
-                self._spawn(self._notify(flag_card(msg.author_name, v.score, msg.text)))
+                self._spawn(self._notify(f"Flagged {msg.author_name} (score {v.score}): {truncate(msg.text, 80)}"))
             return
 
         key = f"{msg.platform}:{msg.author_id}"
@@ -240,9 +237,12 @@ class Hub:
             self._suppressed += 1
             return
         self._notify_times.append(now)
-        extra = f"+{self._suppressed} more waiting, see /pending" if self._suppressed else ""
+        extra = f"\n(+{self._suppressed} more waiting, see /pending)" if self._suppressed else ""
         self._suppressed = 0
-        await self._notify(approval_card(id_, r, extra), approval_keyboard(id_))
+        what = r["action"] + (f" {r['duration']}s" if r.get("duration") else "")
+        text = (f"Approval needed #{id_}: {what} for {r['author_name']} (score {r['score']})\n"
+                f"“{truncate(r['text'], 120)}”\nWhy: {'; '.join(r['reasons'][:4])}{extra}")
+        await self._notify(text, [[("Approve", f"approve:{id_}"), ("Reject", f"reject:{id_}")]])
 
     async def _execute(self, id_: int) -> dict[str, Any]:
         a = await self.store.get_action(id_)
@@ -293,9 +293,9 @@ class Hub:
         self.bus.publish("mod_resolved", {"id": id_, "status": "rejected", "action": a["action"], "author": a["author_name"]})
         return {"ok": True, "status": "rejected"}
 
-    async def resolve_all(self, approve: bool, demo: bool | None = None) -> dict[str, int]:
+    async def resolve_all(self, approve: bool) -> dict[str, int]:
         done = failed = 0
-        for a in await self.store.pending_actions(demo):
+        for a in await self.store.pending_actions():
             res = await (self.approve(a["id"]) if approve else self.reject(a["id"]))
             done += 1 if res.get("ok") else 0
             failed += 0 if res.get("ok") else 1

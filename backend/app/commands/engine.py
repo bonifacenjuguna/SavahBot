@@ -7,7 +7,6 @@ from typing import Any, Callable
 from ..models import ChatMessage
 from ..store import LEVELS, Store, ValidationFailed, clean_name
 from ..utils import format_duration, truncate
-from .triggers import matches
 from .variables import Ctx, Renderer
 
 BUILTIN_NAMES = {"commands", "addcom", "editcom", "delcom", "permit", "quote", "addquote", "uptime"}
@@ -29,8 +28,6 @@ class CommandEngine:
         self.channel_fn = channel_fn or (lambda: "")
         self._last_global: dict[int, float] = {}
         self._last_user: dict[tuple[int, str], float] = {}
-        self._trig_global: dict[int, float] = {}
-        self._trig_user: dict[tuple[int, str], float] = {}
 
     def make_ctx(self, msg: ChatMessage, name: str, rest: str) -> Ctx:
         return Ctx(platform=msg.platform, author_id=msg.author_id, author_name=msg.author_name, level=msg.level,
@@ -65,32 +62,6 @@ class CommandEngine:
         reply = await self.renderer.render(cmd["response"], self.make_ctx(msg, name, rest))
         await self.store.bump_command(cmd["id"])
         return [reply] if reply else []
-
-    async def handle_triggers(self, msg: ChatMessage) -> list[str]:
-        """Answer an exact phrase or word (see commands/triggers.py). Commands always win; at most one reply per message."""
-        if not self.cfg.get("triggers_enabled") or msg.from_bot or msg.backfill:
-            return []
-        text = msg.text.strip()
-        prefix = self.cfg.get("command_prefix")
-        if not text or (prefix and text.startswith(prefix)):
-            return []
-        now = time.time()
-        for t in await self.store.enabled_triggers():
-            if rank(msg.level) < LEVELS[t["userlevel"]] or not matches(t, text):
-                continue
-            if msg.level != "owner":
-                if now - self._trig_global.get(t["id"], 0) < t["cooldown"] or now - self._trig_user.get((t["id"], msg.author_id), 0) < t["user_cooldown"]:
-                    continue
-            self._trig_global[t["id"]] = now
-            self._trig_user[(t["id"], msg.author_id)] = now
-            reply = await self.renderer.render(t["response"], self.make_ctx(msg, "trigger", ""))
-            if not reply:
-                return []
-            if t["mention"] and "$(user" not in t["response"].lower() and "$(touser" not in t["response"].lower():
-                reply = truncate(f"@{msg.author_name} {reply}", self.cfg.get("command_max_response_length"))
-            await self.store.bump_trigger(t["id"])
-            return [reply]
-        return []
 
     async def preview(self, template: str, msg: ChatMessage, rest: str = "") -> str:
         return await self.renderer.render(template, self.make_ctx(msg, "preview", rest))
