@@ -682,6 +682,178 @@ async def telegram_test(request: Request, c: Any) -> dict:
     return {"ok": True}
 
 
+# ================================================================================= intelligence (1.1.6)
+def _intel(c: Any) -> Any:
+    if getattr(c, "intel", None) is None:
+        raise ApiError("The intelligence layer is not available.", 503)
+    return c.intel
+
+
+def _page(request: Request, default: int = 50) -> tuple[int, int]:
+    q = request.query_params
+    try:
+        return max(1, min(int(q.get("limit", default)), 200)), max(0, int(q.get("offset", 0)))
+    except ValueError:
+        raise ApiError("limit and offset must be numbers.", 400) from None
+
+
+def _hours(request: Request, default: float) -> float:
+    try:
+        return max(1.0, min(float(request.query_params.get("hours", default)), 24 * 90))
+    except ValueError:
+        raise ApiError("hours must be a number.", 400) from None
+
+
+@R.add("/intel/overview", ["GET"])
+async def intel_overview(request: Request, c: Any) -> dict:
+    return await _intel(c).overview(_hours(request, 24))
+
+
+@R.add("/intel/packs", ["GET"])
+async def intel_packs(request: Request, c: Any) -> dict:
+    reg = _intel(c).registry
+    from ..intel.knowledge.registry import CATEGORIES, KINDS
+    return {"items": reg.summary(), "categories": CATEGORIES, "kinds": KINDS, "problems": reg.problems}
+
+
+@R.add("/intel/packs/{pack}/enable", ["POST"])
+async def intel_pack_enable(request: Request, c: Any) -> dict:
+    intel = _intel(c)
+    pack = request.path_params["pack"]
+    need(pack in intel.registry.packs, "pack")
+    b = await parse(request, S.IntelEnable)
+    await intel.store.set_pack_enabled(pack, b.enabled)
+    await intel.refresh_state()
+    return {"ok": True, "enabled": intel.registry.enabled(pack)}
+
+
+@R.add("/intel/packs/{pack}/entries", ["GET"])
+async def intel_entries(request: Request, c: Any) -> dict:
+    intel = _intel(c)
+    pack = request.path_params["pack"]
+    need(pack in intel.registry.packs, "pack")
+    q = request.query_params
+    needle, which = q.get("q", "").strip().lower(), q.get("filter", "all")
+    limit, offset = _page(request, 60)
+    rows = intel.registry.rows(pack)
+    if needle:
+        rows = [r for r in rows if needle in r.value.lower() or any(needle in t.lower() for t in r.tags)]
+    if which == "yours":
+        rows = [r for r in rows if r.user]
+    elif which == "muted":
+        rows = [r for r in rows if r.muted]
+    p = intel.registry.packs[pack]
+    return {"items": [r.to_dict() for r in rows[offset:offset + limit]], "total": len(rows), "editable": p.editable, "kind": p.kind,
+            "sources": p.sources, "enabled": intel.registry.enabled(pack)}
+
+
+@R.add("/intel/packs/{pack}/entries", ["POST"])
+async def intel_entry_add(request: Request, c: Any) -> dict:
+    intel = _intel(c)
+    pack = request.path_params["pack"]
+    need(pack in intel.registry.packs, "pack")
+    if not intel.registry.packs[pack].editable:
+        raise ApiError("This pack is read-only. Switch it off, or mute entries you do not want, in packs that allow it.", 400)
+    b = await parse(request, S.IntelEntry)
+    value = " ".join(b.value.split())
+    if len(intel.registry.added.get(pack, {})) >= 2000:
+        raise ApiError("This pack already has 2,000 of your entries.", 400)
+    await intel.store.add_user_entry(pack, "add", value, b.weight)
+    await intel.store.remove_user_entry(pack, "mute", value)
+    await intel.refresh_state()
+    return {"ok": True}
+
+
+@R.add("/intel/packs/{pack}/entries", ["DELETE"])
+async def intel_entry_remove(request: Request, c: Any) -> dict:
+    intel = _intel(c)
+    pack = request.path_params["pack"]
+    need(pack in intel.registry.packs, "pack")
+    value = request.query_params.get("value", "")
+    need(bool(value) and value in intel.registry.added.get(pack, {}), "entry")
+    await intel.store.remove_user_entry(pack, "add", value)
+    await intel.store.remove_user_entry(pack, "mute", value)
+    await intel.refresh_state()
+    return {"ok": True}
+
+
+@R.add("/intel/packs/{pack}/mute", ["POST"])
+async def intel_entry_mute(request: Request, c: Any) -> dict:
+    intel = _intel(c)
+    pack = request.path_params["pack"]
+    need(pack in intel.registry.packs, "pack")
+    if not intel.registry.packs[pack].editable:
+        raise ApiError("Entries in this kind of pack cannot be muted one by one. Switch the whole pack off instead.", 400)
+    b = await parse(request, S.IntelMute)
+    if b.muted:
+        await intel.store.add_user_entry(pack, "mute", b.value, 0)
+    else:
+        await intel.store.remove_user_entry(pack, "mute", b.value)
+    await intel.refresh_state()
+    return {"ok": True}
+
+
+@R.add("/intel/test", ["POST"])
+async def intel_test(request: Request, c: Any) -> dict:
+    """Run every detector on a text, even ones that are Off, and show each one's opinion next to the real verdict."""
+    intel = _intel(c)
+    b = await parse(request, S.IntelTest)
+    level = b.level if b.level in (*LEVELS, "bot") else "everyone"
+    v = c.engine.evaluate(ModInput("test", "tester", b.name or "tester", b.text, level), stateless=True)
+    return {"results": intel.test(b.text, b.name, level), "verdict": v.to_dict(), "thresholds": _thresholds(c), "mode": c.cfg.get("mod_mode")}
+
+
+@R.add("/intel/learning", ["GET"])
+async def intel_learning(request: Request, c: Any) -> dict:
+    return await _intel(c).learning_stats()
+
+
+@R.add("/intel/examples", ["GET"])
+async def intel_examples(request: Request, c: Any) -> dict:
+    intel = _intel(c)
+    q = request.query_params
+    limit, offset = _page(request, 40)
+    rows, total = await intel.store.list_examples(q.get("label", ""), q.get("q", ""), limit, offset)
+    return {"items": rows, "total": total}
+
+
+@R.add("/intel/examples/{id:int}", ["DELETE"])
+async def intel_forget(request: Request, c: Any) -> dict:
+    need(await _intel(c).forget(request.path_params["id"]), "lesson")
+    return {"ok": True}
+
+
+@R.add("/intel/learning/reset", ["POST"])
+async def intel_reset(request: Request, c: Any) -> dict:
+    return {"ok": True, "forgotten": await _intel(c).reset_learning()}
+
+
+@R.add("/intel/teach", ["POST"])
+async def intel_teach(request: Request, c: Any) -> dict:
+    """'Teach the bot': this message was spam, or this message was fine. Works from a history row or from any text."""
+    from ..intel.service import TEACH_WEIGHT
+    intel = _intel(c)
+    b = await parse(request, S.IntelTeach)
+    text, author, author_id, demo = b.text, b.author, "", False
+    if b.action_id is not None:
+        a = await c.store.get_action(b.action_id)
+        need(a is not None, "request")
+        text, author, author_id, demo = a.get("body", "") or text, a.get("author_name", ""), a.get("author_id", ""), bool(a.get("demo"))
+    if not text.strip():
+        raise ApiError("There is no message to learn from.", 400)
+    res = await intel.learn(text, b.label, source="teach", author=author, weight=TEACH_WEIGHT, demo=demo)
+    if author_id and intel.store is not None:
+        await intel.store.label_shadow(author_id, text, b.label)
+    return res | {"examples": await intel.store.example_counts()}
+
+
+@R.add("/intel/shadow", ["GET"])
+async def intel_shadow(request: Request, c: Any) -> dict:
+    q = request.query_params
+    limit, offset = _page(request, 30)
+    return await _intel(c).shadow_report(_hours(request, 168), q.get("detector", ""), limit, offset, q.get("differs") in ("1", "true"))
+
+
 # ================================================================================= live feed (Server-Sent Events)
 @R.add("/events", ["GET"])
 async def events(request: Request, c: Any) -> Any:

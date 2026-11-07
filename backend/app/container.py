@@ -12,6 +12,7 @@ from .db import Database
 from .events import EventBus
 from .hub import Hub
 from .moderation import ModerationEngine, PermitStore
+from .intel import Intelligence
 from .runtime_config import RuntimeConfig
 from .security import OwnerAuth
 from .seed import seed_defaults
@@ -34,6 +35,8 @@ class Container:
         self.auth = OwnerAuth(self.settings, self.db)
         self.permits = PermitStore()
         self.engine = ModerationEngine(self.cfg, self.permits)
+        self.intel = Intelligence(self.cfg, self.db)       # 1.1.6: knowledge packs and detectors
+        self.engine.attach_intel(self.intel)
         self.renderer = Renderer(self.cfg, self.store, uptime_fn=lambda: self.hub.uptime())
         self.commands = CommandEngine(self.cfg, self.store, self.renderer, self.permits, uptime_fn=lambda: self.hub.uptime(),
                                       channel_fn=self._channel_name)
@@ -72,6 +75,10 @@ class Container:
         await self.store.load_regulars()
         if self.cfg.get("command_seed_defaults"):
             await seed_defaults(self.db, self.store)
+        try:
+            await self.intel.start()
+        except Exception:  # the intelligence layer must never stop the bot from booting
+            logger.exception("Intelligence failed to start; continuing with the original moderation only")
         await self.hub.reload_blacklist()
         await self.quota.sync()
         await self.hub.apply_mode()

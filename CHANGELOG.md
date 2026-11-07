@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.6
+
+### Intelligence without AI services
+The bot can now recognise spam and scams well beyond a phrase list, using plain algorithms and data files that run on your own server. No AI model, no outside API. Full guide: `docs/KNOWLEDGE.md`.
+
+- **Knowledge, split by category.** `backend/app/intel/knowledge/packs/` holds one JSON file per category: promo and sub-for-sub, crypto fraud, fake prizes, account phishing, contact lures, adult-link bots, Kenya and East Africa scams (English, Swahili and Sheng), scam message shapes, risky links, disguise maps, official-sounding names, and training examples in English and Swahili/Sheng. Each pack has a version, date and sources (researched November 2026 from current reports on live-chat spam, crypto-doubling streams, abused link endings and M-Pesa fraud). An empty **abusive language** pack ships for you to fill; nothing is shipped there.
+- **Nine detectors**, each Off, Shadow or Active, with its own sensitivity and maximum points: Knowledge packs (disguise-proof exact matching), Fuzzy matching (trigram index and edit distance, plus a consonant skeleton for dropped vowels), Learning filter (Naive Bayes over words, pairs and fragments, in English and Swahili), Link intelligence (shorteners, abused endings, brand lookalikes, brand-in-subdomain, the @ trick, raw IPs), Viewer reputation (trust discount, repeat offenders, blocked text returning on a new account), Scam patterns (shapes combined as independent hints), Bot shape (keyboard-mashing, template spam, channel waves), Evasion tricks, Lookalike names.
+- **Safe by design.** Every new detector starts in **Shadow**: it runs and is logged but never changes what happens in chat. Agreeing detectors count for less each time, and intelligence alone can never reach the timeout score, so it cannot time out or ban anyone by itself. A failing detector is skipped, never fatal. With everything in shadow, verdicts are identical to 1.1.5 (tested).
+- **It learns from you.** Approve teaches "spam", Reject teaches "fine", "Teach the bot" gives a deliberate lesson, and ordinary messages from trusted chatters teach "fine" slowly. Every lesson is stored and can be forgotten; accuracy is measured honestly (each message is guessed before it is learned). Demo decisions never teach it unless you allow it.
+
+### Dashboard: Settings, Knowledge
+- **Overview**: the state of the bot's mind and the one most useful next step.
+- **Packs**: browse and search every pack, switch packs on or off, add your own entries, mute entries you do not want, see where each pack's knowledge came from.
+- **Detectors**: mode, sensitivity and most points for each, and **Try it here**, which shows every detector's opinion on any message, even ones that are Off.
+- **Learning**: lessons, accuracy over time, the words it distrusts and trusts, teach by pasting a message, forget one lesson or all of them, and what it may learn from.
+- **Shadow report**: what detectors would have done, how often your own decisions agreed, and a one-tap "Switch to Active" when one is mostly right.
+- **Moderation, History**: "Why and teach" explains why a message was flagged, shows what each detector thinks, and lets you teach the bot.
+- Command palette: Open Knowledge, Shadow report, Teach the bot, Knowledge packs.
+
+### API
+New under `/api/intel/`: `overview`, `packs`, `packs/{id}/enable`, `packs/{id}/entries` (GET, POST, DELETE), `packs/{id}/mute`, `test`, `learning`, `examples`, `examples/{id}` (DELETE), `learning/reset`, `teach`, `shadow`. Verdicts gain a `shadow` list. New tables: `intel_examples`, `intel_shadow`, `intel_packs`, `intel_user`.
+
+### Settings
+New `INTEL_*` settings (editable in the dashboard). `.env.example` regenerated.
+
+### Technical
+- New `app/intel/` package: `text.py`, `knowledge/`, `detectors/` (one file each), `service.py`, `store.py`. About 0.7 ms per message with every detector on.
+- 25 new tests (`tests/test_intel.py`, plus two API tests). Version bumped to 1.1.6.
+
 ## 1.1.5
 
 ### Quota

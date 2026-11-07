@@ -185,6 +185,35 @@ _f(G, "mod_interval_max_cv", 0.15, "Timing variation (std/mean) below this looks
 _f(G, "mod_interval_max_mean_gap", 120.0, "Only judge users whose average gap is under this many seconds.")
 _f(G, "mod_interval_weight", 30, "Score added by the timing signal.")
 
+# ---------------------------------------------------------------------------------------------
+# 1.1.6 Intelligence: knowledge packs plus detectors that need no AI model and no outside service.
+# Every detector can be Off, Shadow (runs and is logged, never acts) or Active (adds to the message score).
+# (id, title, default max points, default sensitivity 0..1). New detectors start in shadow mode.
+INTEL_DETECTORS: list[tuple[str, str, int, float]] = [
+    ("packs", "Knowledge packs", 100, 0.5),
+    ("fuzzy", "Fuzzy matching", 45, 0.5),
+    ("learning", "Learning filter", 45, 0.5),
+    ("links", "Link intelligence", 45, 0.5),
+    ("reputation", "Viewer reputation", 30, 0.5),
+    ("scam", "Scam patterns", 55, 0.5),
+    ("shape", "Bot shape", 30, 0.5),
+    ("evasion", "Evasion tricks", 25, 0.5),
+    ("names", "Lookalike names", 45, 0.5),
+]
+G = "Intelligence"
+_f(G, "intel_enabled", True, "Run the intelligence layer (knowledge packs and detectors). When off, only the original moderation signals run.")
+for _id, _title, _cap, _sens in INTEL_DETECTORS:
+    _f(G, f"intel_{_id}_mode", "shadow", f"{_title}: 'off', 'shadow' (runs and is logged, never acts) or 'active' (adds to the score).")
+    _f(G, f"intel_{_id}_weight", _cap, f"{_title}: the most points this detector can add to a message score.")
+    _f(G, f"intel_{_id}_sensitivity", _sens, f"{_title}: 0 is cautious (fewer catches), 1 is eager (more catches, more mistakes).")
+_f(G, "intel_learn_auto", True, "Learn from your Approve and Reject decisions in Moderation.")
+_f(G, "intel_learn_from_demo", False, "Also learn from simulated (demo) decisions. Off by default so test data never teaches the bot.")
+_f(G, "intel_learn_trusted_ham", True, "Learn that ordinary messages from regulars, members and mods are fine (a few per minute at most).")
+_f(G, "intel_learn_prior", 0.15, "How much of real chat is expected to be spam (0.01 to 0.5). Lower makes the learning filter more careful.")
+_f(G, "intel_example_cap", 5000, "Most learned messages to keep. The oldest are forgotten first.")
+_f(G, "intel_shadow_retention_days", 14, "How long shadow-mode findings are kept for the report.")
+_f(G, "intel_protected_names", "", "Names to guard against copycats, comma separated (your channel name, your mods). Names of the owner and mods seen in chat are added automatically.")
+
 G = "Commands"
 _f(G, "command_prefix", "!", "Character(s) that start a chat command.")
 _f(G, "command_default_cooldown", 5, "Default global cooldown (seconds) for new commands.")
@@ -251,12 +280,14 @@ EDITABLE_PREFIXES = (
     "mod_", "command_", "urlfetch_", "demo_", "yt_", "timers_", "reminders_", "scheduler_",
     "telegram_notify_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
     "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_",
+    "intel_",
 )
 EDITABLE_KEYS = {"bot_mode", "telegram_mode", "owner_timezone"}
 ENUMS: dict[str, list[str]] = {
     "bot_mode": ["demo", "live"],
     "telegram_mode": ["webhook", "polling"],
     "mod_mode": ["off", "suggest", "auto"],
+    **{f"intel_{i}_mode": ["off", "shadow", "active"] for i, *_ in INTEL_DETECTORS},
 }
 
 

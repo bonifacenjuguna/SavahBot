@@ -160,3 +160,31 @@ class ModTest(_In):
 
 class QuotaSet(_In):
     used: int = Field(ge=0, le=1_000_000)
+
+
+# ---- 1.1.6 intelligence
+class IntelEnable(_In):
+    enabled: bool
+
+
+class IntelEntry(_In):
+    value: str = Field(min_length=2, max_length=200)
+    weight: int = Field(default=0, ge=0, le=100)
+
+
+class IntelMute(_In):
+    value: str = Field(min_length=1, max_length=300)
+    muted: bool
+
+
+class IntelTest(_In):
+    text: str = Field(max_length=1000)
+    name: str = Field(default="", max_length=100)
+    level: str = "everyone"
+
+
+class IntelTeach(_In):
+    label: str = Field(pattern="^(spam|ham)$")
+    text: str = Field(default="", max_length=1000)
+    action_id: int | None = None
+    author: str = Field(default="", max_length=100)

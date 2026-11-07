@@ -63,6 +63,22 @@ SCHEMA: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_chat_ts ON chat_messages (ts)",
     "CREATE INDEX IF NOT EXISTS idx_actions_status ON mod_actions (status, ts)",
     "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (status, due)",
+    # 1.1.6 intelligence: what the bot learned, what its shadow detectors saw, and your pack choices
+    """CREATE TABLE IF NOT EXISTS intel_examples (
+        id {PK}, ts {REAL} NOT NULL, label TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'teach', body TEXT NOT NULL,
+        author TEXT NOT NULL DEFAULT '', pred {REAL}, weight {REAL} NOT NULL DEFAULT 1, demo INTEGER NOT NULL DEFAULT 0)""",
+    """CREATE TABLE IF NOT EXISTS intel_shadow (
+        id {PK}, ts {REAL} NOT NULL, platform TEXT NOT NULL DEFAULT '', author_id TEXT NOT NULL DEFAULT '',
+        author_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', detector TEXT NOT NULL, signal TEXT NOT NULL,
+        weight INTEGER NOT NULL, detail TEXT NOT NULL DEFAULT '', would TEXT NOT NULL DEFAULT 'allow',
+        actual TEXT NOT NULL DEFAULT 'allow', label TEXT NOT NULL DEFAULT '', demo INTEGER NOT NULL DEFAULT 0)""",
+    "CREATE TABLE IF NOT EXISTS intel_packs (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL)",
+    """CREATE TABLE IF NOT EXISTS intel_user (
+        id {PK}, pack TEXT NOT NULL, kind TEXT NOT NULL, value TEXT NOT NULL, weight INTEGER NOT NULL DEFAULT 0,
+        created {REAL} NOT NULL, UNIQUE (pack, kind, value))""",
+    "CREATE INDEX IF NOT EXISTS idx_intel_examples_ts ON intel_examples (ts)",
+    "CREATE INDEX IF NOT EXISTS idx_intel_shadow_ts ON intel_shadow (ts)",
+    "CREATE INDEX IF NOT EXISTS idx_intel_shadow_author ON intel_shadow (author_id, ts)",
 ]
 
 

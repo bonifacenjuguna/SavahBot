@@ -56,6 +56,7 @@ class Verdict:
     exempt: bool = False
     strikes: int = 0
     blacklist_ids: list[int] = field(default_factory=list)
+    shadow: list[dict[str, Any]] = field(default_factory=list)   # 1.1.6: what Shadow-mode detectors found (never changes the score)
 
     @property
     def reasons(self) -> list[str]:
@@ -69,6 +70,7 @@ class Verdict:
             "exempt": self.exempt,
             "strikes": self.strikes,
             "signals": [{"name": s.name, "weight": s.weight, "detail": s.detail} for s in self.signals],
+            "shadow": self.shadow,
         }
 
 
@@ -177,10 +179,25 @@ class ModerationEngine:
         self.sims = SimilarityTracker()
         self.behavior = BehaviorTracker()
         self._strikes: dict[str, deque[float]] = {}
+        self.intel: Any = None                 # 1.1.6: the Intelligence service, attached by the container
+        self._blacklist: list[dict] = []
+
+    def attach_intel(self, intel: Any) -> None:
+        self.intel = intel
+        intel.set_blacklist(self._blacklist)
+
+    def action_for_score(self, score: int) -> str:
+        """The action a bare score reaches (strikes aside). Used to report what a shadow detector would have changed."""
+        c = self.cfg.get
+        return ("ban" if score >= c("mod_score_ban") else "timeout" if score >= c("mod_score_timeout") else
+                "delete" if score >= c("mod_score_delete") else "flag" if score >= c("mod_score_flag") else "allow")
 
     # --- configuration ---------------------------------------------------------------------
     def set_blacklist(self, entries: list[dict]) -> None:
         self.matcher.rebuild(entries)
+        self._blacklist = list(entries)
+        if self.intel is not None:
+            self.intel.set_blacklist(entries)
 
     def exempt(self, level: str) -> bool:
         c = self.cfg.get
@@ -212,18 +229,22 @@ class ModerationEngine:
         dashboard's 'test a message' box)."""
         c = self.cfg.get
         now = m.ts if m.ts is not None else time.time()
+        if self.intel is not None and not stateless:
+            self.intel.observe_author(m)       # owners and mods are the names worth guarding, so note them before exempting them
         if self.exempt(m.level):
             return Verdict(exempt=True)
         text = m.text or ""
         key = f"{m.platform}:{m.author_id}"
         signals: list[Signal] = []
         blacklist_ids: list[int] = []
+        hit_phrases: list[str] = []
 
         # ---- content signals -------------------------------------------------------------
         if c("mod_blacklist_enabled"):
             hits = self.matcher.scan(text)
             if hits:
                 blacklist_ids = [h["id"] for h in hits if "id" in h]
+                hit_phrases = [h["phrase"] for h in hits]
                 weight = max(int(h.get("weight") or c("mod_blacklist_weight")) for h in hits)
                 signals.append(Signal("blacklist", min(100, weight), ", ".join(h["phrase"] for h in hits[:3])))
 
@@ -295,7 +316,13 @@ class ModerationEngine:
                 signals.append(Signal("timing", c("mod_interval_weight"),
                                       f"posts every {info.mean_gap:.1f}s like clockwork"))
 
-        base = sum(s.weight for s in signals)
+        shadow: list[dict[str, Any]] = []
+        if self.intel is not None:
+            out = self.intel.analyze(m, base_score=sum(s.weight for s in signals), matched=hit_phrases, is_new=is_new, stateless=stateless, now=now)
+            signals.extend(Signal(a.signal, a.weight, a.detail) for a in out.active)
+            shadow = [a.to_dict() for a in out.shadow]
+
+        base = max(0, sum(s.weight for s in signals))
         if base > 0 and is_new:
             signals.append(Signal("new_chatter", c("mod_new_chatter_weight"), "first minutes in chat"))
         score = min(100, base + (c("mod_new_chatter_weight") if base > 0 and is_new else 0))
@@ -322,8 +349,10 @@ class ModerationEngine:
             # The first timeout is always the first rung; each strike beyond the threshold climbs one.
             rung = max(0, strikes - c("mod_strikes_to_timeout"))
             duration = ladder[min(rung, len(ladder) - 1)]
+        if self.intel is not None and not stateless:
+            self.intel.record(m, action, now)
         return Verdict(score=score, action=action, duration=duration, signals=signals, strikes=strikes,
-                       blacklist_ids=blacklist_ids)
+                       blacklist_ids=blacklist_ids, shadow=shadow)
 
     # --- helpers ---------------------------------------------------------------------------
     def _link_signal(self, m: ModInput, text: str, now: float) -> Signal | None:

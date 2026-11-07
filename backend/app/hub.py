@@ -160,7 +160,10 @@ class Hub:
             msg.from_bot = True
 
         verdict: Verdict | None = None
+        intel = self.engine.intel
         if not msg.backfill and not msg.from_bot and self.cfg.get("mod_mode") != "off":
+            if intel is not None:
+                await intel.prepare(msg)
             verdict = self.engine.evaluate(ModInput(msg.platform, msg.author_id, msg.author_name, msg.text, msg.level, msg.ts))
             msg.score, msg.verdict = verdict.score, verdict.action
             if verdict.action != "allow":
@@ -170,6 +173,10 @@ class Hub:
             msg.id = await self.store.add_chat(msg.to_dict() | {"text": msg.text})
         except Exception:
             logger.exception("Could not store chat message")
+        if intel is not None and not msg.backfill and not msg.from_bot:
+            if verdict is not None:
+                await intel.log_shadow(msg, verdict, self.engine.action_for_score)
+            await intel.maybe_learn_trusted(msg, verdict.action if verdict else "allow")
         payload = msg.to_dict() | {"reasons": verdict.reasons if verdict else []}
         self.buffer.append(payload)
         self.bus.publish("chat", payload)
@@ -279,17 +286,36 @@ class Hub:
             self.engine.add_strike(key)
             if a["action"] in ("timeout", "ban"):
                 self._recent_punish[key] = time.time()
+            if self.engine.intel is not None and not a["demo"]:
+                self.engine.intel.note_punished(a["platform"], a["author_id"], a.get("body", ""))
         self.bus.publish("mod_resolved", {"id": id_, "status": status, "action": a["action"], "author": a["author_name"]})
         return {"ok": status != "failed", "status": status, "error": "; ".join(errors)}
 
+    async def _teach(self, a: dict[str, Any] | None, label: str) -> None:
+        """Your decision is a lesson: Approve means this was spam, Reject means it was fine."""
+        intel = self.engine.intel
+        if a is None or intel is None or not a.get("body"):
+            return
+        await intel.learn_decision(a["body"], label, a.get("author_name", ""), bool(a.get("demo")))
+        if intel.store is not None:
+            try:
+                await intel.store.label_shadow(a["author_id"], a["body"], label)
+            except Exception:
+                logger.exception("Could not label shadow findings")
+
     async def approve(self, id_: int) -> dict[str, Any]:
-        return await self._execute(id_)
+        a = await self.store.get_action(id_)
+        res = await self._execute(id_)
+        if res.get("ok"):
+            await self._teach(a, "spam")
+        return res
 
     async def reject(self, id_: int) -> dict[str, Any]:
         a = await self.store.get_action(id_)
         if not a or a["status"] != "pending":
             return {"ok": False, "error": "This request is no longer pending."}
         await self.store.update_action(id_, status="rejected", resolved_ts=time.time())
+        await self._teach(a, "ham")
         self.bus.publish("mod_resolved", {"id": id_, "status": "rejected", "action": a["action"], "author": a["author_name"]})
         return {"ok": True, "status": "rejected"}
 

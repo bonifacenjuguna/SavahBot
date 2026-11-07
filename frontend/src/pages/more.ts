@@ -15,7 +15,7 @@ const BLURB: Record<string, string> = {
   insights: "Charts of chat and moderation",
   demo: "Run simulated chat scenarios",
   setup: "Connect YouTube and Telegram",
-  settings: "Every option, searchable",
+  settings: "Every option, and the bot's Knowledge",
 };
 
 function hero(s: Status | null): { state: "live" | "demo" | "standby"; title: string; detail: string } {

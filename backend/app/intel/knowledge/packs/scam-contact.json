@@ -1,0 +1,87 @@
+{
+ "id": "scam-contact",
+ "version": "2026.11.1",
+ "updated": "2026-11-06",
+ "language": "en",
+ "user_supplied": false,
+ "sources": [
+  {
+   "title": "YouTube on spam, copy-paste waves, creator impersonation and Robux scams in chat",
+   "url": "https://www.theverge.com/2022/12/13/23508062/youtube-comment-spam-warning-violation-detection-bots"
+  },
+  {
+   "title": "Analysis of spammers' behavior on a live streaming chat (IJ-AI)",
+   "url": "https://ijai.iaescore.com/index.php/IJAI/article/download/20659/13070"
+  }
+ ],
+ "title": "Pull-you-off-chat contact lures",
+ "category": "scams",
+ "kind": "phrases",
+ "description": "Messages that move you to WhatsApp, Telegram or DMs, where the real scam happens.",
+ "entries": [
+  {
+   "p": "dm me",
+   "w": 25
+  },
+  {
+   "p": "inbox me",
+   "w": 40
+  },
+  {
+   "p": "text me on",
+   "w": 40
+  },
+  {
+   "p": "message me on",
+   "w": 35
+  },
+  {
+   "p": "whatsapp me",
+   "w": 45
+  },
+  {
+   "p": "chat me on whatsapp",
+   "w": 55
+  },
+  {
+   "p": "telegram me",
+   "w": 45
+  },
+  {
+   "p": "contact me on telegram",
+   "w": 55
+  },
+  {
+   "p": "join my telegram",
+   "w": 50
+  },
+  {
+   "p": "t.me/",
+   "w": 40
+  },
+  {
+   "p": "wa.me/",
+   "w": 45
+  },
+  {
+   "p": "chat.whatsapp.com",
+   "w": 50
+  },
+  {
+   "p": "add me on snapchat",
+   "w": 55
+  },
+  {
+   "p": "my snap is",
+   "w": 50
+  },
+  {
+   "p": "text me at",
+   "w": 40
+  },
+  {
+   "p": "whatsapp +",
+   "w": 55
+  }
+ ]
+}

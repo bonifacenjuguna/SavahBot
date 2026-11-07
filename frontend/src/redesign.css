@@ -231,3 +231,25 @@ body.zoom-open .tabbar { z-index: 10; }
 .line .why.flagged { color: var(--demo); border-color: color-mix(in srgb, var(--demo) 45%, transparent); }
 .line .why.blocked { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
 .line .why .ico { flex: none; }
+
+
+/* ---------- 1.1.6 bottom tab bar: a lit capsule behind the icon instead of a grey slab ---------- */
+.tabbar { --tab-glow: #7d95ff; }
+.tab { background: none; -webkit-tap-highlight-color: transparent; transition: color .2s; }
+.tab > svg, .tab > .ico { position: relative; z-index: 1; transition: transform .35s cubic-bezier(.3, 1.5, .5, 1), color .2s; }
+/* the capsule that glows behind the selected icon */
+.tab::after { content: ""; position: absolute; z-index: 0; top: 4px; left: 50%; width: 54px; height: 30px; margin-left: -27px; border-radius: 15px;
+  background: radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, var(--tab-glow) 38%, transparent), color-mix(in srgb, var(--tab-glow) 14%, transparent) 70%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tab-glow) 35%, transparent), 0 4px 16px -4px color-mix(in srgb, var(--tab-glow) 55%, transparent);
+  opacity: 0; transform: scale(0.4); transition: opacity .2s, transform .35s cubic-bezier(.3, 1.5, .5, 1); }
+/* a bright tab on the top edge of the bar */
+.tab::before { content: ""; position: absolute; top: -7px; left: 50%; width: 0; height: 3px; transform: translateX(-50%); border-radius: 0 0 4px 4px; background: var(--tab-glow);
+  box-shadow: 0 3px 14px 1px color-mix(in srgb, var(--tab-glow) 70%, transparent); transition: width .3s cubic-bezier(.3, 1.4, .5, 1); }
+.tab[aria-current="page"] { color: color-mix(in srgb, var(--tab-glow) 45%, #fff); }
+.tab[aria-current="page"]::after { opacity: 1; transform: scale(1); }
+.tab[aria-current="page"]::before { width: 30px; }
+.tab[aria-current="page"] > svg, .tab[aria-current="page"] > .ico { transform: translateY(-1px) scale(1.08); color: #fff; }
+.tab:active > svg, .tab:active > .ico { transform: scale(0.88); }
+.tab:focus-visible { outline: 2px solid var(--tab-glow); outline-offset: -2px; }
+.tab .badge { z-index: 2; }
+@media (prefers-reduced-motion: reduce) { .tab, .tab::before, .tab::after, .tab > svg, .tab > .ico { transition: none !important; } }

@@ -4,6 +4,8 @@ import { icon } from "../icons.js";
 import { refreshStatus } from "../state.js";
 import { areaNav } from "./kit.js";
 import { empty, pageHead } from "./shared.js";
+import { renderKnowledge } from "./knowledge/index.js";
+import { settingsTabs } from "./knowledge/common.js";
 import type { Page } from "./types.js";
 
 interface Setting {
@@ -15,8 +17,9 @@ export const settings: Page = {
   id: "settings",
   title: "Settings",
   icon: "sliders",
-  blurb: "Every option, searchable",
-  render(root) {
+  blurb: "Every option, and the bot's Knowledge",
+  render(root, query) {
+    if (query.get("tab") === "knowledge") { renderKnowledge(root, query); return; }
     const box = h("div", { class: "block flush" });
     const search = h("input", { type: "search", placeholder: "Search settings", "aria-label": "Search settings" });
     const changedOnly = h("input", { type: "checkbox", class: "switch", "aria-label": "Only settings changed from the default" });
@@ -56,7 +59,7 @@ export const settings: Page = {
     const load = async () => { items = (await get<{ items: Setting[] }>("/api/settings")).items; draw(); };
     search.oninput = draw;
     changedOnly.onchange = draw;
-    mount(root, pageHead("sliders", "Settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."), areaNav("settings"),
+    mount(root, pageHead("sliders", "Settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."), areaNav("settings"), settingsTabs("options"),
       h("div", { class: "row between", style: "margin-bottom:14px" },
         h("div", { class: "input-icon", style: "flex:1 1 280px;max-width:420px" }, icon("search", 16), search),
         h("label", { class: "check small" }, changedOnly, "Changed from default only"), summary),
