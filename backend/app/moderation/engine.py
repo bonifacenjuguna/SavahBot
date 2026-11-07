@@ -182,6 +182,20 @@ class ModerationEngine:
         self.intel: Any = None                 # 1.1.6: the Intelligence service, attached by the container
         self._blacklist: list[dict] = []
 
+    # 1.1.8: what the engine remembers about chatters, as plain data (saved to Redis, restored after a restart)
+    def export_state(self, now: float) -> dict[str, Any]:
+        strikes = {k: list(dq) for k, dq in self._strikes.items() if dq and now - dq[-1] <= 86400}
+        return {"rate": self.rate.export_state(now), "dups": self.dups.export_state(now), "sims": self.sims.export_state(now),
+                "behavior": self.behavior.export_state(now), "strikes": dict(list(strikes.items())[:5000])}
+
+    def import_state(self, data: dict[str, Any]) -> None:
+        self.rate.import_state(data.get("rate") or {})
+        self.dups.import_state(data.get("dups") or {})
+        self.sims.import_state(data.get("sims") or [])
+        self.behavior.import_state(data.get("behavior") or {})
+        for k, ts in (data.get("strikes") or {}).items():
+            self._strikes[str(k)] = deque((float(t) for t in ts), maxlen=50)
+
     def attach_intel(self, intel: Any) -> None:
         self.intel = intel
         intel.set_blacklist(self._blacklist)

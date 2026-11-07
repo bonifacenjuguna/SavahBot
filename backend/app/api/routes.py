@@ -104,21 +104,21 @@ def _demo_filter(c: Any) -> bool:
 @R.add("/health", ["GET"], public=True)
 async def health(request: Request, c: Any) -> dict:
     return {"ok": True, "app": c.cfg.get("app_name"), "version": __version__, "mode": c.cfg.get("bot_mode"),
-            "database": c.db.backend, "uptime": round(time.time() - c.started_at)}
+            "database": c.db.backend, "uptime": round(time.time() - c.started_at), "redis": c.shared.mode}
 
 
 @R.add("/auth/login", ["POST"], public=True)
 async def login(request: Request, c: Any) -> Any:
     body = await parse(request, S.Login)
     key = client_ip(request)
-    wait = c.auth.throttle.retry_after(key)
+    wait = await c.auth.throttle.retry_after(key)
     if wait:
         raise ApiError(f"Too many attempts. Try again in {wait} seconds.", 429)
     if not c.auth.check_password(body.password):
-        c.auth.throttle.fail(key)
+        await c.auth.throttle.fail(key)
         await asyncio.sleep(0.4)
         raise ApiError("That password is not right.", 401)
-    c.auth.throttle.success(key)
+    await c.auth.throttle.success(key)
     token, ttl = c.auth.issue_token()
     return {"token": token, "expires_in": ttl}
 
@@ -169,6 +169,7 @@ async def status(request: Request, c: Any) -> dict:
         "hub": c.hub.status(), "telegram": c.telegram.status(), "youtube": c.youtube.status(), "demo": c.demo.status(),
         "pending": len(await c.store.pending_actions(_demo_filter(c))), "database": c.db.backend, "uptime": round(time.time() - c.started_at),
         "sse_clients": c.bus.subscriber_count,
+        "redis": c.shared.status() | {"leader": c.leader.is_leader, "snapshot": c.keeper.status()},
     }
 
 
@@ -542,7 +543,9 @@ async def set_mode(request: Request, c: Any) -> dict:
 @R.add("/analytics", ["GET"])
 async def analytics(request: Request, c: Any) -> dict:
     hours = float(request.query_params.get("hours", 24))
-    return await summary(c.store, hours, demo=_demo_filter(c))
+    demo = _demo_filter(c)
+    # 1.1.8: with Redis on, a few seconds of caching means many open dashboards (or instances) share one heavy query
+    return await c.shared.cached(f"analytics:{hours}:{demo}", c.cfg.get("shared_cache_seconds"), lambda: summary(c.store, hours, demo=demo))
 
 
 @R.add("/demo", ["GET"])

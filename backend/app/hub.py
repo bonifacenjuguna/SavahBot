@@ -55,12 +55,22 @@ class Hub:
         self._stream_started: float | None = None
         self._sent: deque[tuple[str, float]] = deque(maxlen=50)
         self._recent_punish: dict[str, float] = {}
+        self.shared: Any = None          # 1.1.8: set by the container when Redis is on
+        self.active: Callable[[], bool] | None = None   # 1.1.8: a standby instance must not start a chat source
         self._notify_times: deque[float] = deque()
         self._suppressed = 0
         self._mode_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------ sources and mode
+    # 1.1.8: the "just punished" memory and the recent-message ids, as plain data
+    def export_state(self, now: float) -> dict[str, Any]:
+        return {"punish": {k: t for k, t in self._recent_punish.items() if now - t <= 3600}}
+
+    def import_state(self, data: dict[str, Any]) -> None:
+        for k, t in (data.get("punish") or {}).items():
+            self._recent_punish[str(k)] = float(t)
+
     def register(self, source: ChatSource) -> None:
         self.sources[source.name] = source
 
@@ -73,6 +83,8 @@ class Hub:
 
     async def apply_mode(self) -> dict[str, Any]:
         """Start the chat source that matches bot_mode (demo | live), stopping the previous one."""
+        if self.active is not None and not self.active():
+            return self.status()
         async with self._mode_lock:
             wanted = self.sources.get(self.source_name_for_mode())
             if self.source is not None and self.source is not wanted:
@@ -153,6 +165,11 @@ class Hub:
 
     # ------------------------------------------------------------------ the pipeline
     async def ingest(self, msg: ChatMessage) -> ChatMessage:
+        # With Redis on, a message id is claimed once: a restart, or a second instance overlapping during a hand-over,
+        # never moderates or answers the same live message twice. (Demo and unlabelled messages are not tracked.)
+        if self.shared is not None and self.shared.configured and msg.msg_id and not msg.demo:
+            if not await self.shared.set(f"seen:{msg.platform}:{msg.msg_id}", "1", ex=600, nx=True):
+                return msg
         # Regulars are promoted unless they already hold a higher level.
         if msg.level in ("everyone", "member") and self.store.is_regular(msg.author_id, msg.author_name):
             msg.level = "regular"

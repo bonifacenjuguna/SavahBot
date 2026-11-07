@@ -15,7 +15,8 @@ logger = logging.getLogger("savahbot.scheduler")
 
 
 class Scheduler:
-    def __init__(self, cfg: Any, store: Any, hub: Any, bus: Any) -> None:
+    def __init__(self, cfg: Any, store: Any, hub: Any, bus: Any, active: Any = None) -> None:
+        self.active = active          # 1.1.8: returns False on a standby instance, so only the leader fires timers and reminders
         self.cfg = cfg
         self.store = store
         self.hub = hub
@@ -49,6 +50,8 @@ class Scheduler:
 
     async def tick(self, now: float | None = None) -> None:
         now = now if now is not None else time.time()
+        if self.active is not None and not self.active():
+            return
         if self.cfg.get("reminders_enabled"):
             await self._reminders(now)
         if self.cfg.get("timers_enabled"):

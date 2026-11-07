@@ -245,6 +245,14 @@ _f(G, "demo_chatter_count", 20, "Number of simulated viewers.")
 _f(G, "demo_spam_probability", 0.06, "Chance (0-1) that an ambient demo message is spam.")
 _f(G, "demo_seed", 0, "Random seed (0 = different every run).")
 
+G = "Redis (optional)"
+_f(G, "redis_url", "", "Redis address (redis:// or rediss://). Blank = everything stays in memory. Turns on: moderation memory that survives restarts, shared login lockouts, live events across instances, one leader instance, a short dashboard cache, and restart-proof cooldowns.")
+_f(G, "redis_prefix", "savahbot", "Prefix for every key this bot writes, so one Redis can be shared with other apps.")
+_f(G, "redis_timeout_seconds", 3, "How long to wait for Redis before carrying on in memory.")
+_f(G, "redis_snapshot_seconds", 10, "How often the moderation memory is saved to Redis (0 = never). It is also saved when the bot shuts down.")
+_f(G, "redis_leader_ttl_seconds", 30, "If the leader instance disappears, another one takes over after about this many seconds.")
+_f(G, "shared_cache_seconds", 15, "With Redis on, how long heavy dashboard queries (such as Insights) are reused. 0 = no caching.")
+
 G = "Reserved (future features, unused today)"
 _f(G, "twitch_client_id", "", "Reserved: Twitch application client id.")
 _f(G, "twitch_client_secret", "", "Reserved: Twitch application client secret.")
@@ -254,7 +262,6 @@ _f(G, "kick_client_id", "", "Reserved: Kick application client id.")
 _f(G, "kick_client_secret", "", "Reserved: Kick application client secret.")
 _f(G, "discord_bot_token", "", "Reserved: Discord bot token.")
 _f(G, "discord_webhook_url", "", "Reserved: Discord webhook for alerts.")
-_f(G, "redis_url", "", "Reserved: Redis URL for multi-instance scaling.")
 _f(G, "sentry_dsn", "", "Reserved: Sentry error reporting DSN.")
 _f(G, "smtp_host", "", "Reserved: SMTP host for email alerts.")
 _f(G, "smtp_port", 587, "Reserved: SMTP port.")

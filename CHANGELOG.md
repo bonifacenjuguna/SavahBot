@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.8
+
+### Optional Redis
+Set `REDIS_URL` and the bot uses Redis for six things; leave it empty and nothing changes. Guide: `docs/REDIS.md`.
+
+1. **Moderation memory survives restarts.** Message rates, repeats, near-identical raids, strikes and posting rhythm are saved every 10 seconds and on shutdown, and restored on start.
+2. **Login lockout is shared and restart-proof** (dashboard and Telegram `/claim`).
+3. **Live dashboard events across instances** through Redis pub/sub.
+4. **One leader instance** polls YouTube, runs timers and reminders and polls Telegram; another takes over within about 30 seconds if it stops.
+5. **Short shared cache** for heavy dashboard queries (Insights).
+6. **Restart-proof cooldowns and duplicate protection**: command and auto-reply cooldowns, "just punished" markers, and each live message id is handled once.
+
+- Redis is never required. If it is missing or unreachable, the bot carries on in memory and reconnects by itself.
+- The Redis client is built in (no new package). `REDIS_URL` is no longer "reserved"; new optional variables: `REDIS_PREFIX`, `REDIS_TIMEOUT_SECONDS`, `REDIS_SNAPSHOT_SECONDS`, `REDIS_LEADER_TTL_SECONDS`, `SHARED_CACHE_SECONDS`. `.env.example` regenerated.
+- `/api/status` and `/api/health` report the Redis state.
+- 16 new tests (`tests/test_redis.py`) run against a small stand-in Redis server, so the real wire client is exercised.
+
 ## 1.1.7
 
 ### Bottom navigation (phone)
