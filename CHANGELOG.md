@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.7
+
+### Bottom navigation (phone)
+- The grey highlight behind the selected tab is gone, along with the tap flash.
+- A white bar now sits on the top edge of the footer, above the active tab.
+- Tab icons pop (zoom out, then settle) when you select them, and shrink slightly while pressed. Reduced-motion settings turn this off.
+
+### Sign-in page, redesigned
+- Matches the dashboard theme (colours, accent, light and dark), with a branded card, a show/hide password button and a clear loading state.
+- No more setup hints: the page no longer names the `OWNER_PASSWORD` variable or the Railway logs, and the backend address is no longer printed. It is asked for only when none is set, or under "Connection settings" (leave it empty to keep the current connection).
+- Wrong-password and unreachable-server messages are now plain and friendly.
+- Phone: full-width card. Tablet: centred card. Desktop: brand panel beside the card. Short landscape phones are handled too.
+
 ## 1.1.6
 
 ### Intelligence without AI services

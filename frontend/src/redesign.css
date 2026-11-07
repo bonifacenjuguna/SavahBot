@@ -233,23 +233,86 @@ body.zoom-open .tabbar { z-index: 10; }
 .line .why .ico { flex: none; }
 
 
-/* ---------- 1.1.6 bottom tab bar: a lit capsule behind the icon instead of a grey slab ---------- */
-.tabbar { --tab-glow: #7d95ff; }
-.tab { background: none; -webkit-tap-highlight-color: transparent; transition: color .2s; }
-.tab > svg, .tab > .ico { position: relative; z-index: 1; transition: transform .35s cubic-bezier(.3, 1.5, .5, 1), color .2s; }
-/* the capsule that glows behind the selected icon */
-.tab::after { content: ""; position: absolute; z-index: 0; top: 4px; left: 50%; width: 54px; height: 30px; margin-left: -27px; border-radius: 15px;
-  background: radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, var(--tab-glow) 38%, transparent), color-mix(in srgb, var(--tab-glow) 14%, transparent) 70%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tab-glow) 35%, transparent), 0 4px 16px -4px color-mix(in srgb, var(--tab-glow) 55%, transparent);
-  opacity: 0; transform: scale(0.4); transition: opacity .2s, transform .35s cubic-bezier(.3, 1.5, .5, 1); }
-/* a bright tab on the top edge of the bar */
-.tab::before { content: ""; position: absolute; top: -7px; left: 50%; width: 0; height: 3px; transform: translateX(-50%); border-radius: 0 0 4px 4px; background: var(--tab-glow);
-  box-shadow: 0 3px 14px 1px color-mix(in srgb, var(--tab-glow) 70%, transparent); transition: width .3s cubic-bezier(.3, 1.4, .5, 1); }
-.tab[aria-current="page"] { color: color-mix(in srgb, var(--tab-glow) 45%, #fff); }
-.tab[aria-current="page"]::after { opacity: 1; transform: scale(1); }
-.tab[aria-current="page"]::before { width: 30px; }
-.tab[aria-current="page"] > svg, .tab[aria-current="page"] > .ico { transform: translateY(-1px) scale(1.08); color: #fff; }
-.tab:active > svg, .tab:active > .ico { transform: scale(0.88); }
-.tab:focus-visible { outline: 2px solid var(--tab-glow); outline-offset: -2px; }
+/* ---------- 1.1.7 bottom tab bar: no highlight slab; a white bar on top of the active tab and a "pop" on its icon ---------- */
+.tabbar { border-top: 1px solid rgba(255, 255, 255, 0.07); padding-top: 4px; -webkit-tap-highlight-color: transparent; }
+.tab, .tab:hover, .tab:focus, .tab:active, .tab[aria-current="page"] { background: transparent; box-shadow: none; -webkit-tap-highlight-color: transparent; }
+.tab { outline: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; transition: color .2s; }
+.tab > svg, .tab > .ico { transition: transform .22s cubic-bezier(.3, 1.6, .5, 1), color .2s; will-change: transform; }
+.tab:focus-visible { outline: 2px solid #fff; outline-offset: -3px; border-radius: 10px; }
+/* the white bar that sits on the top edge of the footer, over the active tab */
+.tab::before { content: ""; position: absolute; top: -5px; left: 50%; width: 30px; height: 3px; border-radius: 0 0 4px 4px; background: #fff;
+  transform: translateX(-50%) scaleX(0); transform-origin: center; opacity: 0; box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+  transition: transform .3s cubic-bezier(.3, 1.4, .5, 1), opacity .2s; }
+.tab[aria-current="page"]::before { transform: translateX(-50%) scaleX(1); opacity: 1; }
+.tab[aria-current="page"] { color: #fff; }
+.tab[aria-current="page"] > svg, .tab[aria-current="page"] > .ico { color: #fff; animation: tab-pop .5s cubic-bezier(.3, 1.4, .5, 1) both; }
+.tab:active > svg, .tab:active > .ico { transform: scale(0.82); animation: none; }
 .tab .badge { z-index: 2; }
-@media (prefers-reduced-motion: reduce) { .tab, .tab::before, .tab::after, .tab > svg, .tab > .ico { transition: none !important; } }
+@keyframes tab-pop { 0% { transform: scale(0.55); } 45% { transform: scale(1.32); } 72% { transform: scale(0.93); } 100% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .tab, .tab::before, .tab > svg, .tab > .ico { transition: none !important; animation: none !important; } }
+
+/* ---------- 1.1.7 login ---------- */
+.login { position: relative; isolation: isolate; min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); background: var(--bg); overflow: hidden; }
+.login-bg { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 85% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(50% 45% at 0% 100%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%); }
+.login-bg::after { content: ""; position: absolute; inset: 0; opacity: .5;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 40%, #000, transparent 75%); mask-image: radial-gradient(70% 60% at 50% 40%, #000, transparent 75%); }
+.login-hero { display: none; }
+.login-pane { display: grid; place-items: center; padding: max(20px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom)); min-height: 100vh; min-height: 100dvh; }
+.login-card { width: min(420px, 100%); display: grid; gap: 16px; padding: 30px 26px 24px; background: color-mix(in srgb, var(--raised) 88%, transparent); border: 1px solid var(--line); border-radius: 20px;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 6%, transparent) inset, 0 30px 60px -30px rgba(5, 8, 20, .55); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: login-in .5s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes login-in { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+.lc-top { display: grid; justify-items: center; gap: 14px; text-align: center; }
+.lc-logo { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 20px; color: var(--accent-ink); background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #000));
+  box-shadow: 0 10px 30px -8px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 rgba(255, 255, 255, .3); }
+.lc-top h1 { margin: 0; font-size: 1.6rem; line-height: 1.15; letter-spacing: -.01em; }
+.lc-top p { margin: 4px 0 0; color: var(--muted); font-size: .95rem; }
+.lc-field { display: grid; gap: 6px; }
+.lc-field > span { font-size: .82rem; font-weight: 600; color: var(--muted); }
+.lc-input { position: relative; display: block; }
+.lc-input > .ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.lc-input input[type] { min-height: 48px; padding: 10px 46px 10px 42px; border-radius: 12px; font-size: 1rem; background: color-mix(in srgb, var(--bg) 70%, var(--raised)); transition: border-color .15s, box-shadow .15s; }
+.lc-input input[type]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 24%, transparent); }
+.lc-input.plain input[type] { padding-left: 14px; padding-right: 14px; }
+.lc-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.lc-eye:hover { color: var(--ink); }
+.lc-eye:focus-visible { outline: 2px solid var(--focus); }
+.lc-err { margin: 0; min-height: 0; padding: 0; font-size: .88rem; color: var(--bad); display: flex; gap: 8px; align-items: center; }
+.lc-err:empty { display: none; }
+.lc-btn { min-height: 50px; border-radius: 12px; font-size: 1rem; font-weight: 600; width: 100%; position: relative;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent)); box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--accent) 80%, transparent); transition: transform .12s, box-shadow .2s, filter .15s; }
+.lc-btn:active:not(:disabled) { transform: scale(.98); }
+.lc-btn .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent-ink) 30%, transparent); border-top-color: var(--accent-ink); animation: lc-spin .7s linear infinite; }
+@keyframes lc-spin { to { transform: rotate(360deg); } }
+.lc-link { justify-self: center; background: none; border: 0; color: var(--muted); font: inherit; font-size: .85rem; cursor: pointer; padding: 6px 10px; border-radius: 8px; display: inline-flex; gap: 6px; align-items: center; }
+.lc-link:hover { color: var(--ink); background: var(--hover); }
+.lc-conn { display: grid; gap: 6px; animation: login-in .25s ease both; }
+.lc-conn small { color: var(--muted); font-size: .78rem; }
+.lc-foot { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 0; color: var(--muted); font-size: .78rem; opacity: .85; }
+.lc-foot .ico { opacity: .8; }
+
+/* tablet and up: roomier card; desktop: brand panel beside it */
+@media (min-width: 720px) { .login-card { padding: 38px 36px 28px; width: min(460px, 100%); } }
+@media (min-width: 1000px) {
+  .login { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+  .login-hero { display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 56px 56px 44px; color: var(--rail-ink); background: linear-gradient(160deg, #0a0d13, #131c33 70%); position: relative; overflow: hidden; }
+  .login-hero::before { content: ""; position: absolute; width: 520px; height: 520px; right: -160px; top: -160px; border-radius: 50%; background: radial-gradient(circle, rgba(125, 149, 255, .28), transparent 68%); }
+  .login-hero::after { content: ""; position: absolute; width: 420px; height: 420px; left: -140px; bottom: -160px; border-radius: 50%; background: radial-gradient(circle, rgba(125, 149, 255, .16), transparent 68%); }
+  .login-hero > * { position: relative; z-index: 1; }
+  .login-hero .mark { display: flex; align-items: center; gap: 12px; color: #fff; font-weight: 700; font-size: 1.25rem; }
+  .login-hero h2 { font-size: clamp(2rem, 3.2vw, 2.8rem); line-height: 1.1; letter-spacing: -.02em; color: #fff; max-width: 14ch; margin: 0 0 14px; }
+  .login-hero p { color: var(--rail-muted); max-width: 42ch; margin: 0; font-size: 1.02rem; }
+  .login-points { display: grid; gap: 12px; margin: 28px 0 0; padding: 0; list-style: none; }
+  .login-points li { display: flex; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .07); color: #e5e9f1; }
+  .login-points .ico { color: #7d95ff; flex: none; }
+  .login-hero small { color: var(--rail-muted); }
+  .login-card { background: var(--raised); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .login-bg { display: none; }
+  .login-pane { background: var(--bg); }
+}
+@media (max-height: 560px) { .login-pane { place-items: start center; } .lc-top { grid-template-columns: auto 1fr; text-align: left; justify-items: start; align-items: center; } .lc-logo { width: 48px; height: 48px; border-radius: 15px; } }
+@media (prefers-reduced-motion: reduce) { .login-card, .lc-conn, .lc-btn .spin { animation: none !important; } }
+.lc-conn[hidden] { display: none; }
