@@ -14,7 +14,7 @@ Set `REDIS_URL` and the bot uses Redis for six things; leave it empty and nothin
 
 - Redis is never required. If it is missing or unreachable, the bot carries on in memory and reconnects by itself.
 - The Redis client is built in (no new package). `REDIS_URL` is no longer "reserved"; new optional variables: `REDIS_PREFIX`, `REDIS_TIMEOUT_SECONDS`, `REDIS_SNAPSHOT_SECONDS`, `REDIS_LEADER_TTL_SECONDS`, `SHARED_CACHE_SECONDS`. `.env.example` regenerated.
-- `/api/status` and `/api/health` report the Redis state.
+- `/api/status` and `/api/health` report the Redis state. The Desk "Status" panel shows a Redis row right under Database (Off, Connecting, Unreachable, Leader or Standby, and when the moderation memory was last saved).
 - 16 new tests (`tests/test_redis.py`) run against a small stand-in Redis server, so the real wire client is exercised.
 
 ## 1.1.7
