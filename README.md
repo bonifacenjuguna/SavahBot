@@ -110,6 +110,19 @@ Score maps to flag, delete, timeout or ban, and repeat offenders climb a timeout
 
 **Modes** (Moderation page or `/mod`): *off* only logs; *suggest* (default) queues the action for your approval in the dashboard and Telegram; *auto* acts immediately and tells you. Messages loaded when the bot first attaches to a chat are stored but never moderated.
 
+## Knowledge layer (1.1.6)
+
+On top of those signals, SavahBot has a library of knowledge and a team of detectors that read it. It is classic, explainable technique inside your bot: no AI model, no API call to judge a message.
+
+- **Packs** (`backend/app/intel/packs/<category>/<name>.json`): scams, spam, abuse, links and domains, impersonation, Swahili and Sheng, safe phrases, normalisation maps and training examples. One file per topic; every pack can be switched Off, Shadow or Live, re-weighted, searched, extended and exported from **Settings > Knowledge**. Your changes are stored in the database over the built-ins, so upgrades never overwrite them.
+- **Detectors**: scam phrases and scam intent (word groups), spam, abuse, threats, typo and disguise matching (also for your own Blocked phrases), link intelligence, impersonation, text tricks, bot-like accounts, Naive Bayes spam-likeness, BM25 similarity to known spam and a raid-wave tracker. Each is Off, Shadow (recorded, never scored) or Live.
+- **Context**: questions and warnings about a scam score low; gameplay talk is protected by safe phrases.
+- **Learning**: every Approve and Reject teaches it. It suggests phrases and safe phrases, tests shadow detectors against your past decisions, and (in auto mode) applies only confident changes. Everything is logged with Undo.
+- **Live data**: public phishing and malware domain lists fetched by your own server, with ETag, a size cap, an interval, never-block protection for well-known sites, refusal of failed or suspiciously shrunken downloads and one-tap rollback.
+- **Safety**: it only adds signals, is capped (`intel_max_weight`, default 60) so it cannot ban on its own, and `INTEL_ENABLED=false` restores the 1.1.5 behaviour exactly. Abuse, statistics, similarity, bot-like and fake-testimonial rules start in Shadow.
+
+Add knowledge by dropping a JSON pack in the right folder (a test validates every pack), or from the dashboard. Pack format: `id`, `kind` (`phrases`, `facets`, `domains`, `tlds`, `words`, `domain_regex`, `maps`, `corpus`), `signal`, `weight`, `entries` (a phrase, or `[phrase, weight]`, or `re:pattern`).
+
 ## Commands, timers and more
 
 - Custom commands with variables: `$(user) $(touser) $(args) $(1) $(count) $(countdown ...) $(uptime) $(time) $(date) $(random 1 100) $(choose a|b) $(math 2+2) $(quote) $(urlfetch https://...)`. `$(math)` is parsed safely (never `eval`) and `$(urlfetch)` blocks private networks and redirects.
@@ -144,13 +157,14 @@ With no `DATABASE_URL` the backend uses a local SQLite file. On first start it p
 ```
 backend/
   app/config.py          every variable, default and description (single source of truth)
-  app/moderation/        normalisation, Aho-Corasick, trackers, scoring engine
+  app/moderation/        normalisation, Aho-Corasick, trackers, scoring engine, plain-words explanations
+  app/intel/             1.1.6 knowledge layer: packs/ (JSON knowledge by category), detectors, learning, live feeds, accuracy check
   app/commands/          command engine, safe variables, safe math
   app/hub.py             message pipeline and approval workflow
   app/services/          youtube (sign-in checks, identity gate, discovery, polling, moderation), telegram, demo, scheduler
   app/api/               REST + live feed (Server-Sent Events)
   scripts/               gen_env_example.py, check_db.py
-frontend/src/            main.ts (shell, login, router), pages/, events.ts (live feed)
+frontend/src/            main.ts (shell, login, router), pages/ (knowledge*.ts = Settings > Knowledge), events.ts (live feed)
 ```
 
 ## What was and was not verified
@@ -164,3 +178,7 @@ Covered by those fake-based tests: account vs target channel, wrong-channel vide
 - The OAuth callback and the `/api/youtube/verify` route over real HTTP, the Google sign-in itself, the PostgreSQL adapter (use `scripts/check_db.py`), a production `vite build`, the real Telegram API, and the Railway and Vercel deploys.
 
 Expect to fix small things on the first real run; the Setup page and the logs are designed to make them easy to find.
+
+**The knowledge layer (1.1.6).** Its algorithms, packs, learning, feeds, routes and demo scenarios have their own tests (about 120), including feeds with the network faked and every shipped pack validated. The accuracy figures in the changelog come from a labelled set kept apart from the training examples, but a few phrase fixes were made after reading its failures, so it is a development benchmark and not proof of how real chat will behave. Starting values are conservative (Shadow mode for the noisier detectors) for that reason.
+
+Not verified here: the Sheng pack is a small starter set written from general knowledge and needs your own additions; the Block List Project feed address (`raw.githubusercontent.com/blocklistproject/Lists/master/scam.txt`) was not independently confirmed (a failed download is shown on the Live data tab and changes nothing); the PostgreSQL path of the new tables follows the existing patterns but was only run on SQLite; and the real-HTTP API tests (`test_api.py`, `test_api_knowledge.py`) need `uvicorn` and could not be run in the build environment, so the same handlers were exercised directly instead, and the dashboard was driven in a real headless browser against the real handlers and database.

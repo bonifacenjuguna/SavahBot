@@ -173,7 +173,7 @@ export function phraseTool(): PhraseTool {
 }
 
 // ====================================================================================================== test lab
-interface Verdict { score: number; action: string; duration: number | null; exempt: boolean; signals: { name: string; weight: number; detail: string }[] }
+interface Verdict { score: number; action: string; duration: number | null; exempt: boolean; confidence?: number; signals: { name: string; weight: number; detail: string; why?: string }[]; shadow?: { name: string; weight: number; why?: string }[] }
 interface TestReply { verdict: Verdict; thresholds?: Thresholds; mode?: string; note: string }
 
 const EXAMPLES: { label: string; text: string }[] = [
@@ -231,8 +231,10 @@ export function testLab(hooks: { block(text: string): void }): TestLab {
       v.signals.length ? h("ul", { class: "sig-list" }, v.signals.map((s) => h("li", null,
         h("div", { class: "row between nowrap" }, h("strong", null, niceName(SIGNAL, s.name)), h("span", { class: "muted small" }, `+${s.weight} points`)),
         h("span", { class: "track" }, h("i", { class: "s2", style: `width:${Math.max(6, ((Number(s.weight) || 0) / top) * 100)}%` })),
-        s.detail ? h("span", { class: "muted small wrap" }, s.detail) : null)))
+        s.why || s.detail ? h("span", { class: "muted small wrap" }, s.why || s.detail) : null)))
         : v.exempt ? null : h("p", { class: "muted small" }, "No checks fired, so the score is 0."),
+      !v.exempt && v.signals.length && typeof v.confidence === "number" ? h("p", { class: "muted small" }, `The bot is ${Math.round(v.confidence * 100)}% sure this is a real problem.`) : null,
+      v.shadow && v.shadow.length ? h("p", { class: "muted small" }, `Also noticed, but not counted (shadow mode): ${v.shadow.map((x) => niceName(SIGNAL, x.name)).join(", ")}. See Settings > Knowledge.`) : null,
       canBlock ? h("div", { class: "lab-cta" }, h("span", { class: "muted small" }, "This got through. Want it caught next time?"), h("button", { class: "btn small", type: "button", onclick: () => hooks.block(text.value) }, icon("ban", 15), "Block this phrase")) : null,
       h("p", { class: "muted small" }, r.note));
   };

@@ -40,6 +40,15 @@ SCENARIOS: dict[str, dict[str, str]] = {
     "bot_timing": {"label": "Clockwork bot", "description": "An account posts every five seconds on the dot (timing analysis). Takes about 35 seconds."},
     "disguised_words": {"label": "Disguised words", "description": "Leetspeak, look-alike letters and spacing hide a banned phrase (normalisation + Aho-Corasick)."},
     "commands": {"label": "Commands", "description": "Viewers use !hello, !uptime, !quote, !dice and !commands."},
+    "scam_wave": {"label": "Scam messages", "description": "Four different scams: a crypto doubler, a fake channel warning, fake support and a fake prize (scam packs, scam intent, link intelligence)."},
+    "typo_scam": {"label": "Typos and disguises", "description": "Misspelt and stretched-out scam phrases ('frree robus', 'd0uble ur b1tcoin') that exact matching alone would miss (typo matching)."},
+    "lookalike_links": {"label": "Look-alike links", "description": "youtub3.com, a Nitro gift site, a short link and a bare IP address (link intelligence)."},
+    "impersonator": {"label": "Impersonator", "description": "Accounts named like the streamer's support team claim to be staff (impersonation guard)."},
+    "art_spam": {"label": "Text tricks", "description": "Zalgo text, Cyrillic look-alikes, hidden characters and symbol art (text-trick detection)."},
+    "swahili_scam": {"label": "Swahili scams", "description": "'Nimekutumia pesa kwa makosa', a fake prize and sub-for-sub in Swahili (language packs)."},
+    "raid_wave": {"label": "Raid wave", "description": "Eight brand-new accounts arrive within seconds, then one posts a suspicious line (raid wave tracker). Takes about 12 seconds."},
+    "warnings_and_questions": {"label": "Warnings and questions", "description": "Viewers warn each other about a scam and ask if it is real. Nothing should be flagged (context awareness)."},
+    "gaming_talk": {"label": "Gaming talk", "description": "'Kill streak', 'nuke incoming', 'I'm dead lol'. Nothing should be flagged (safe phrases)."},
     "mixed": {"label": "Everything", "description": "Runs friendly chat, commands, disguised words and a raid back to back."},
 }
 
@@ -212,6 +221,76 @@ class DemoSource:
     async def _sc_disguised_words(self) -> None:
         n, a = self._newcomer("sneaky")
         await self._post(n, a, "Fr33 R0bux at my pr0file, f r e e  v - b u c k s too")
+
+    async def _sc_scam_wave(self) -> None:
+        for text in ("Double your bitcoin! Send 0.1 BTC and get 0.2 BTC back, whatsapp me +254712345678",
+                     "Your channel will be removed. Verify now at bit.ly/yt-verify",
+                     "Customer support number 0712 345 678, call now to claim your refund",
+                     "CONGRATULATIONS you have been selected as the winner! Claim your prize at claim-prize-now.top"):
+            n, a = self._newcomer("promo")
+            await self._post(n, a, text)
+            await self._sleep(1.2)
+
+    async def _sc_typo_scam(self) -> None:
+        for text in ("frree robus click my pr0file", "d0uble ur b1tcoin n0w guaranteed profit", "cl4im ur fr33 g1ft cards at the link"):
+            n, a = self._newcomer("sneaky")
+            await self._post(n, a, text)
+            await self._sleep(1.2)
+
+    async def _sc_lookalike_links(self) -> None:
+        for text in ("Verify your account at youtub3.com/verify", "Free gift for everyone: discord-nitro.gift",
+                     "Check this out bit.ly/3xYzAb", "Log in here http://192.168.1.50/youtube"):
+            n, a = self._newcomer("linker")
+            await self._post(n, a, text)
+            await self._sleep(1.2)
+
+    async def _sc_impersonator(self) -> None:
+        channel = str(self.cfg.get("demo_channel_name"))
+        await self._post(f"{channel}_Support", "demo-impostor-1", "Hello! I am the admin of this stream. Send your details to receive the reward.")
+        await self._sleep(1.5)
+        await self._post("YouTube Support Team", "demo-impostor-2", "Your channel is at risk. Reply here to verify.")
+
+    async def _sc_art_spam(self) -> None:
+        for text in ("h\u0300\u0301\u0302\u0303e\u0300\u0301\u0302\u0303l\u0300\u0301\u0302\u0303l\u0300\u0301\u0302\u0303o\u0300\u0301\u0302\u0303 everyone",
+                     "fr\u0435e r\u043ebux at my profile",
+                     "w\u200ba\u200bt\u200bc\u200bh my stream",
+                     "\u2588\u2588\u2588\u2588\u2593\u2593\u2593\u2593\u2592\u2592\u2592\u2592\u2591\u2591\u2591\u2591 \u2588\u2588\u2588\u2588\u2593\u2593\u2593\u2593"):
+            n, a = self._newcomer("artist")
+            await self._post(n, a, text)
+            await self._sleep(1.2)
+
+    async def _sc_swahili_scam(self) -> None:
+        for text in ("Nimekutumia pesa kwa makosa tafadhali rudisha", "Umechaguliwa kushinda! Pokea zawadi yako bonyeza link hii",
+                     "Pata pesa haraka mtandaoni wasiliana nasi whatsapp", "Nisub nikusub tuongezane subscribers"):
+            n, a = self._newcomer("mgeni")
+            await self._post(n, a, text)
+            await self._sleep(1.2)
+
+    async def _sc_raid_wave(self) -> None:
+        hellos = ("hi everyone", "hello from nairobi", "just got here", "what are we playing", "mambo vipi", "first time here",
+                  "hey chat", "good evening")
+        for text in hellos:
+            n, a = self._newcomer("arrival")
+            await self._post(n, a, text)
+            await self._sleep(0.9)
+        n, a = self._newcomer("lateguest")
+        await self._post(n, a, "claim your prize now")
+        await self._sleep(1.0)
+        n, a = self._newcomer("lateguest")
+        await self._post(n, a, "nice stream everyone")
+
+    async def _sc_warnings_and_questions(self) -> None:
+        for text in ("don't click that link, it's a scam bot", "is that elon musk giveaway real or a scam?", "mods please ban that bot",
+                     "never share your seed phrase with anyone"):
+            n, a = self._newcomer("careful")
+            await self._post(n, a, text)
+            await self._sleep(1.5)
+
+    async def _sc_gaming_talk(self) -> None:
+        for text in ("kill streak! he is dead lol", "nuke incoming run", "that headshot was insane, destroyed him", "clutch or kick, rush b"):
+            n, a = self._newcomer("gamer")
+            await self._post(n, a, text)
+            await self._sleep(1.5)
 
     async def _sc_commands(self) -> None:
         for line in ["!hello", "!uptime", "!quote", "!dice", "!commands"]:

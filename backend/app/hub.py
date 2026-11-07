@@ -55,22 +55,13 @@ class Hub:
         self._stream_started: float | None = None
         self._sent: deque[tuple[str, float]] = deque(maxlen=50)
         self._recent_punish: dict[str, float] = {}
-        self.shared: Any = None          # 1.1.8: set by the container when Redis is on
-        self.active: Callable[[], bool] | None = None   # 1.1.8: a standby instance must not start a chat source
         self._notify_times: deque[float] = deque()
         self._suppressed = 0
         self._mode_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
+        self.learning: Any = None  # app.intel.Learning: learns from approve/reject decisions (optional)
 
     # ------------------------------------------------------------------ sources and mode
-    # 1.1.8: the "just punished" memory and the recent-message ids, as plain data
-    def export_state(self, now: float) -> dict[str, Any]:
-        return {"punish": {k: t for k, t in self._recent_punish.items() if now - t <= 3600}}
-
-    def import_state(self, data: dict[str, Any]) -> None:
-        for k, t in (data.get("punish") or {}).items():
-            self._recent_punish[str(k)] = float(t)
-
     def register(self, source: ChatSource) -> None:
         self.sources[source.name] = source
 
@@ -83,8 +74,6 @@ class Hub:
 
     async def apply_mode(self) -> dict[str, Any]:
         """Start the chat source that matches bot_mode (demo | live), stopping the previous one."""
-        if self.active is not None and not self.active():
-            return self.status()
         async with self._mode_lock:
             wanted = self.sources.get(self.source_name_for_mode())
             if self.source is not None and self.source is not wanted:
@@ -165,11 +154,6 @@ class Hub:
 
     # ------------------------------------------------------------------ the pipeline
     async def ingest(self, msg: ChatMessage) -> ChatMessage:
-        # With Redis on, a message id is claimed once: a restart, or a second instance overlapping during a hand-over,
-        # never moderates or answers the same live message twice. (Demo and unlabelled messages are not tracked.)
-        if self.shared is not None and self.shared.configured and msg.msg_id and not msg.demo:
-            if not await self.shared.set(f"seen:{msg.platform}:{msg.msg_id}", "1", ex=600, nx=True):
-                return msg
         # Regulars are promoted unless they already hold a higher level.
         if msg.level in ("everyone", "member") and self.store.is_regular(msg.author_id, msg.author_name):
             msg.level = "regular"
@@ -177,12 +161,15 @@ class Hub:
             msg.from_bot = True
 
         verdict: Verdict | None = None
-        intel = self.engine.intel
         if not msg.backfill and not msg.from_bot and self.cfg.get("mod_mode") != "off":
-            if intel is not None:
-                await intel.prepare(msg)
             verdict = self.engine.evaluate(ModInput(msg.platform, msg.author_id, msg.author_name, msg.text, msg.level, msg.ts))
             msg.score, msg.verdict = verdict.score, verdict.action
+            intel = self.engine.intel
+            if intel is not None and intel.pop_wave_started():
+                self.bus.publish("intel_wave", {"ts": msg.ts, "demo": msg.platform == "demo"})
+                if msg.platform != "demo":
+                    await self._notify("\U0001f30a Raid wave: many brand-new accounts started chatting within seconds. "
+                                       "I am watching messages from new accounts more closely for a few minutes.")
             if verdict.action != "allow":
                 await self._handle_verdict(msg, verdict)
 
@@ -190,10 +177,6 @@ class Hub:
             msg.id = await self.store.add_chat(msg.to_dict() | {"text": msg.text})
         except Exception:
             logger.exception("Could not store chat message")
-        if intel is not None and not msg.backfill and not msg.from_bot:
-            if verdict is not None:
-                await intel.log_shadow(msg, verdict, self.engine.action_for_score)
-            await intel.maybe_learn_trusted(msg, verdict.action if verdict else "allow")
         payload = msg.to_dict() | {"reasons": verdict.reasons if verdict else []}
         self.buffer.append(payload)
         self.bus.publish("chat", payload)
@@ -303,38 +286,30 @@ class Hub:
             self.engine.add_strike(key)
             if a["action"] in ("timeout", "ban"):
                 self._recent_punish[key] = time.time()
-            if self.engine.intel is not None and not a["demo"]:
-                self.engine.intel.note_punished(a["platform"], a["author_id"], a.get("body", ""))
+            await self._learn(a, "spam")
         self.bus.publish("mod_resolved", {"id": id_, "status": status, "action": a["action"], "author": a["author_name"]})
         return {"ok": status != "failed", "status": status, "error": "; ".join(errors)}
 
-    async def _teach(self, a: dict[str, Any] | None, label: str) -> None:
-        """Your decision is a lesson: Approve means this was spam, Reject means it was fine."""
-        intel = self.engine.intel
-        if a is None or intel is None or not a.get("body"):
-            return
-        await intel.learn_decision(a["body"], label, a.get("author_name", ""), bool(a.get("demo")))
-        if intel.store is not None:
-            try:
-                await intel.store.label_shadow(a["author_id"], a["body"], label)
-            except Exception:
-                logger.exception("Could not label shadow findings")
-
     async def approve(self, id_: int) -> dict[str, Any]:
-        a = await self.store.get_action(id_)
-        res = await self._execute(id_)
-        if res.get("ok"):
-            await self._teach(a, "spam")
-        return res
+        return await self._execute(id_)
 
     async def reject(self, id_: int) -> dict[str, Any]:
         a = await self.store.get_action(id_)
         if not a or a["status"] != "pending":
             return {"ok": False, "error": "This request is no longer pending."}
         await self.store.update_action(id_, status="rejected", resolved_ts=time.time())
-        await self._teach(a, "ham")
+        await self._learn(a, "ham")
         self.bus.publish("mod_resolved", {"id": id_, "status": "rejected", "action": a["action"], "author": a["author_name"]})
         return {"ok": True, "status": "rejected"}
+
+    async def _learn(self, action: dict[str, Any], label: str) -> None:
+        """Every approve/reject is a training label. Learning must never get in the way of moderation."""
+        if self.learning is None:
+            return
+        try:
+            await self.learning.feedback(action, label)
+        except Exception:
+            logger.exception("Learning from a decision failed")
 
     async def resolve_all(self, approve: bool, demo: bool | None = None) -> dict[str, int]:
         done = failed = 0

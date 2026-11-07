@@ -4,7 +4,6 @@ import { icon, logo } from "../icons.js";
 import { onStatus, status, type Status } from "../state.js";
 import { THEME_ICON, appContext, openPalette, openShortcuts, themePref, type ThemePref } from "../ui.js";
 import { APP_VERSION } from "../version.js";
-import { installApp, onPWAState } from "../pwa.js";
 import { AREAS, tile } from "./kit.js";
 import { empty } from "./shared.js";
 import { setupSteps, type Setup } from "./setup.js";
@@ -16,7 +15,7 @@ const BLURB: Record<string, string> = {
   insights: "Charts of chat and moderation",
   demo: "Run simulated chat scenarios",
   setup: "Connect YouTube and Telegram",
-  settings: "Every option, and the bot's Knowledge",
+  settings: "Every option, searchable",
 };
 
 function hero(s: Status | null): { state: "live" | "demo" | "standby"; title: string; detail: string } {
@@ -88,16 +87,9 @@ export const more: Page = {
         h("button", { class: "mc-link danger", type: "button", onclick: () => ctx.signOut() }, icon("logout", 18), h("span", { class: "grow" }, "Sign out"), icon("chevronRight", 16))),
       h("p", { class: "muted small centered" }, `SavahBot dashboard v${APP_VERSION}`));
 
-    // 1.1.9: install entry. It stays here after the banner is dismissed, and disappears once the app is installed.
-    const installBox = h("section", { class: "more-group", hidden: true });
-    const offInstall = onPWAState((s) => {
-      installBox.hidden = !s.entry;
-      if (s.entry) mount(installBox, h("h2", { class: "mg-title" }, "App"), h("div", { class: "tiles" }, tile({ icon: s.mode === "native" ? "download" : "plusSquare", title: s.label, text: s.hint, onclick: () => void installApp() })));
-    });
-
     mount(root, h("div", { class: "more-page" },
       h("div", { class: "more-head" }, h("h1", null, "More"), h("p", { class: "muted" }, "Everything beyond the daily desk, in one place.")),
-      card, installBox, h("div", { class: "input-icon more-find" }, icon("search", 16), find), sections, account));
+      card, h("div", { class: "input-icon more-find" }, icon("search", 16), find), sections, account));
 
     // ------------------------------------------------------------ live bits: status, counts, setup progress
     drawHero(status);
@@ -115,6 +107,6 @@ export const more: Page = {
       const done = steps.filter((x) => x.done).length;
       setMeta("setup", done === steps.length ? "All set" : `${done} of ${steps.length} done`, done === steps.length ? "ok" : "warn");
     }, () => undefined);
-    return () => { alive = false; off(); offInstall(); };
+    return () => { alive = false; off(); };
   },
 };

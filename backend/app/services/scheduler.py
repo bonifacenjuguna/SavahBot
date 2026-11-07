@@ -15,8 +15,7 @@ logger = logging.getLogger("savahbot.scheduler")
 
 
 class Scheduler:
-    def __init__(self, cfg: Any, store: Any, hub: Any, bus: Any, active: Any = None) -> None:
-        self.active = active          # 1.1.8: returns False on a standby instance, so only the leader fires timers and reminders
+    def __init__(self, cfg: Any, store: Any, hub: Any, bus: Any) -> None:
         self.cfg = cfg
         self.store = store
         self.hub = hub
@@ -26,6 +25,7 @@ class Scheduler:
         self._lines_at: dict[int, int] = {}
         self._last_housekeeping = 0.0
         self._last_expiry = 0.0
+        self.hooks: list[Any] = []  # extra async callables(now), e.g. the knowledge refresh; a failing hook never stops the others
 
     async def start(self) -> None:
         if self._task is None:
@@ -50,8 +50,6 @@ class Scheduler:
 
     async def tick(self, now: float | None = None) -> None:
         now = now if now is not None else time.time()
-        if self.active is not None and not self.active():
-            return
         if self.cfg.get("reminders_enabled"):
             await self._reminders(now)
         if self.cfg.get("timers_enabled"):
@@ -65,6 +63,13 @@ class Scheduler:
             self._last_housekeeping = now
             await self.store.purge(now - self.cfg.get("chat_retention_days") * 86400,
                                    now - self.cfg.get("action_retention_days") * 86400)
+        for hook in self.hooks:
+            try:
+                await hook(now)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Scheduler hook failed")
 
     async def _reminders(self, now: float) -> None:
         for r in await self.store.due_reminders(now):

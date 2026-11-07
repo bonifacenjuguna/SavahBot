@@ -3,9 +3,9 @@ import { h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { refreshStatus } from "../state.js";
 import { areaNav } from "./kit.js";
+import { renderKnowledge } from "./knowledge.js";
 import { empty, pageHead } from "./shared.js";
-import { renderKnowledge } from "./knowledge/index.js";
-import { settingsTabs } from "./knowledge/common.js";
+import { seg } from "./widgets.js";
 import type { Page } from "./types.js";
 
 interface Setting {
@@ -17,9 +17,19 @@ export const settings: Page = {
   id: "settings",
   title: "Settings",
   icon: "sliders",
-  blurb: "Every option, and the bot's Knowledge",
+  blurb: "Every option, searchable",
   render(root, query) {
-    if (query.get("tab") === "knowledge") { renderKnowledge(root, query); return; }
+    // 1.1.6: Settings has two views. "All settings" is the long searchable list that has always been here; "Knowledge" is the new
+    // section for packs, detectors, learning and live data. The address says which one, so links and the back button work.
+    const tab = query.get("tab") === "knowledge" ? "knowledge" : "all";
+    const views = seg<"all" | "knowledge">("Settings view", [{ id: "all", label: "All settings", icon: "sliders" }, { id: "knowledge", label: "Knowledge", icon: "sparkle" }], tab,
+      (v) => { location.hash = v === "knowledge" ? "#/settings?tab=knowledge" : "#/settings"; });
+    if (tab === "knowledge") {
+      const host = h("div");
+      mount(root, pageHead("sparkle", "Knowledge", "What the bot knows and how it uses it: packs of patterns, the detectors that read them, what it learns from you, and live threat lists."), areaNav("settings"),
+        h("div", { style: "margin-bottom:14px" }, views.el), host);
+      return renderKnowledge(host, query);
+    }
     const box = h("div", { class: "block flush" });
     const search = h("input", { type: "search", placeholder: "Search settings", "aria-label": "Search settings" });
     const changedOnly = h("input", { type: "checkbox", class: "switch", "aria-label": "Only settings changed from the default" });
@@ -59,11 +69,13 @@ export const settings: Page = {
     const load = async () => { items = (await get<{ items: Setting[] }>("/api/settings")).items; draw(); };
     search.oninput = draw;
     changedOnly.onchange = draw;
-    mount(root, pageHead("sliders", "Settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."), areaNav("settings"), settingsTabs("options"),
+    mount(root, pageHead("sliders", "Settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."), areaNav("settings"),
+      h("div", { style: "margin-bottom:14px" }, views.el),
       h("div", { class: "row between", style: "margin-bottom:14px" },
         h("div", { class: "input-icon", style: "flex:1 1 280px;max-width:420px" }, icon("search", 16), search),
         h("label", { class: "check small" }, changedOnly, "Changed from default only"), summary),
       box);
     void load().catch((e) => toast(e.message, "error"));
+    return undefined;
   },
 };

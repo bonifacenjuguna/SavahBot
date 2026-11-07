@@ -32,25 +32,6 @@ class CommandEngine:
         self._trig_global: dict[int, float] = {}
         self._trig_user: dict[tuple[int, str], float] = {}
 
-    # 1.1.8: cooldowns as plain data, so a restart does not let a command or auto-reply fire twice in a row
-    def export_state(self, now: float, max_age: float = 86400.0, limit: int = 5000) -> dict[str, Any]:
-        def recent(d: dict) -> list:
-            items = [(k, t) for k, t in d.items() if now - t <= max_age]
-            items.sort(key=lambda kv: kv[1], reverse=True)
-            return items[:limit]
-        return {"g": [[k, t] for k, t in recent(self._last_global)], "u": [[k[0], k[1], t] for k, t in recent(self._last_user)],
-                "tg": [[k, t] for k, t in recent(self._trig_global)], "tu": [[k[0], k[1], t] for k, t in recent(self._trig_user)]}
-
-    def import_state(self, data: dict[str, Any]) -> None:
-        for k, t in data.get("g") or []:
-            self._last_global[int(k)] = float(t)
-        for k, a, t in data.get("u") or []:
-            self._last_user[(int(k), str(a))] = float(t)
-        for k, t in data.get("tg") or []:
-            self._trig_global[int(k)] = float(t)
-        for k, a, t in data.get("tu") or []:
-            self._trig_user[(int(k), str(a))] = float(t)
-
     def make_ctx(self, msg: ChatMessage, name: str, rest: str) -> Ctx:
         return Ctx(platform=msg.platform, author_id=msg.author_id, author_name=msg.author_name, level=msg.level,
                    args=rest.split(), raw_args=rest, channel=self.channel_fn(), command=name, now=msg.ts)

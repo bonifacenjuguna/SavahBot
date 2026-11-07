@@ -113,7 +113,9 @@ export const SIGNAL: Record<string, string> = {
   blacklist: "Blocked phrase", link: "Link", new_chatter: "New chatter", caps: "Shouting", repetition: "Repetition", repeat: "Repetition",
   emotes: "Emote spam", emote: "Emote spam", symbols: "Symbol spam", length: "Very long message", mention: "Mention spam",
   rate: "Message flood", duplicate: "Repeated message", raid: "Copy-paste raid", timing: "Bot-like timing",
-  knowledge: "Knowledge pack", fuzzy: "Close to a blocked phrase", learned: "Learned from your decisions", link_risk: "Risky link", reputation: "Chatter history",
-  scam_pattern: "Scam pattern", bot_shape: "Bot-like shape", evasion: "Disguised text", lookalike_name: "Lookalike name",
+  // 1.1.6 knowledge layer
+  scam: "Scam", spam: "Spam or promotion", abuse: "Abusive language", harassment: "Threat or harassment", typo: "Typo or disguise",
+  link_risk: "Risky link", impersonation: "Impersonation", obfuscation: "Text trick", bot_like: "Bot-like account", intent: "Spam-like wording",
+  known_spam: "Known spam", raid_wave: "Raid wave",
 };
 export const niceName = (map: Record<string, string>, key: string): string => map[key] ?? sentence(String(key).replace(/_/g, " "));

@@ -1,0 +1,28 @@
+{
+ "id": "links.messengers",
+ "category": "links",
+ "kind": "domains",
+ "title": "Messenger invite links",
+ "description": "WhatsApp and Telegram invite links. Often legitimate, but a stranger posting one in a live chat is how scams start.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "role": "messenger",
+ "weight": 22,
+ "default_mode": "live",
+ "entries": [
+  "wa.me",
+  "chat.whatsapp.com",
+  "api.whatsapp.com",
+  "t.me",
+  "telegram.me",
+  "telegram.dog",
+  "signal.me",
+  "signal.group",
+  "m.me",
+  "line.me",
+  "wechat.com",
+  "viber.com"
+ ]
+}

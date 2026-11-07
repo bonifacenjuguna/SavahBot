@@ -32,16 +32,6 @@ class SlidingWindowCounter:
         for k in [k for k, dq in self._events.items() if not dq or now - dq[-1] > window]:
             del self._events[k]
 
-    # 1.1.8: snapshots, so the bot's memory of who is spamming survives a restart (see app/persist.py)
-    def export_state(self, now: float, max_age: float = 3600.0, limit: int = 5000) -> dict:
-        live = [(k, dq) for k, dq in self._events.items() if dq and now - dq[-1] <= max_age]
-        live.sort(key=lambda kv: kv[1][-1], reverse=True)
-        return {k: [t for t in dq if now - t <= max_age][-60:] for k, dq in live[:limit]}
-
-    def import_state(self, data: dict) -> None:
-        for k, ts in (data or {}).items():
-            self._events[str(k)] = deque(float(t) for t in ts)
-
 
 class DuplicateTracker:
     """Counts how often the same user sent the same (canonical) text recently."""
@@ -60,15 +50,6 @@ class DuplicateTracker:
             for k in [k for k, v in self._seen.items() if not v or now - v[-1][0] > window]:
                 del self._seen[k]
         return sum(1 for _, x in dq if x == h)
-
-    def export_state(self, now: float, max_age: float = 3600.0, limit: int = 5000) -> dict:
-        live = [(k, dq) for k, dq in self._seen.items() if dq and now - dq[-1][0] <= max_age]
-        live.sort(key=lambda kv: kv[1][-1][0], reverse=True)
-        return {k: [[t, h] for t, h in dq if now - t <= max_age] for k, dq in live[:limit]}
-
-    def import_state(self, data: dict) -> None:
-        for k, items in (data or {}).items():
-            self._seen[str(k)] = deque(((float(t), str(h)) for t, h in items), maxlen=30)
 
 
 def simhash(text: str, shingle: int = 3) -> int:
@@ -112,13 +93,6 @@ class SimilarityTracker:
             self._items.append((now, author, h))
         return len(authors)
 
-    def export_state(self, now: float, max_age: float = 3600.0) -> list:
-        return [[t, a, h] for t, a, h in self._items if now - t <= max_age]
-
-    def import_state(self, data: list) -> None:
-        for t, a, h in data or []:
-            self._items.append((float(t), str(a), int(h)))
-
 
 @dataclass
 class BehaviorInfo:
@@ -155,12 +129,3 @@ class BehaviorTracker:
                 cv = statistics.pstdev(gaps) / mean_gap
                 regular = mean_gap <= max_mean_gap and cv <= max_cv
         return BehaviorInfo(is_new, len(times), cv, mean_gap, regular)
-
-    def export_state(self, now: float, max_age: float = 86400.0, limit: int = 5000) -> dict:
-        live = [(k, v) for k, v in self._state.items() if v[1] and now - v[1][-1] <= max_age]
-        live.sort(key=lambda kv: kv[1][1][-1], reverse=True)
-        return {k: [first, list(times)] for k, (first, times) in live[:limit]}
-
-    def import_state(self, data: dict) -> None:
-        for k, (first, times) in (data or {}).items():
-            self._state[str(k)] = (float(first), deque((float(t) for t in times), maxlen=12))

@@ -1,5 +1,0 @@
-
-/* why was this flagged */
-.why { display: grid; gap: 12px; }
-.why-msg { margin: 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--raised); border-radius: 0 12px 12px 0; overflow-wrap: anywhere; line-height: 1.45; }
-.why-teach { display: grid; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }

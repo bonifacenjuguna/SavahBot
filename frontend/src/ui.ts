@@ -3,7 +3,6 @@ import { get, post } from "./api.js";
 import { h, mount, sheet, toast } from "./dom.js";
 import { icon } from "./icons.js";
 import type { Page } from "./pages/types.js";
-import { installApp, getPWAState } from "./pwa.js";
 import { refreshStatus, status } from "./state.js";
 
 // ------------------------------------------------------------------ theme
@@ -108,15 +107,13 @@ export function openPalette(ctx: AppContext): void {
     { group: "Quick add", label: "Set a reminder", icon: "bell", run: () => { location.hash = "#/notebook?pane=reminders"; }, keywords: "remind timer" },
     { group: "Quick add", label: "Add a quote", icon: "quote", run: () => { location.hash = "#/community?add=quote"; }, keywords: "quote community" },
     { group: "Quick add", label: "Test a message against the rules", icon: "gauge", run: () => { location.hash = "#/moderation?tab=rules"; }, keywords: "score moderation test try" },
-    { group: "Knowledge", label: "Open Knowledge", icon: "sparkle", run: () => { location.hash = "#/settings?tab=knowledge"; }, keywords: "intelligence ai smart detectors packs brain" },
-    { group: "Knowledge", label: "Shadow report: what the detectors would have done", icon: "eyeOff", run: () => { location.hash = "#/settings?tab=knowledge&view=shadow"; }, keywords: "shadow detectors findings" },
-    { group: "Knowledge", label: "Teach the bot", icon: "sparkle", run: () => { location.hash = "#/settings?tab=knowledge&view=learning"; }, keywords: "learn spam lesson train" },
-    { group: "Knowledge", label: "Knowledge packs", icon: "package", run: () => { location.hash = "#/settings?tab=knowledge&view=packs"; }, keywords: "phrases scams spam packs categories" },
+    { group: "Quick add", label: "Check a message against the knowledge", icon: "flask", run: () => { location.hash = "#/settings?tab=knowledge&view=test"; }, keywords: "knowledge test lab scam spam detect try" },
+    { group: "Go to", label: "Knowledge: packs, detectors and learning", icon: "sparkle", hint: "What the bot knows", run: () => { location.hash = "#/settings?tab=knowledge"; }, keywords: "knowledge intelligence packs detectors learning feeds scam" },
+    { group: "Actions", label: "Review what the bot has learned", icon: "trending", run: () => { location.hash = "#/settings?tab=knowledge&view=learning"; }, keywords: "learning suggestions approve reject" },
     { group: "Actions", label: "Refresh status", icon: "refresh", run: async () => { await refreshStatus(); toast("Status refreshed"); }, keywords: "reload" },
     { group: "Appearance", label: "Theme: follow system", icon: "monitor", run: () => ctx.setTheme("system"), keywords: "theme appearance" },
     { group: "Appearance", label: "Theme: light", icon: "sun", run: () => ctx.setTheme("light"), keywords: "theme appearance" },
     { group: "Appearance", label: "Theme: dark", icon: "moon", run: () => ctx.setTheme("dark"), keywords: "theme appearance" },
-    ...(getPWAState().entry ? [{ group: "Actions", label: getPWAState().label, icon: "download", run: () => installApp(), keywords: "install app pwa home screen dock add" } satisfies Item] : []),
     { group: "Help", label: "Keyboard shortcuts", icon: "keyboard", run: () => openShortcuts(ctx), keywords: "keys help" },
     { group: "Account", label: "Sign out", icon: "logout", run: () => ctx.signOut(), keywords: "logout" },
   ];

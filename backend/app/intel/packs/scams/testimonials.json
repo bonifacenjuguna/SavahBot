@@ -1,0 +1,114 @@
+{
+ "id": "scams.testimonials",
+ "category": "scams",
+ "kind": "phrases",
+ "title": "Fake testimonials",
+ "description": "'I just got my Bitcoin, thank you for the giveaway': bots flood chat with these to make a scam look real. Starts in shadow mode because real giveaways produce honest thank-yous too.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "scam",
+ "weight": 30,
+ "fuzzy": false,
+ "default_mode": "shadow",
+ "entries": [
+  "i just got my bitcoin",
+  "i just received my bitcoin",
+  "i received my bitcoin",
+  "i just got my btc",
+  [
+   "i got my payment",
+   25
+  ],
+  [
+   "i just received my payment",
+   30
+  ],
+  [
+   "i just got paid",
+   25
+  ],
+  [
+   "thank you for the giveaway",
+   25
+  ],
+  [
+   "thanks for the giveaway",
+   25
+  ],
+  [
+   "thank you so much for the giveaway",
+   30
+  ],
+  "thank you for the free",
+  [
+   "just received my",
+   25
+  ],
+  [
+   "just got my reward",
+   30
+  ],
+  [
+   "got my reward",
+   25
+  ],
+  "got my robux",
+  "got my vbucks",
+  "got my giftcard",
+  "got my gift card",
+  [
+   "it really works",
+   30
+  ],
+  [
+   "it works guys",
+   30
+  ],
+  [
+   "it actually works",
+   30
+  ],
+  [
+   "legit it works",
+   35
+  ],
+  "this is real it works",
+  [
+   "i received my money",
+   30
+  ],
+  [
+   "i received my prize",
+   30
+  ],
+  [
+   "withdrawal successful",
+   35
+  ],
+  [
+   "payment received",
+   20
+  ],
+  [
+   "payment confirmed",
+   25
+  ],
+  [
+   "profit confirmed",
+   35
+  ],
+  [
+   "made my first",
+   20
+  ],
+  "thank you mr",
+  "thanks mr",
+  "god bless you sir",
+  "thank you sir for",
+  "i have received my",
+  "i have been paid",
+  "received successfully"
+ ]
+}

@@ -1,6 +1,7 @@
 import "./styles.css";
 import "./redesign.css";
 import "./manage.css";
+import "./knowledge.css";
 import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
@@ -12,7 +13,6 @@ let resetTimer = 0;
 import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
 import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
 import { APP_VERSION } from "./version.js";
-import { initPWA, mountInstallButton } from "./pwa.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -39,7 +39,6 @@ let statusTimer: number | undefined;
 let shellCleanup: (() => void) | null = null;
 
 initTheme();
-initPWA();
 
 function route(): { id: string; query: URLSearchParams } {
   const raw = location.hash.replace(/^#\/?/, "");
@@ -66,67 +65,46 @@ function showLogin(): void {
   feed.stop();
   window.clearInterval(statusTimer);
   const needsBase = !apiBase();
-  const pass = h("input", { type: "password", autocomplete: "current-password", required: true, id: "pw", placeholder: "Enter your password", autocapitalize: "off", spellcheck: false });
-  // The server address is never printed on this page. It is asked for only when none is set, or after "Connection settings".
-  const base = h("input", { type: "url", placeholder: "https://your-server.example", value: "", id: "base", autocomplete: "off", autocapitalize: "off", spellcheck: false, required: needsBase });
-  const err = h("p", { class: "lc-err", role: "alert" });
-  const eye = h("button", { class: "lc-eye", type: "button", "aria-label": "Show password", "aria-pressed": "false", onclick: () => {
-    const show = pass.type === "password";
-    pass.type = show ? "text" : "password";
-    eye.setAttribute("aria-pressed", String(show));
-    eye.setAttribute("aria-label", show ? "Hide password" : "Show password");
-    eye.replaceChildren(icon(show ? "eyeOff" : "eye", 18));
-    pass.focus();
-  } }, icon("eye", 18));
-  const btn = h("button", { class: "btn primary lc-btn", type: "submit" }, icon("lock", 16), "Sign in");
-  const connBox = h("div", { class: "lc-conn", hidden: !needsBase },
-    h("label", { class: "lc-field" }, h("span", null, "Server address"), h("span", { class: "lc-input plain" }, base)),
-    needsBase ? null : h("small", null, "Leave empty to keep the current connection."));
-  const connLink = needsBase ? null : h("button", { class: "lc-link", type: "button", "aria-expanded": "false", onclick: () => {
-    const open = connBox.hidden;
-    connBox.hidden = !open;
-    connLink!.setAttribute("aria-expanded", String(open));
-    if (open) base.focus();
-  } }, icon("sliders", 14), "Connection settings");
-  const setBusy = (on: boolean) => { btn.disabled = on; btn.replaceChildren(...(on ? [h("span", { class: "spin" }), "Signing in"] : [icon("lock", 16), "Sign in"])); };
+  const pass = h("input", { type: "password", autocomplete: "current-password", required: true, id: "pw" });
+  const base = h("input", { type: "url", placeholder: "https://your-app.up.railway.app", value: apiBase(), id: "base" });
+  const err = h("p", { class: "small", style: "color:var(--bad)", role: "alert" });
+  const btn = h("button", { class: "btn primary", type: "submit" }, icon("lock", 16), "Sign in");
   const form = h(
     "form",
     {
-      class: "login-card",
-      novalidate: false,
       onsubmit: (e: Event) => {
         e.preventDefault();
         err.textContent = "";
-        if (base.value.trim()) setApiBase(base.value);
-        setBusy(true);
+        setApiBase(base.value);
+        btn.disabled = true;
         post<{ token: string }>("/api/auth/login", { password: pass.value })
           .then((r) => { setToken(r.token); boot(); })
-          .catch((ex) => { err.textContent = ex instanceof ApiError && ex.status === 401 ? "That password is not right. Try again." : ex instanceof ApiError ? ex.message : "Could not reach the server. Check your connection."; pass.select(); })
-          .finally(() => setBusy(false));
+          .catch((ex) => { err.textContent = ex instanceof ApiError ? ex.message : "Could not sign in."; })
+          .finally(() => (btn.disabled = false));
       },
     },
-    h("div", { class: "lc-top" },
-      h("div", { class: "lc-logo" }, logo(36)),
-      h("div", null, h("h1", null, "Welcome back"), h("p", null, "Sign in to your SavahBot dashboard"))),
-    h("label", { class: "lc-field" }, h("span", null, "Password"), h("span", { class: "lc-input" }, icon("lock", 18), pass, eye)),
-    needsBase ? connBox : null,
+    h("div", { class: "mobile-logo" }, logo(44)),
+    h("div", { class: "head" }, h("h1", null, "Sign in")),
+    h("p", { class: "muted" }, "Owner sign-in. The password is the OWNER_PASSWORD variable, or the one printed once in the Railway logs on first start."),
+    h("label", { class: "field" }, "Password", pass),
+    needsBase
+      ? h("label", { class: "field" }, "Backend address", base)
+      : h("details", null, h("summary", { class: "small muted" }, "Backend address"), h("label", { class: "field" }, "Address", base)),
     err,
     btn,
-    connLink,
-    needsBase ? null : connBox,
-    h("p", { class: "lc-foot" }, icon("shield", 13), `Private, owner access only \u00b7 v${APP_VERSION}`),
+    h("p", { class: "muted small" }, `SavahBot dashboard v${APP_VERSION}`),
   );
-  const hero = h("aside", { class: "login-hero", "aria-hidden": "false" },
-    h("div", { class: "mark" }, logo(36), "SavahBot"),
-    h("div", null,
+  const brand = h("aside", { class: "login-brand" },
+    h("div", { class: "row nowrap mark" }, logo(40), h("span", { class: "brand", style: "font-size:1.3rem" }, "SavahBot")),
+    h("div", { class: "stack" },
       h("h2", null, "Your chat, under control."),
-      h("p", null, "Private moderation for your live chat, with a clear reason behind every decision."),
+      h("p", null, "A private moderation and utility bot for YouTube live chat, run from this dashboard and from Telegram."),
       h("ul", { class: "login-points" },
-        [["shield", "Every moderation decision explains itself"], ["flask", "Practice safely in demo mode"], ["chart", "Live view of chat activity"]]
+        [["shield", "Explainable moderation: every score shows its signals."], ["flask", "Demo mode: simulated chat, nothing sent, no quota used."], ["chart", "Live charts of chat activity and moderation."]]
           .map(([i, t]) => h("li", null, icon(i, 20), h("span", null, t))))),
-    h("small", null, "Owner access only"));
-  mount(root, h("main", { class: "login" }, h("div", { class: "login-bg", "aria-hidden": "true" }), hero, h("div", { class: "login-pane" }, form)));
-  pass.focus({ preventScroll: true });
+    h("span", { class: "small" }, `v${APP_VERSION}`));
+  mount(root, h("main", { class: "login" }, brand, h("div", { class: "login-pane" }, form)));
+  pass.focus();
 }
 
 // ------------------------------------------------------------------------------------------------ shell
@@ -186,12 +164,10 @@ function showShell(): void {
   const themeBtn = h("button", { class: "rail-btn", type: "button", onclick: () => ctx.cycleTheme(), title: "Change theme" }, themeIcon, themeText);
   const out = h("button", { class: "rail-btn", type: "button", onclick: signOut, title: "Sign out" }, icon("logout", 18), h("span", { class: "txt" }, "Sign out"));
   const verTag = h("span", { class: "ver", title: "Dashboard version" }, `v${APP_VERSION}`);
-  const railFoot = h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out);
-  offs.push(mountInstallButton(railFoot, themeBtn)); // 1.1.9: "Install app", shown only while installing makes sense
   const rail = h("aside", { class: "rail" },
     h("div", { class: "rail-brand" }, logo(30), h("span", { class: "brand" }, "SavahBot"), verTag),
     tally, nav,
-    railFoot);
+    h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out));
 
   // ----- top bar
   const tbIco = h("span", { class: "tb-ico", "aria-hidden": "true" }, icon("power", 13));

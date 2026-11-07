@@ -60,25 +60,25 @@ SCHEMA: list[str] = [
         resolved_ts {REAL}, demo INTEGER NOT NULL DEFAULT 0)""",
     "CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)",
     "CREATE TABLE IF NOT EXISTS quota_usage (day TEXT PRIMARY KEY, units INTEGER NOT NULL)",
+    # ---- 1.1.6 knowledge: the owner's changes laid over the built-in packs, live-data feeds, learning ----
+    "CREATE TABLE IF NOT EXISTS knowledge_packs (id TEXT PRIMARY KEY, mode TEXT NOT NULL DEFAULT '', scale {REAL} NOT NULL DEFAULT 1, updated {REAL})",
+    """CREATE TABLE IF NOT EXISTS knowledge_entries (id {PK}, pack_id TEXT NOT NULL, phrase TEXT NOT NULL,
+        is_regex INTEGER NOT NULL DEFAULT 0, weight INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user', gen INTEGER NOT NULL DEFAULT 0, created {REAL},
+        UNIQUE (pack_id, phrase, source, gen))""",
+    "CREATE INDEX IF NOT EXISTS idx_kentries_pack ON knowledge_entries (pack_id)",
+    """CREATE TABLE IF NOT EXISTS knowledge_feeds (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1,
+        gen INTEGER NOT NULL DEFAULT 0, last_run {REAL}, last_ok {REAL}, status TEXT NOT NULL DEFAULT '',
+        entries INTEGER NOT NULL DEFAULT 0, prev_entries INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
+        etag TEXT NOT NULL DEFAULT '')""",
+    """CREATE TABLE IF NOT EXISTS knowledge_suggestions (id {PK}, kind TEXT NOT NULL, pack_id TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', weight INTEGER NOT NULL DEFAULT 0,
+        evidence INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new', created {REAL})""",
+    """CREATE TABLE IF NOT EXISTS knowledge_log (id {PK}, ts {REAL} NOT NULL, kind TEXT NOT NULL, summary TEXT NOT NULL,
+        undo TEXT NOT NULL DEFAULT '', undone INTEGER NOT NULL DEFAULT 0)""",
     "CREATE INDEX IF NOT EXISTS idx_chat_ts ON chat_messages (ts)",
     "CREATE INDEX IF NOT EXISTS idx_actions_status ON mod_actions (status, ts)",
     "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (status, due)",
-    # 1.1.6 intelligence: what the bot learned, what its shadow detectors saw, and your pack choices
-    """CREATE TABLE IF NOT EXISTS intel_examples (
-        id {PK}, ts {REAL} NOT NULL, label TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'teach', body TEXT NOT NULL,
-        author TEXT NOT NULL DEFAULT '', pred {REAL}, weight {REAL} NOT NULL DEFAULT 1, demo INTEGER NOT NULL DEFAULT 0)""",
-    """CREATE TABLE IF NOT EXISTS intel_shadow (
-        id {PK}, ts {REAL} NOT NULL, platform TEXT NOT NULL DEFAULT '', author_id TEXT NOT NULL DEFAULT '',
-        author_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', detector TEXT NOT NULL, signal TEXT NOT NULL,
-        weight INTEGER NOT NULL, detail TEXT NOT NULL DEFAULT '', would TEXT NOT NULL DEFAULT 'allow',
-        actual TEXT NOT NULL DEFAULT 'allow', label TEXT NOT NULL DEFAULT '', demo INTEGER NOT NULL DEFAULT 0)""",
-    "CREATE TABLE IF NOT EXISTS intel_packs (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL)",
-    """CREATE TABLE IF NOT EXISTS intel_user (
-        id {PK}, pack TEXT NOT NULL, kind TEXT NOT NULL, value TEXT NOT NULL, weight INTEGER NOT NULL DEFAULT 0,
-        created {REAL} NOT NULL, UNIQUE (pack, kind, value))""",
-    "CREATE INDEX IF NOT EXISTS idx_intel_examples_ts ON intel_examples (ts)",
-    "CREATE INDEX IF NOT EXISTS idx_intel_shadow_ts ON intel_shadow (ts)",
-    "CREATE INDEX IF NOT EXISTS idx_intel_shadow_author ON intel_shadow (author_id, ts)",
 ]
 
 

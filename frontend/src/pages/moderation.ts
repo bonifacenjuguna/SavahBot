@@ -6,7 +6,6 @@ import { onStatus, status, refreshStatus } from "../state.js";
 import { dateRange, rangeQuery, type RangeValue } from "./kit.js";
 import { actionLabel, approvalList, card, chipFor, empty, pageHead, type Action } from "./shared.js";
 import { phraseTool, testLab } from "./modtools.js";
-import { openWhy } from "./whysheet.js";
 import type { Page } from "./types.js";
 
 const MODES: { id: string; icon: string; title: string; text: string }[] = [
@@ -42,14 +41,13 @@ export const moderation: Page = {
     const loadPending = async () => mount(pending, approvalList((await get<{ items: Action[] }>("/api/moderation/pending")).items, async () => { await loadPending(); await loadHistory(); }));
 
     const historyTable = (rows: Action[]): HTMLElement => rows.length
-      ? h("div", { class: "table-wrap" }, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["When", "Who", "Action", "Outcome", "Why", ""].map((c) => h("th", null, c)))),
+      ? h("div", { class: "table-wrap" }, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["When", "Who", "Action", "Outcome", "Why"].map((c) => h("th", null, c)))),
         h("tbody", null, rows.map((a) => h("tr", null,
           h("td", { "data-label": "When" }, dateTime(a.ts)),
           h("td", { "data-label": "Who" }, h("span", null, a.author_name, a.demo ? h("span", { class: "chip", style: "margin-left:6px" }, "demo") : null)),
           h("td", { "data-label": "Action" }, actionLabel(a)),
           h("td", { "data-label": "Outcome" }, h("div", null, h("span", { class: `chip ${chipFor(a.status)}` }, a.status), a.error ? h("div", { class: "reasons" }, a.error) : null)),
-          h("td", { class: "small muted", "data-label": "Why" }, a.reasons.join(", ") || "-"),
-          h("td", { class: "small", "data-label": "Review" }, h("button", { class: "btn small ghost", type: "button", onclick: () => openWhy(a) }, icon("sparkle", 14), "Why and teach")))))))
+          h("td", { class: "small muted", "data-label": "Why" }, a.reasons.join(", ") || "-"))))))
       : empty("history", hRange.active || hNeedle || hFilter !== "all" ? `No actions match${hRange.active ? ` for ${hRange.label.toLowerCase()}` : ""}.` : "No moderation actions yet.");
     const historyBody = h("div");
     const summary = h("div", { class: "muted small hist-summary" });

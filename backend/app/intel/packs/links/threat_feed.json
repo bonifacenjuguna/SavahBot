@@ -1,0 +1,15 @@
+{
+ "id": "links.threat_feed",
+ "category": "links",
+ "kind": "domains",
+ "title": "Threat lists (live data)",
+ "description": "Domains from public phishing and malware lists, filled by the Live data feeds. Empty until the first refresh.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "role": "scam",
+ "weight": 65,
+ "default_mode": "live",
+ "entries": []
+}

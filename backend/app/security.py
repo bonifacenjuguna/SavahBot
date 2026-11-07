@@ -73,47 +73,14 @@ class LoginThrottle:
         self._state.pop(key, None)
 
 
-class SharedThrottle:
-    """Same rules as LoginThrottle, but with Redis on, the counts live there and survive a restart or a second instance."""
-
-    def __init__(self, shared: Any, max_attempts: int, lockout_seconds: int) -> None:
-        self.shared = shared
-        self.max_attempts = max_attempts
-        self.lockout_seconds = lockout_seconds
-        self.local = LoginThrottle(max_attempts, lockout_seconds)
-
-    async def retry_after(self, key: str) -> int:
-        if not self.shared.configured:
-            return self.local.retry_after(key)
-        left = await self.shared.ttl(f"login:lock:{key}")
-        return int(left) + 1 if left > 0 else 0
-
-    async def fail(self, key: str) -> None:
-        if not self.shared.configured:
-            return self.local.fail(key)
-        n = await self.shared.incr(f"login:fail:{key}", ex=self.lockout_seconds)
-        if n >= self.max_attempts:
-            await self.shared.set(f"login:lock:{key}", "1", ex=self.lockout_seconds)
-            await self.shared.delete(f"login:fail:{key}")
-
-    async def success(self, key: str) -> None:
-        if not self.shared.configured:
-            return self.local.success(key)
-        await self.shared.delete(f"login:fail:{key}")
-        await self.shared.delete(f"login:lock:{key}")
-
-
 class OwnerAuth:
-    def __init__(self, settings: Any, db: Any, shared: Any = None) -> None:
+    def __init__(self, settings: Any, db: Any) -> None:
         self.settings = settings
         self.db = db
         self._password = ""
         self._secret = ""
         self.password_generated = False
-        if shared is None:
-            from .shared import Shared
-            shared = Shared()      # Redis off: the throttle then works in memory exactly as before
-        self.throttle = SharedThrottle(shared, settings.login_max_attempts, settings.login_lockout_minutes * 60)
+        self.throttle = LoginThrottle(settings.login_max_attempts, settings.login_lockout_minutes * 60)
 
     async def init(self) -> None:
         password = self.settings.owner_password or await self.db.kv_get("_owner_password")

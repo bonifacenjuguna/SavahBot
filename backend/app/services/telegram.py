@@ -289,10 +289,10 @@ class TelegramBot:
     async def _claim(self, user_id: int, password: str) -> None:
         key = f"tg:{user_id}"
         auth = self.c.auth
-        if await auth.throttle.retry_after(key) or not auth.check_password(password):
-            await auth.throttle.fail(key)
+        if auth.throttle.retry_after(key) or not auth.check_password(password):
+            auth.throttle.fail(key)
             return
-        await auth.throttle.success(key)
+        auth.throttle.success(key)
         await self.c.db.kv_set("telegram_owner_id", str(user_id))
         self._owner = user_id
         await self.client.send(user_id, Rich("🎉 <b>You are now the owner of this bot.</b>\nOnly your account can use it. Tap /menu to see what it can do."),
