@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.9
+
+### Install SavahBot as an app (PWA)
+The dashboard can now be installed on a phone, tablet or computer and opens in its own window, with no browser bars.
+
+- **A calm install card** appears at the bottom of the signed-in dashboard, only when installing makes sense. It uses the dashboard's own colours, shows the app icon, says what you get, and has **Install** and **Not now**. It never shows on the sign-in screen, while a dialog is open, or while the tab is in the background, and it waits a few seconds after the dashboard opens.
+- **The browser's own install prompt is never shown automatically.** It is held until you press Install.
+- **Not now is remembered, but never final.** The card returns after 3 days, then 14, then 60. An **Install app** button stays in the sidebar, on the **More** page and in the command palette (Ctrl K), so you can install whenever you like. It disappears once the app is installed.
+- **iPhone and iPad get their own steps** (Share, then Add to Home Screen), written for Safari, for other iOS browsers (iOS 16.4 and later), and for apps with a built in browser, where it asks you to open the page in Safari. Android steps are never shown on iOS. Safari 17 on a Mac gets Add to Dock.
+- **Browsers without an install prompt** (for example Firefox on Android) get menu steps. Browsers that cannot install web apps see nothing.
+- **Detection:** `beforeinstallprompt`, `appinstalled`, `display-mode` (standalone, minimal-ui, window-controls-overlay), iOS `navigator.standalone`, and Android app launches. Changes made in another tab are followed.
+- **Home screen shortcuts** (long press the app icon): Desk, Moderation queue, Commands. The manifest also gained a stable `id`, `lang` and `categories`. Existing name, colours and icons are unchanged.
+- **Offline page.** Opening the installed app with no connection shows a branded "You are offline" page instead of a browser error.
+
+### Safety
+- The new service worker (`public/sw.js`) caches **one static page** (`/offline.html`) and nothing else. It only handles page loads, tries the network first, and never touches POST requests, other origins (your backend, fonts), `/api/` paths, requests with an Authorization header, or addresses with a token. Sign-in, the API and the live feed behave exactly as before.
+- The only thing stored by the install card is the dismissal count and time (`savahbot.pwa` in local storage).
+
+### Code
+- New `frontend/src/pwa.ts` (`initPWA()`, called once from `main.ts`) and `pwa.css`. The sidebar button, More tile and palette action read the same state. Two small icons (`share`, `plusSquare`) were added.
+- `vercel.json` adds headers for `sw.js` (never cached), the manifest (correct type) and the offline page.
+
 ## 1.1.8
 
 ### Optional Redis

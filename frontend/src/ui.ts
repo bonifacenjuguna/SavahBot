@@ -3,6 +3,7 @@ import { get, post } from "./api.js";
 import { h, mount, sheet, toast } from "./dom.js";
 import { icon } from "./icons.js";
 import type { Page } from "./pages/types.js";
+import { installApp, getPWAState } from "./pwa.js";
 import { refreshStatus, status } from "./state.js";
 
 // ------------------------------------------------------------------ theme
@@ -115,6 +116,7 @@ export function openPalette(ctx: AppContext): void {
     { group: "Appearance", label: "Theme: follow system", icon: "monitor", run: () => ctx.setTheme("system"), keywords: "theme appearance" },
     { group: "Appearance", label: "Theme: light", icon: "sun", run: () => ctx.setTheme("light"), keywords: "theme appearance" },
     { group: "Appearance", label: "Theme: dark", icon: "moon", run: () => ctx.setTheme("dark"), keywords: "theme appearance" },
+    ...(getPWAState().entry ? [{ group: "Actions", label: getPWAState().label, icon: "download", run: () => installApp(), keywords: "install app pwa home screen dock add" } satisfies Item] : []),
     { group: "Help", label: "Keyboard shortcuts", icon: "keyboard", run: () => openShortcuts(ctx), keywords: "keys help" },
     { group: "Account", label: "Sign out", icon: "logout", run: () => ctx.signOut(), keywords: "logout" },
   ];

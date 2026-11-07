@@ -12,6 +12,7 @@ let resetTimer = 0;
 import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
 import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
 import { APP_VERSION } from "./version.js";
+import { initPWA, mountInstallButton } from "./pwa.js";
 import { desk } from "./pages/desk.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -38,6 +39,7 @@ let statusTimer: number | undefined;
 let shellCleanup: (() => void) | null = null;
 
 initTheme();
+initPWA();
 
 function route(): { id: string; query: URLSearchParams } {
   const raw = location.hash.replace(/^#\/?/, "");
@@ -184,10 +186,12 @@ function showShell(): void {
   const themeBtn = h("button", { class: "rail-btn", type: "button", onclick: () => ctx.cycleTheme(), title: "Change theme" }, themeIcon, themeText);
   const out = h("button", { class: "rail-btn", type: "button", onclick: signOut, title: "Sign out" }, icon("logout", 18), h("span", { class: "txt" }, "Sign out"));
   const verTag = h("span", { class: "ver", title: "Dashboard version" }, `v${APP_VERSION}`);
+  const railFoot = h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out);
+  offs.push(mountInstallButton(railFoot, themeBtn)); // 1.1.9: "Install app", shown only while installing makes sense
   const rail = h("aside", { class: "rail" },
     h("div", { class: "rail-brand" }, logo(30), h("span", { class: "brand" }, "SavahBot"), verTag),
     tally, nav,
-    h("div", { class: "rail-foot" }, h("div", { class: "stat" }, icon("gauge", 16), quotaText), meter, h("div", { class: "stat" }, connIcon, connText), themeBtn, out));
+    railFoot);
 
   // ----- top bar
   const tbIco = h("span", { class: "tb-ico", "aria-hidden": "true" }, icon("power", 13));
