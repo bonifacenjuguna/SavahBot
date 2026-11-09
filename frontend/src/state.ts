@@ -35,6 +35,9 @@ export interface Status {
   demo: { state: string; ambient: boolean; scenarios_running: string[]; channel: string };
   pending: number;
   database: string;
+  /** 1.1.8: optional Redis. Absent when talking to an older backend. */
+  redis?: { mode: "off" | "connecting" | "redis" | "unreachable"; configured: boolean; instance: string; error: string; leader: boolean;
+            snapshot: { enabled: boolean; last_saved: number | null; bytes: number; last_restored: number | null } };
   uptime: number;
   sse_clients: number;
 }

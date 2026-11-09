@@ -32,7 +32,7 @@ class Stack:
     pass
 
 
-async def build_stack(overrides=None, seed=True, seed_value=7, intel=False):
+async def build_stack(overrides=None, seed=True, seed_value=7):
     s = Stack()
     s.db = Database(":memory:")
     await s.db.connect()
@@ -41,10 +41,6 @@ async def build_stack(overrides=None, seed=True, seed_value=7, intel=False):
     s.bus = EventBus()
     s.permits = PermitStore()
     s.engine = ModerationEngine(s.cfg, s.permits)
-    if intel:  # the 1.1.6 intelligence layer; off by default so older tests keep testing the older engine
-        from app.intel import Intel
-        s.intel = Intel(s.cfg, names_fn=lambda: [s.cfg.get("demo_channel_name")])
-        s.engine.intel = s.intel
     s.renderer = Renderer(s.cfg, s.store, uptime_fn=lambda: s.hub.uptime())
     s.commands = CommandEngine(s.cfg, s.store, s.renderer, s.permits, uptime_fn=lambda: s.hub.uptime(),
                                channel_fn=lambda: s.cfg.get("demo_channel_name"))

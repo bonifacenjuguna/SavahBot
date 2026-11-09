@@ -223,7 +223,18 @@ export const desk: Page = {
         h("div", { class: "status-rows" },
           row("youtube", "YouTube", s.youtube.chat_attached ? (s.youtube.title || "Chat attached") : s.youtube.connected ? "Connected, no stream attached" : "Not connected", s.youtube.last_error ? ["bad", "Error"] : s.youtube.chat_attached ? ["ok", "Attached"] : s.youtube.connected ? ["warn", "Idle"] : ["", "Off"]),
           row("telegram", "Telegram", s.telegram.configured ? (s.telegram.bot_username ? `@${s.telegram.bot_username} (${s.telegram.mode})` : s.telegram.mode) : "No bot token", s.telegram.last_error ? ["bad", "Error"] : s.telegram.configured && s.telegram.owner_bound ? ["ok", "Ready"] : ["warn", s.telegram.configured ? "Not claimed" : "Off"]),
-          row("database", "Database", s.database, ["ok", "OK"])));
+          row("database", "Database", s.database, ["ok", "OK"]),
+          redisRow(s, row)));
+    };
+    /** Sits right under Database. Redis is optional, so "off" is a normal state, not a warning. */
+    const redisRow = (s: Status, row: (ic: string, title: string, text: string, chip: [string, string]) => HTMLElement): HTMLElement | null => {
+      const r = s.redis;
+      if (!r) return null;
+      if (r.mode === "off") return row("zap", "Redis", "Not set up, running in memory", ["", "Off"]);
+      if (r.mode === "unreachable") return row("zap", "Redis", "Cannot connect, using memory", ["warn", "Unreachable"]);
+      if (r.mode === "connecting") return row("zap", "Redis", "Connecting", ["warn", "Connecting"]);
+      const saved = r.snapshot.last_saved ? `memory saved ${ago(r.snapshot.last_saved)}` : r.snapshot.enabled ? "memory not saved yet" : "memory saving off";
+      return row("zap", "Redis", `${r.leader ? "Leader" : "Standby"}, ${saved}`, ["ok", r.leader ? "Leader" : "Standby"]);
     };
 
     mount(root,

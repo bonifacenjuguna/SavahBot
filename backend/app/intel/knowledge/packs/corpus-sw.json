@@ -1,0 +1,351 @@
+{
+ "id": "corpus-sw",
+ "version": "2026.11.1",
+ "updated": "2026-11-06",
+ "language": "sw",
+ "user_supplied": false,
+ "sources": [
+  {
+   "title": "The Star: what you need to know about M-Pesa fraud schemes",
+   "url": "https://www.the-star.co.ke/news/2025-03-27-explainer-what-you-need-to-know-about-m-pesa-fraud-schemes"
+  },
+  {
+   "title": "Eastleigh Voice: why 2025 was a perfect storm for Kenyan cybercrime",
+   "url": "https://eastleighvoice.co.ke/technology/263316/why-2025-was-a-perfect-storm-for-kenyan-cybercrime-and-how-to-stay-safe-in-2026"
+  },
+  {
+   "title": "Safaricom: fake or old M-PESA message",
+   "url": "https://www.safaricom.co.ke/fraud-awareness/m-pesa-fraud/fake-old-m-pesa-message"
+  }
+ ],
+ "title": "Training examples: Swahili and Sheng chat",
+ "category": "learning",
+ "kind": "corpus",
+ "description": "Swahili, Sheng and mixed-language chat, next to the scam shapes seen in Kenya. 'Umeshinda' in a game is fine; in a prize message it is not, and the filter learns the difference from context.",
+ "entries": [
+  {
+   "t": "mambo vipi chat",
+   "l": "ham"
+  },
+  {
+   "t": "niaje wasee",
+   "l": "ham"
+  },
+  {
+   "t": "poa sana",
+   "l": "ham"
+  },
+  {
+   "t": "sawa bro",
+   "l": "ham"
+  },
+  {
+   "t": "hii stream ni fire",
+   "l": "ham"
+  },
+  {
+   "t": "asante kwa stream",
+   "l": "ham"
+  },
+  {
+   "t": "nakupenda bro",
+   "l": "ham"
+  },
+  {
+   "t": "umecheza vizuri sana",
+   "l": "ham"
+  },
+  {
+   "t": "mchezo huu ni mzuri",
+   "l": "ham"
+  },
+  {
+   "t": "habari za asubuhi",
+   "l": "ham"
+  },
+  {
+   "t": "habari za jioni",
+   "l": "ham"
+  },
+  {
+   "t": "usiku mwema wote",
+   "l": "ham"
+  },
+  {
+   "t": "tutaonana kesho",
+   "l": "ham"
+  },
+  {
+   "t": "karibu tena",
+   "l": "ham"
+  },
+  {
+   "t": "hongera sana",
+   "l": "ham"
+  },
+  {
+   "t": "pole sana",
+   "l": "ham"
+  },
+  {
+   "t": "kwa kweli umejitahidi",
+   "l": "ham"
+  },
+  {
+   "t": "ule mchezo ulikuwa mkali",
+   "l": "ham"
+  },
+  {
+   "t": "tuko pamoja",
+   "l": "ham"
+  },
+  {
+   "t": "salamu kutoka Mombasa",
+   "l": "ham"
+  },
+  {
+   "t": "salamu kutoka Nairobi",
+   "l": "ham"
+  },
+  {
+   "t": "naangalia kutoka Kisumu",
+   "l": "ham"
+  },
+  {
+   "t": "sauti iko chini kidogo",
+   "l": "ham"
+  },
+  {
+   "t": "tafadhali ongeza sauti",
+   "l": "ham"
+  },
+  {
+   "t": "unatumia simu gani",
+   "l": "ham"
+  },
+  {
+   "t": "mchezo huu unaitwa nini",
+   "l": "ham"
+  },
+  {
+   "t": "wimbo huu ni mzuri",
+   "l": "ham"
+  },
+  {
+   "t": "nimefurahia sana",
+   "l": "ham"
+  },
+  {
+   "t": "endelea hivyo",
+   "l": "ham"
+  },
+  {
+   "t": "umeshinda mchezo huu, hongera",
+   "l": "ham"
+  },
+  {
+   "t": "uko wapi sasa",
+   "l": "ham"
+  },
+  {
+   "t": "ni nani anashinda",
+   "l": "ham"
+  },
+  {
+   "t": "alama ni ngapi",
+   "l": "ham"
+  },
+  {
+   "t": "mimi ni mgeni hapa",
+   "l": "ham"
+  },
+  {
+   "t": "nimejiunga leo",
+   "l": "ham"
+  },
+  {
+   "t": "twende kazi",
+   "l": "ham"
+  },
+  {
+   "t": "ni kali sana",
+   "l": "ham"
+  },
+  {
+   "t": "sema kitu chat",
+   "l": "ham"
+  },
+  {
+   "t": "kesho utakuwa live?",
+   "l": "ham"
+  },
+  {
+   "t": "saa ngapi unaanza",
+   "l": "ham"
+  },
+  {
+   "t": "asante sana kwa kila kitu",
+   "l": "ham"
+  },
+  {
+   "t": "good game bro, umecheza vizuri",
+   "l": "ham"
+  },
+  {
+   "t": "mtu amwambie hello",
+   "l": "ham"
+  },
+  {
+   "t": "hello kutoka Uganda",
+   "l": "ham"
+  },
+  {
+   "t": "habari yako streamer",
+   "l": "ham"
+  },
+  {
+   "t": "leo ni siku nzuri",
+   "l": "ham"
+  },
+  {
+   "t": "niko hapa tangu mwanzo",
+   "l": "ham"
+  },
+  {
+   "t": "hii ni sehemu ninayopenda",
+   "l": "ham"
+  },
+  {
+   "t": "tafadhali cheza wimbo mwingine",
+   "l": "ham"
+  },
+  {
+   "t": "wacha tuone atafanya nini",
+   "l": "ham"
+  },
+  {
+   "t": "nimekupenda bure tu bro",
+   "l": "ham"
+  },
+  {
+   "t": "kazi nzuri sana leo",
+   "l": "ham"
+  },
+  {
+   "t": "Tuma pesa 500 upate 5000 sasa hivi",
+   "l": "spam"
+  },
+  {
+   "t": "Umeshinda KSh 50,000 bonyeza link hapa chini kudai zawadi",
+   "l": "spam"
+  },
+  {
+   "t": "Pata pesa haraka mtandaoni jiunge telegram group",
+   "l": "spam"
+  },
+  {
+   "t": "Jiunge na WhatsApp group kupata kazi za mtandaoni",
+   "l": "spam"
+  },
+  {
+   "t": "Nimekutumia pesa kimakosa tafadhali rudisha",
+   "l": "spam"
+  },
+  {
+   "t": "Safaricom promo umechaguliwa bonyeza hapa",
+   "l": "spam"
+  },
+  {
+   "t": "Tuma kwa hii number 07xx xxx xxx upate zawadi",
+   "l": "spam"
+  },
+  {
+   "t": "Mkopo wa haraka bila CRB tuma ujumbe WhatsApp",
+   "l": "spam"
+  },
+  {
+   "t": "Fuliza limit increase DM me",
+   "l": "spam"
+  },
+  {
+   "t": "sure odds fixed matches VIP tips join telegram",
+   "l": "spam"
+  },
+  {
+   "t": "Ongeza pesa yako mara mbili na M-Pesa leo tu",
+   "l": "spam"
+  },
+  {
+   "t": "Bundles bure za Safaricom bonyeza link",
+   "l": "spam"
+  },
+  {
+   "t": "Kazi ya nyumbani lipwa kila siku WhatsApp me",
+   "l": "spam"
+  },
+  {
+   "t": "Free airtime Safaricom giveaway click here",
+   "l": "spam"
+  },
+  {
+   "t": "Nitumie pesa nikupe mkopo",
+   "l": "spam"
+  },
+  {
+   "t": "KRA refund claim here bonyeza kiungo",
+   "l": "spam"
+  },
+  {
+   "t": "Umeshinda iPhone tuma ada ya usajili",
+   "l": "spam"
+  },
+  {
+   "t": "Pesa bure kwa wote jiunge sasa hivi",
+   "l": "spam"
+  },
+  {
+   "t": "Mikopo ya haraka bila dhamana piga namba hii",
+   "l": "spam"
+  },
+  {
+   "t": "Hustler fund limit increase lipa ada ndogo",
+   "l": "spam"
+  },
+  {
+   "t": "Tuma ksh 200 upate ksh 2000 haraka",
+   "l": "spam"
+  },
+  {
+   "t": "Karibu jiunge group yetu ya betting tips tunashinda kila siku",
+   "l": "spam"
+  },
+  {
+   "t": "Pata kazi Dubai tuma pesa ya usajili WhatsApp",
+   "l": "spam"
+  },
+  {
+   "t": "M-Pesa hack app download hapa",
+   "l": "spam"
+  },
+  {
+   "t": "Umechaguliwa kupata zawadi bonyeza link sasa hivi",
+   "l": "spam"
+  },
+  {
+   "t": "Tuma pesa kwa namba hii upokee mara mbili",
+   "l": "spam"
+  },
+  {
+   "t": "Free bundles Safaricom link in bio",
+   "l": "spam"
+  },
+  {
+   "t": "Jiunge telegram upate pesa bila kuwekeza",
+   "l": "spam"
+  },
+  {
+   "t": "Rudisha pesa niliyotuma kimakosa tafadhali",
+   "l": "spam"
+  }
+ ]
+}

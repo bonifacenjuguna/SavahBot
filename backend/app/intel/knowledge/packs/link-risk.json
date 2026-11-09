@@ -1,0 +1,257 @@
+{
+ "id": "link-risk",
+ "version": "2026.11.1",
+ "updated": "2026-11-06",
+ "language": "en",
+ "user_supplied": false,
+ "sources": [
+  {
+   "title": "Interisle: phishing landscape, most abused endings per capita (via Domain Name Wire)",
+   "url": "https://domainnamewire.com/2025/09/11/report-names-commonly-used-tlds-for-phishing-attacks/"
+  },
+  {
+   "title": "Cybercrime Information Center: spam and phishing activity by top-level domain, 2025",
+   "url": "https://www.cybercrimeinfocenter.org/spam-activity-in-tlds-march-may-2025"
+  },
+  {
+   "title": "ANY.RUN 2025 data on top-level domains abused in phishing (via HackRead)",
+   "url": "https://hackread.com/top-level-domain-names-hackers-abused-phishing-attacks/"
+  }
+ ],
+ "title": "Risky links",
+ "category": "links",
+ "kind": "linkrisk",
+ "description": "Link shorteners, link-in-bio hubs, cheap domain endings that are heavily abused, lookalikes of big brands, and words that give a scam site away. An ending alone is only a hint, since many are used honestly.",
+ "data": {
+  "shorteners": [
+   "bit.ly",
+   "tinyurl.com",
+   "t.co",
+   "goo.gl",
+   "ow.ly",
+   "is.gd",
+   "buff.ly",
+   "rebrand.ly",
+   "cutt.ly",
+   "shorturl.at",
+   "tiny.cc",
+   "rb.gy",
+   "t.ly",
+   "bl.ink",
+   "lnkd.in",
+   "s.id",
+   "v.gd",
+   "clck.ru",
+   "shorte.st",
+   "adf.ly",
+   "ouo.io",
+   "bc.vc",
+   "linktr.ee",
+   "beacons.ai",
+   "carrd.co",
+   "lnk.bio",
+   "bio.link",
+   "solo.to"
+  ],
+  "risky_tlds": {
+   "high": [
+    "xin",
+    "bond",
+    "cfd",
+    "sbs",
+    "icu",
+    "top",
+    "win",
+    "loan",
+    "click",
+    "rest",
+    "help",
+    "cyou",
+    "monster",
+    "buzz",
+    "gdn",
+    "quest",
+    "li",
+    "zip",
+    "mov",
+    "tk",
+    "ml",
+    "ga",
+    "cf",
+    "gq"
+   ],
+   "medium": [
+    "xyz",
+    "online",
+    "vip",
+    "fun",
+    "site",
+    "shop",
+    "store",
+    "cc",
+    "pro",
+    "club",
+    "today",
+    "link",
+    "space",
+    "website",
+    "work",
+    "bar",
+    "ru",
+    "cn"
+   ]
+  },
+  "brands": {
+   "youtube": [
+    "youtube.com",
+    "youtu.be",
+    "youtube-nocookie.com"
+   ],
+   "google": [
+    "google.com",
+    "goo.gl",
+    "g.co"
+   ],
+   "discord": [
+    "discord.com",
+    "discord.gg",
+    "discordapp.com",
+    "discord.media"
+   ],
+   "steam": [
+    "steampowered.com",
+    "steamcommunity.com"
+   ],
+   "roblox": [
+    "roblox.com",
+    "rbxcdn.com"
+   ],
+   "twitch": [
+    "twitch.tv"
+   ],
+   "tiktok": [
+    "tiktok.com"
+   ],
+   "instagram": [
+    "instagram.com"
+   ],
+   "facebook": [
+    "facebook.com",
+    "fb.com",
+    "fb.me"
+   ],
+   "whatsapp": [
+    "whatsapp.com",
+    "wa.me"
+   ],
+   "telegram": [
+    "telegram.org",
+    "t.me",
+    "telegram.me"
+   ],
+   "paypal": [
+    "paypal.com",
+    "paypal.me"
+   ],
+   "binance": [
+    "binance.com"
+   ],
+   "coinbase": [
+    "coinbase.com"
+   ],
+   "metamask": [
+    "metamask.io"
+   ],
+   "safaricom": [
+    "safaricom.co.ke"
+   ],
+   "mpesa": [
+    "safaricom.co.ke"
+   ],
+   "spotify": [
+    "spotify.com"
+   ],
+   "netflix": [
+    "netflix.com"
+   ],
+   "amazon": [
+    "amazon.com",
+    "amzn.to"
+   ],
+   "apple": [
+    "apple.com"
+   ],
+   "microsoft": [
+    "microsoft.com"
+   ],
+   "epicgames": [
+    "epicgames.com"
+   ],
+   "minecraft": [
+    "minecraft.net"
+   ],
+   "tesla": [
+    "tesla.com"
+   ],
+   "kra": [
+    "kra.go.ke"
+   ],
+   "ecitizen": [
+    "ecitizen.go.ke"
+   ]
+  },
+  "scam_words": [
+   "giveaway",
+   "claim",
+   "bonus",
+   "prize",
+   "reward",
+   "nitro",
+   "robux",
+   "vbucks",
+   "airdrop",
+   "wallet",
+   "verify",
+   "login",
+   "secure",
+   "support",
+   "official",
+   "promo",
+   "winner",
+   "double",
+   "invest",
+   "profit",
+   "freemoney",
+   "generator",
+   "unlock",
+   "free",
+   "hack",
+   "earn",
+   "gift"
+  ],
+  "safe_domains": [
+   "youtube.com",
+   "youtu.be",
+   "google.com",
+   "twitch.tv",
+   "twitter.com",
+   "x.com",
+   "instagram.com",
+   "tiktok.com",
+   "facebook.com",
+   "discord.com",
+   "discord.gg",
+   "github.com",
+   "wikipedia.org",
+   "reddit.com",
+   "spotify.com",
+   "steamcommunity.com",
+   "store.steampowered.com",
+   "kick.com",
+   "tenor.com",
+   "giphy.com",
+   "imgur.com",
+   "streamlabs.com"
+  ]
+ }
+}

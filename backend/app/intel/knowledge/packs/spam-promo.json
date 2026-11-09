@@ -1,0 +1,207 @@
+{
+ "id": "spam-promo",
+ "version": "2026.11.1",
+ "updated": "2026-11-06",
+ "language": "en",
+ "user_supplied": false,
+ "sources": [
+  {
+   "title": "YouTube on spam, copy-paste waves, creator impersonation and Robux scams in chat",
+   "url": "https://www.theverge.com/2022/12/13/23508062/youtube-comment-spam-warning-violation-detection-bots"
+  },
+  {
+   "title": "Analysis of spammers' behavior on a live streaming chat (IJ-AI)",
+   "url": "https://ijai.iaescore.com/index.php/IJAI/article/download/20659/13070"
+  }
+ ],
+ "title": "Promo and sub-for-sub",
+ "category": "spam",
+ "kind": "phrases",
+ "description": "Viewers who only came to advertise their own channel, trade subscribes or sell followers.",
+ "entries": [
+  {
+   "p": "sub4sub",
+   "w": 55
+  },
+  {
+   "p": "sub for sub",
+   "w": 55
+  },
+  {
+   "p": "sub 4 sub",
+   "w": 55
+  },
+  {
+   "p": "follow for follow",
+   "w": 50
+  },
+  {
+   "p": "f4f",
+   "w": 35
+  },
+  {
+   "p": "l4l",
+   "w": 35
+  },
+  {
+   "p": "s4s",
+   "w": 35
+  },
+  {
+   "p": "like for like",
+   "w": 45
+  },
+  {
+   "p": "promo for promo",
+   "w": 50
+  },
+  {
+   "p": "check out my channel",
+   "w": 50
+  },
+  {
+   "p": "check my channel",
+   "w": 45
+  },
+  {
+   "p": "check out my stream",
+   "w": 45
+  },
+  {
+   "p": "visit my channel",
+   "w": 45
+  },
+  {
+   "p": "subscribe to my channel",
+   "w": 50
+  },
+  {
+   "p": "sub to my channel",
+   "w": 50
+  },
+  {
+   "p": "come to my stream",
+   "w": 40
+  },
+  {
+   "p": "come watch my stream",
+   "w": 40
+  },
+  {
+   "p": "support me back",
+   "w": 40
+  },
+  {
+   "p": "i will sub back",
+   "w": 50
+  },
+  {
+   "p": "sub back",
+   "w": 35
+  },
+  {
+   "p": "follow me back",
+   "w": 30
+  },
+  {
+   "p": "follow me on",
+   "w": 20
+  },
+  {
+   "p": "view my profile",
+   "w": 40
+  },
+  {
+   "p": "click my profile",
+   "w": 45
+  },
+  {
+   "p": "link in my bio",
+   "w": 40
+  },
+  {
+   "p": "link in bio",
+   "w": 35
+  },
+  {
+   "p": "free subscribers",
+   "w": 70
+  },
+  {
+   "p": "free followers",
+   "w": 70
+  },
+  {
+   "p": "buy followers",
+   "w": 80
+  },
+  {
+   "p": "buy subscribers",
+   "w": 80
+  },
+  {
+   "p": "buy views",
+   "w": 75
+  },
+  {
+   "p": "buy viewers",
+   "w": 80
+  },
+  {
+   "p": "cheap views",
+   "w": 70
+  },
+  {
+   "p": "get more views",
+   "w": 55
+  },
+  {
+   "p": "get more subscribers",
+   "w": 55
+  },
+  {
+   "p": "grow your channel",
+   "w": 55
+  },
+  {
+   "p": "boost your channel",
+   "w": 55
+  },
+  {
+   "p": "primes and viewers",
+   "w": 85
+  },
+  {
+   "p": "bigfollows",
+   "w": 85
+  },
+  {
+   "p": "gain subscribers fast",
+   "w": 75
+  },
+  {
+   "p": "increase your views",
+   "w": 55
+  },
+  {
+   "p": "youtube growth service",
+   "w": 70
+  },
+  {
+   "p": "channel promotion",
+   "w": 45
+  },
+  {
+   "p": "seo services",
+   "w": 50
+  },
+  {
+   "p": "i can promote your channel",
+   "w": 70
+  },
+  {
+   "p": "grow your audience",
+   "w": 45
+  }
+ ]
+}

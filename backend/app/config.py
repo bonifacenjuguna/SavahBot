@@ -185,49 +185,34 @@ _f(G, "mod_interval_max_cv", 0.15, "Timing variation (std/mean) below this looks
 _f(G, "mod_interval_max_mean_gap", 120.0, "Only judge users whose average gap is under this many seconds.")
 _f(G, "mod_interval_weight", 30, "Score added by the timing signal.")
 
+# ---------------------------------------------------------------------------------------------
+# 1.1.6 Intelligence: knowledge packs plus detectors that need no AI model and no outside service.
+# Every detector can be Off, Shadow (runs and is logged, never acts) or Active (adds to the message score).
+# (id, title, default max points, default sensitivity 0..1). New detectors start in shadow mode.
+INTEL_DETECTORS: list[tuple[str, str, int, float]] = [
+    ("packs", "Knowledge packs", 100, 0.5),
+    ("fuzzy", "Fuzzy matching", 45, 0.5),
+    ("learning", "Learning filter", 45, 0.5),
+    ("links", "Link intelligence", 45, 0.5),
+    ("reputation", "Viewer reputation", 30, 0.5),
+    ("scam", "Scam patterns", 55, 0.5),
+    ("shape", "Bot shape", 30, 0.5),
+    ("evasion", "Evasion tricks", 25, 0.5),
+    ("names", "Lookalike names", 45, 0.5),
+]
 G = "Intelligence"
-_f(G, "intel_enabled", True, "Master switch for the intelligence layer (phrase packs, typo matching, link intelligence, scam intent, statistics). Off = the bot behaves exactly as in 1.1.5.")
-_f(G, "intel_max_weight", 60, "The most score the intelligence layer can add to one message on its own. Keeps it from banning anyone by itself.")
-_f(G, "intel_scam_mode", "live", "Scam phrases and scam-intent scoring: off, shadow (logged, never scored) or live.")
-_f(G, "intel_spam_mode", "live", "Spam and promotion phrases: off, shadow or live.")
-_f(G, "intel_abuse_mode", "shadow", "Profanity and insults: off, shadow or live. Shadow by default so you can review what it would catch first.")
-_f(G, "intel_harassment_mode", "live", "Threats and harassment (death wishes, doxxing, swatting): off, shadow or live.")
-_f(G, "intel_typo_mode", "live", "Typo and disguise matching of blocked and known-bad phrases: off, shadow or live.")
-_f(G, "intel_link_risk_mode", "live", "Link intelligence (look-alike domains, shorteners, threat lists): off, shadow or live.")
-_f(G, "intel_impersonation_mode", "live", "Impersonation guard (copied or staff-like account names, 'I am the admin'): off, shadow or live.")
-_f(G, "intel_obfuscation_mode", "live", "Text tricks (zalgo, hidden characters, mixed alphabets, symbol art): off, shadow or live.")
-_f(G, "intel_bot_like_mode", "shadow", "Bot-like account names: off, shadow or live.")
-_f(G, "intel_intent_mode", "shadow", "Naive Bayes spam-likeness: off, shadow or live.")
-_f(G, "intel_known_spam_mode", "shadow", "Similarity to known spam messages (BM25): off, shadow or live.")
-_f(G, "intel_raid_wave_mode", "live", "Raid wave tracker: off, shadow or live.")
-_f(G, "intel_scam_scale", 1.0, "Strength multiplier for the scam detector (0.5 = half as strong, 2 = twice).")
-_f(G, "intel_spam_scale", 1.0, "Strength multiplier for the spam detector.")
-_f(G, "intel_abuse_scale", 1.0, "Strength multiplier for the abuse detector.")
-_f(G, "intel_harassment_scale", 1.0, "Strength multiplier for the threats and harassment detector.")
-_f(G, "intel_typo_scale", 1.0, "Strength multiplier for typo matching.")
-_f(G, "intel_link_risk_scale", 1.0, "Strength multiplier for link intelligence.")
-_f(G, "intel_impersonation_scale", 1.0, "Strength multiplier for the impersonation guard.")
-_f(G, "intel_obfuscation_scale", 1.0, "Strength multiplier for text-trick detection.")
-_f(G, "intel_bot_like_scale", 1.0, "Strength multiplier for bot-like accounts.")
-_f(G, "intel_intent_scale", 1.0, "Strength multiplier for the Naive Bayes detector.")
-_f(G, "intel_known_spam_scale", 1.0, "Strength multiplier for known-spam similarity.")
-_f(G, "intel_raid_wave_scale", 1.0, "Strength multiplier for the raid wave bonus.")
-_f(G, "intel_context_enabled", True, "Understand context: a question about a scam, or a warning to others, scores lower than the scam itself.")
-_f(G, "intel_safe_enabled", True, "Use the safe phrases (gaming talk such as 'kill streak') to stop rules firing on normal chat.")
-_f(G, "intel_languages", "en,sw,sheng", "Which language packs are active, comma separated: en, sw (Swahili), sheng.")
-_f(G, "intel_protected_names", "", "Names the impersonation guard protects, comma separated (your channel name, your moderators). The demo channel name is added automatically.")
-_f(G, "intel_protected_domains", "", "Your own websites, comma separated. Links that look almost like them are flagged as look-alikes, and links to them are never treated as risky.")
-_f(G, "intel_intent_min_tokens", 4, "Messages shorter than this many words are not scored by the statistical detectors.")
-_f(G, "intel_wave_accounts", 6, "A raid wave starts when this many brand-new accounts speak within the window below.")
-_f(G, "intel_wave_window_seconds", 30, "Window for counting new accounts toward a raid wave.")
-_f(G, "intel_wave_duration_seconds", 180, "How long a raid wave stays active once detected.")
-_f(G, "intel_wave_weight", 15, "Score added to suspicious messages from new accounts during a raid wave.")
-_f(G, "intel_learning_mode", "suggest", "What the bot does with what it learns from your approve and reject decisions: off, suggest (you decide) or auto (applies the confident ones, every change is logged and reversible).")
-_f(G, "intel_feeds_enabled", True, "Refresh the live data feeds (public phishing and malware domain lists) in the background.")
-_f(G, "intel_feed_interval_hours", 24, "Minimum hours between refreshes of the same feed. Never lower than 1.")
-_f(G, "intel_feed_max_entries", 15000, "Most domains kept from any one feed.")
-_f(G, "intel_feed_max_bytes", 6000000, "Largest download accepted from a feed.")
-_f(G, "intel_feed_startup_delay_seconds", 120, "Wait this long after boot before the first feed refresh, so start-up stays fast.")
+_f(G, "intel_enabled", True, "Run the intelligence layer (knowledge packs and detectors). When off, only the original moderation signals run.")
+for _id, _title, _cap, _sens in INTEL_DETECTORS:
+    _f(G, f"intel_{_id}_mode", "shadow", f"{_title}: 'off', 'shadow' (runs and is logged, never acts) or 'active' (adds to the score).")
+    _f(G, f"intel_{_id}_weight", _cap, f"{_title}: the most points this detector can add to a message score.")
+    _f(G, f"intel_{_id}_sensitivity", _sens, f"{_title}: 0 is cautious (fewer catches), 1 is eager (more catches, more mistakes).")
+_f(G, "intel_learn_auto", True, "Learn from your Approve and Reject decisions in Moderation.")
+_f(G, "intel_learn_from_demo", False, "Also learn from simulated (demo) decisions. Off by default so test data never teaches the bot.")
+_f(G, "intel_learn_trusted_ham", True, "Learn that ordinary messages from regulars, members and mods are fine (a few per minute at most).")
+_f(G, "intel_learn_prior", 0.15, "How much of real chat is expected to be spam (0.01 to 0.5). Lower makes the learning filter more careful.")
+_f(G, "intel_example_cap", 5000, "Most learned messages to keep. The oldest are forgotten first.")
+_f(G, "intel_shadow_retention_days", 14, "How long shadow-mode findings are kept for the report.")
+_f(G, "intel_protected_names", "", "Names to guard against copycats, comma separated (your channel name, your mods). Names of the owner and mods seen in chat are added automatically.")
 
 G = "Commands"
 _f(G, "command_prefix", "!", "Character(s) that start a chat command.")
@@ -260,6 +245,14 @@ _f(G, "demo_chatter_count", 20, "Number of simulated viewers.")
 _f(G, "demo_spam_probability", 0.06, "Chance (0-1) that an ambient demo message is spam.")
 _f(G, "demo_seed", 0, "Random seed (0 = different every run).")
 
+G = "Redis (optional)"
+_f(G, "redis_url", "", "Redis address (redis:// or rediss://). Blank = everything stays in memory. Turns on: moderation memory that survives restarts, shared login lockouts, live events across instances, one leader instance, a short dashboard cache, and restart-proof cooldowns.")
+_f(G, "redis_prefix", "savahbot", "Prefix for every key this bot writes, so one Redis can be shared with other apps.")
+_f(G, "redis_timeout_seconds", 3, "How long to wait for Redis before carrying on in memory.")
+_f(G, "redis_snapshot_seconds", 10, "How often the moderation memory is saved to Redis (0 = never). It is also saved when the bot shuts down.")
+_f(G, "redis_leader_ttl_seconds", 30, "If the leader instance disappears, another one takes over after about this many seconds.")
+_f(G, "shared_cache_seconds", 15, "With Redis on, how long heavy dashboard queries (such as Insights) are reused. 0 = no caching.")
+
 G = "Reserved (future features, unused today)"
 _f(G, "twitch_client_id", "", "Reserved: Twitch application client id.")
 _f(G, "twitch_client_secret", "", "Reserved: Twitch application client secret.")
@@ -269,7 +262,6 @@ _f(G, "kick_client_id", "", "Reserved: Kick application client id.")
 _f(G, "kick_client_secret", "", "Reserved: Kick application client secret.")
 _f(G, "discord_bot_token", "", "Reserved: Discord bot token.")
 _f(G, "discord_webhook_url", "", "Reserved: Discord webhook for alerts.")
-_f(G, "redis_url", "", "Reserved: Redis URL for multi-instance scaling.")
 _f(G, "sentry_dsn", "", "Reserved: Sentry error reporting DSN.")
 _f(G, "smtp_host", "", "Reserved: SMTP host for email alerts.")
 _f(G, "smtp_port", 587, "Reserved: SMTP port.")
@@ -293,17 +285,16 @@ BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 # Settings the dashboard / Telegram may change at runtime. Secrets and infrastructure stay env-only.
 EDITABLE_PREFIXES = (
     "mod_", "command_", "urlfetch_", "demo_", "yt_", "timers_", "reminders_", "scheduler_",
-    "telegram_notify_", "intel_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
+    "telegram_notify_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
     "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_",
+    "intel_",
 )
 EDITABLE_KEYS = {"bot_mode", "telegram_mode", "owner_timezone"}
 ENUMS: dict[str, list[str]] = {
     "bot_mode": ["demo", "live"],
     "telegram_mode": ["webhook", "polling"],
     "mod_mode": ["off", "suggest", "auto"],
-    "intel_learning_mode": ["off", "suggest", "auto"],
-    **{f"intel_{d}_mode": ["off", "shadow", "live"] for d in (
-        "scam", "spam", "abuse", "harassment", "typo", "link_risk", "impersonation", "obfuscation", "bot_like", "intent", "known_spam", "raid_wave")},
+    **{f"intel_{i}_mode": ["off", "shadow", "active"] for i, *_ in INTEL_DETECTORS},
 }
 
 

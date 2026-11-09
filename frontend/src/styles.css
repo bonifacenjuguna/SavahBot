@@ -157,7 +157,7 @@ kbd { font: 600 0.72rem var(--mono); border: 1px solid var(--line); border-botto
 /* ---------- phone bottom navigation ---------- */
 .tabbar { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--rail); color: var(--rail-ink); padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px)); grid-template-columns: repeat(5, 1fr); gap: 2px; border-top: 1px solid rgba(255,255,255,0.08); }
 .tab { background: none; border: 0; color: var(--rail-muted); text-decoration: none; display: grid; justify-items: center; align-content: center; gap: 2px; font-size: 0.7rem; padding: 6px 2px; border-radius: 10px; min-height: 48px; position: relative; cursor: pointer; }
-.tab[aria-current="page"] { background: rgba(255,255,255,0.14); color: #fff; font-weight: 600; }
+.tab[aria-current="page"] { color: #fff; font-weight: 600; }
 .tab .badge { position: absolute; top: 2px; left: calc(50% + 6px); background: var(--demo); color: #1b1300; font-size: 0.66rem; font-weight: 700; border-radius: 999px; padding: 0 5px; line-height: 15px; min-width: 16px; text-align: center; }
 .more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .more-item { display: grid; justify-items: center; gap: 6px; padding: 14px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); color: var(--ink); text-decoration: none; font-size: 0.86rem; text-align: center; }
@@ -367,19 +367,7 @@ tbody tr:hover { background: var(--hover); }
 .pal-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 0.78rem; color: var(--muted); }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-items: center; }
 
-/* ---------- login ---------- */
-.login { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.login-brand { background: var(--rail); color: var(--rail-ink); padding: 48px; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; }
-.login-brand .mark { color: #fff; }
-.login-brand h2 { font-size: 1.9rem; line-height: 1.15; color: #fff; max-width: 14ch; }
-.login-brand p { color: var(--rail-muted); max-width: 40ch; }
-.login-points { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
-.login-points li { display: flex; gap: 12px; align-items: flex-start; }
-.login-points .ico { color: #fff; margin-top: 2px; }
-.login-pane { display: grid; place-items: center; padding: 24px; }
-.login form { width: min(400px, 100%); display: grid; gap: 14px; }
-.login form .head { display: flex; align-items: center; gap: 10px; }
-.login .mobile-logo { display: none; }
+/* ---------- login: see redesign.css (1.1.7) ---------- */
 
 /* ---------- toasts ---------- */
 .toasts { position: fixed; bottom: 16px; right: 16px; display: grid; gap: 8px; z-index: 80; max-width: min(380px, calc(100vw - 32px)); }
@@ -525,10 +513,6 @@ details.group[open] > summary { border-bottom: 1px solid var(--line); }
   .sheet-body { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
   .palette { margin-top: 0; width: 100%; border-radius: 0 0 16px 16px; border-top: 0; max-height: 80dvh; align-self: start; }
   .overlay.top { align-items: start; }
-  .login { grid-template-columns: 1fr; }
-  .login-brand { display: none; }
-  .login .mobile-logo { display: block; }
-  .login-pane { align-items: start; padding-top: 12vh; }
 }
 @media (min-width: 720px) {
   .tabbar { display: none; }

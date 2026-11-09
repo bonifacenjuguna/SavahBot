@@ -1,43 +1,85 @@
 # Changelog
 
+## 1.1.9
+
+### Install SavahBot as an app (PWA)
+The dashboard can now be installed on a phone, tablet or computer and opens in its own window, with no browser bars.
+
+- **A calm install card** appears at the bottom of the signed-in dashboard, only when installing makes sense. It uses the dashboard's own colours, shows the app icon, says what you get, and has **Install** and **Not now**. It never shows on the sign-in screen, while a dialog is open, or while the tab is in the background, and it waits a few seconds after the dashboard opens.
+- **The browser's own install prompt is never shown automatically.** It is held until you press Install.
+- **Not now is remembered, but never final.** The card returns after 3 days, then 14, then 60. An **Install app** button stays in the sidebar, on the **More** page and in the command palette (Ctrl K), so you can install whenever you like. It disappears once the app is installed.
+- **iPhone and iPad get their own steps** (Share, then Add to Home Screen), written for Safari, for other iOS browsers (iOS 16.4 and later), and for apps with a built in browser, where it asks you to open the page in Safari. Android steps are never shown on iOS. Safari 17 on a Mac gets Add to Dock.
+- **Browsers without an install prompt** (for example Firefox on Android) get menu steps. Browsers that cannot install web apps see nothing.
+- **Detection:** `beforeinstallprompt`, `appinstalled`, `display-mode` (standalone, minimal-ui, window-controls-overlay), iOS `navigator.standalone`, and Android app launches. Changes made in another tab are followed.
+- **Home screen shortcuts** (long press the app icon): Desk, Moderation queue, Commands. The manifest also gained a stable `id`, `lang` and `categories`. Existing name, colours and icons are unchanged.
+- **Offline page.** Opening the installed app with no connection shows a branded "You are offline" page instead of a browser error.
+
+### Safety
+- The new service worker (`public/sw.js`) caches **one static page** (`/offline.html`) and nothing else. It only handles page loads, tries the network first, and never touches POST requests, other origins (your backend, fonts), `/api/` paths, requests with an Authorization header, or addresses with a token. Sign-in, the API and the live feed behave exactly as before.
+- The only thing stored by the install card is the dismissal count and time (`savahbot.pwa` in local storage).
+
+### Code
+- New `frontend/src/pwa.ts` (`initPWA()`, called once from `main.ts`) and `pwa.css`. The sidebar button, More tile and palette action read the same state. Two small icons (`share`, `plusSquare`) were added.
+- `vercel.json` adds headers for `sw.js` (never cached), the manifest (correct type) and the offline page.
+
+## 1.1.8
+
+### Optional Redis
+Set `REDIS_URL` and the bot uses Redis for six things; leave it empty and nothing changes. Guide: `docs/REDIS.md`.
+
+1. **Moderation memory survives restarts.** Message rates, repeats, near-identical raids, strikes and posting rhythm are saved every 10 seconds and on shutdown, and restored on start.
+2. **Login lockout is shared and restart-proof** (dashboard and Telegram `/claim`).
+3. **Live dashboard events across instances** through Redis pub/sub.
+4. **One leader instance** polls YouTube, runs timers and reminders and polls Telegram; another takes over within about 30 seconds if it stops.
+5. **Short shared cache** for heavy dashboard queries (Insights).
+6. **Restart-proof cooldowns and duplicate protection**: command and auto-reply cooldowns, "just punished" markers, and each live message id is handled once.
+
+- Redis is never required. If it is missing or unreachable, the bot carries on in memory and reconnects by itself.
+- The Redis client is built in (no new package). `REDIS_URL` is no longer "reserved"; new optional variables: `REDIS_PREFIX`, `REDIS_TIMEOUT_SECONDS`, `REDIS_SNAPSHOT_SECONDS`, `REDIS_LEADER_TTL_SECONDS`, `SHARED_CACHE_SECONDS`. `.env.example` regenerated.
+- `/api/status` and `/api/health` report the Redis state. The Desk "Status" panel shows a Redis row right under Database (Off, Connecting, Unreachable, Leader or Standby, and when the moderation memory was last saved).
+- 16 new tests (`tests/test_redis.py`) run against a small stand-in Redis server, so the real wire client is exercised.
+
+## 1.1.7
+
+### Bottom navigation (phone)
+- The grey highlight behind the selected tab is gone, along with the tap flash.
+- A white bar now sits on the top edge of the footer, above the active tab.
+- Tab icons pop (zoom out, then settle) when you select them, and shrink slightly while pressed. Reduced-motion settings turn this off.
+
+### Sign-in page, redesigned
+- Matches the dashboard theme (colours, accent, light and dark), with a branded card, a show/hide password button and a clear loading state.
+- No more setup hints: the page no longer names the `OWNER_PASSWORD` variable or the Railway logs, and the backend address is no longer printed. It is asked for only when none is set, or under "Connection settings" (leave it empty to keep the current connection).
+- Wrong-password and unreachable-server messages are now plain and friendly.
+- Phone: full-width card. Tablet: centred card. Desktop: brand panel beside the card. Short landscape phones are handled too.
+
 ## 1.1.6
 
-### The knowledge layer (no AI model, no API)
-SavahBot now reads chat with a library of knowledge and a team of detectors. All of it is classic, explainable technique running inside your bot: weighted phrase matching (Aho-Corasick), typo tolerance (BK-tree and edit distance), scam-intent scoring from word groups, a Naive Bayes classifier, BM25 similarity to known spam, link analysis and a raid-wave tracker. Nothing calls an outside service to judge a message.
+### Intelligence without AI services
+The bot can now recognise spam and scams well beyond a phrase list, using plain algorithms and data files that run on your own server. No AI model, no outside API. Full guide: `docs/KNOWLEDGE.md`.
 
-- **40 knowledge packs, about 1,900 entries**, one JSON file per topic under `backend/app/intel/packs/<category>/`: Scams (giveaways, crypto doublers, fake account warnings, fake support, fake testimonials, get-rich pitches, M-Pesa and betting scams, word groups), Spam (self-promotion, follower sellers, adult bait), Abuse (profanity, insults, threats), Links (shorteners, messenger invites, risky endings, protected brands, scam address patterns, threat lists), Impersonation, Languages (Swahili and a small Sheng starter set), Safe phrases (gaming talk), Normalisation (look-alike letters) and Training examples. Adding knowledge means adding a file.
-- **12 detectors**, each Off, **Shadow** (records what it would have caught, never scores) or Live, with its own strength: scam phrases, spam and promotion, abuse, threats and harassment, typo and disguise matching, link intelligence, impersonation guard, text tricks, bot-like accounts, spam-likeness (Naive Bayes), known-spam similarity (BM25) and raid wave.
-- **Typo and disguise matching** also covers your own Blocked phrases: `frree robus` now matches `free robux`. Short words must match exactly, so `you have worn` never matches `you have won`.
-- **Link intelligence**: look-alike domains (`youtub3.com`, `paypa1.com`), brand names inside other domains, punycode and mixed alphabets, bare IP links, the `user@host` trick, shorteners, messenger invites, risky endings, bait words in the address, and domains from threat lists.
-- **Context awareness**: a question about a scam (`is that giveaway real?`) or a warning to others (`don't click that, it's a scam bot`) scores far lower than the scam itself, unless the message carries a link, phone number or wallet address. Safe phrases protect gameplay talk (`kill streak`, `I'm dead lol`).
-- **Impersonation guard** for names that copy the streamer or pose as staff, and `I am the admin` claims. Names to protect: the setting `intel_protected_names`.
-- **Raid wave tracker**: when many brand-new accounts speak within seconds, suspicious messages from new accounts get extra weight for a few minutes, and you get one Telegram notice per wave.
-- **Every verdict now explains itself**: each signal has a plain-words reason, and the verdict has a confidence from 0 to 1 and a list of what only shadow mode noticed.
-- **Learning from your decisions.** Approve and Reject are training labels. The model learns instantly, the bot works out how far to trust each detector, suggests phrases that keep appearing in approved actions and safe phrases from rejected ones, and tests shadow detectors against your past decisions to suggest promoting the ones that would have agreed with you. Modes: off, **suggest** (default) or auto (confident suggestions only, safe phrases always wait for you). Every change is logged with an **Undo**.
-- **Live data.** Public phishing and malware domain lists are fetched by your bot's own server, once a day, politely (ETag, size cap, one list per tick, a startup delay). Well-known sites can never be added, a failed or suddenly shrunken download is refused and the old data kept, and every refresh can be rolled back. Five built-in lists (OpenPhish starts off because its free feed is for personal use) and up to ten of your own, guarded like `$(urlfetch)`.
-- **Settings > Knowledge** (new, next to All settings): Overview, Knowledge (browse, search, add, switch off, re-weight, export every pack), Detectors, Learning, Live data and a Test lab that shows exactly how a message is read. The Overview has an **Accuracy check** that runs a held-out set of 68 spam and 105 normal lines with and without the knowledge layer.
-- **Eight new Demo scenarios**: scam messages, typos and disguises, look-alike links, impersonator, text tricks, Swahili scams, raid wave, and two that must flag nothing (warnings and questions, gaming talk).
+- **Knowledge, split by category.** `backend/app/intel/knowledge/packs/` holds one JSON file per category: promo and sub-for-sub, crypto fraud, fake prizes, account phishing, contact lures, adult-link bots, Kenya and East Africa scams (English, Swahili and Sheng), scam message shapes, risky links, disguise maps, official-sounding names, and training examples in English and Swahili/Sheng. Each pack has a version, date and sources (researched November 2026 from current reports on live-chat spam, crypto-doubling streams, abused link endings and M-Pesa fraud). An empty **abusive language** pack ships for you to fill; nothing is shipped there.
+- **Nine detectors**, each Off, Shadow or Active, with its own sensitivity and maximum points: Knowledge packs (disguise-proof exact matching), Fuzzy matching (trigram index and edit distance, plus a consonant skeleton for dropped vowels), Learning filter (Naive Bayes over words, pairs and fragments, in English and Swahili), Link intelligence (shorteners, abused endings, brand lookalikes, brand-in-subdomain, the @ trick, raw IPs), Viewer reputation (trust discount, repeat offenders, blocked text returning on a new account), Scam patterns (shapes combined as independent hints), Bot shape (keyboard-mashing, template spam, channel waves), Evasion tricks, Lookalike names.
+- **Safe by design.** Every new detector starts in **Shadow**: it runs and is logged but never changes what happens in chat. Agreeing detectors count for less each time, and intelligence alone can never reach the timeout score, so it cannot time out or ban anyone by itself. A failing detector is skipped, never fatal. With everything in shadow, verdicts are identical to 1.1.5 (tested).
+- **It learns from you.** Approve teaches "spam", Reject teaches "fine", "Teach the bot" gives a deliberate lesson, and ordinary messages from trusted chatters teach "fine" slowly. Every lesson is stored and can be forgotten; accuracy is measured honestly (each message is guessed before it is learned). Demo decisions never teach it unless you allow it.
 
-### Safe by design (nothing existing was changed in behaviour)
-- The layer only **adds** signals. Your signals, weights, settings, routes and tables are untouched. `intel_enabled = false` gives exactly the 1.1.5 behaviour (a test compares them message by message).
-- Everything it adds is capped (`intel_max_weight`, default 60), so it can never ban anyone on its own. When your own Blocked phrases already matched, it adds a small corroboration instead of stacking.
-- Defaults are conservative: Abuse, Naive Bayes, similarity and bot-like detectors, and the fake-testimonial pack start in **Shadow**. Threats, scams, links and impersonation start Live.
-- The knowledge you change (packs off, phrases added or switched off, re-weighted entries, feed data) lives in the database over the built-in files, so upgrades never overwrite it.
-
-### Measured (development set, not a promise)
-On a labelled set kept separate from the training examples: without the layer and with an empty Blocked phrases list, 6% of spam is flagged; with it, **98.5% is flagged and 75% reaches delete level, with 0 false alarms out of 105 normal lines**. A few fixes came from reading failures on this very set, so treat it as a development benchmark. Real chat will differ; use Shadow mode and the Learning tab to tune on your own.
-
-### Fixes
-- `backend/.env.example` was stale in 1.1.5 (old quota defaults of 90s, 25% and 600s). It is regenerated; a test already guarded this.
+### Dashboard: Settings, Knowledge
+- **Overview**: the state of the bot's mind and the one most useful next step.
+- **Packs**: browse and search every pack, switch packs on or off, add your own entries, mute entries you do not want, see where each pack's knowledge came from.
+- **Detectors**: mode, sensitivity and most points for each, and **Try it here**, which shows every detector's opinion on any message, even ones that are Off.
+- **Learning**: lessons, accuracy over time, the words it distrusts and trusts, teach by pasting a message, forget one lesson or all of them, and what it may learn from.
+- **Shadow report**: what detectors would have done, how often your own decisions agreed, and a one-tap "Switch to Active" when one is mostly right.
+- **Moderation, History**: "Why and teach" explains why a message was flagged, shows what each detector thinks, and lets you teach the bot.
+- Command palette: Open Knowledge, Shadow report, Teach the bot, Knowledge packs.
 
 ### API
-New under `/api/knowledge/`: `overview`, `categories`, `packs/{id}` (GET, PATCH, `/entries` POST and PATCH, `/entries/remove`, `/export`), `detectors`, `test`, `benchmark`, `learning`, `learning/refresh`, `suggestions/{id}/accept|dismiss`, `log/{id}/undo`, `feeds` (GET, POST, PATCH, `/refresh`, `/rollback`, `/delete`). `POST /api/moderation/test` verdicts gain `confidence`, `shadow` and a `why` per signal.
+New under `/api/intel/`: `overview`, `packs`, `packs/{id}/enable`, `packs/{id}/entries` (GET, POST, DELETE), `packs/{id}/mute`, `test`, `learning`, `examples`, `examples/{id}` (DELETE), `learning/reset`, `teach`, `shadow`. Verdicts gain a `shadow` list. New tables: `intel_examples`, `intel_shadow`, `intel_packs`, `intel_user`.
+
+### Settings
+New `INTEL_*` settings (editable in the dashboard). `.env.example` regenerated.
 
 ### Technical
-- New: `backend/app/intel/` (textkit, bayes, match, links, packs, core, service, learning, feeds, benchmark and `packs/`), `moderation/explain.py`, `api/knowledge_routes.py`; `frontend/src/pages/knowledge*.ts` and `knowledge.css`.
-- 42 new settings under **Intelligence**. Five new tables (`knowledge_packs`, `knowledge_entries`, `knowledge_feeds`, `knowledge_suggestions`, `knowledge_log`), created automatically.
-- About 120 tests added (packs, algorithms, detectors, learning, feeds with the network faked, routes, demo scenarios, end-to-end API).
-- Version bumped to 1.1.6.
+- New `app/intel/` package: `text.py`, `knowledge/`, `detectors/` (one file each), `service.py`, `store.py`. About 0.7 ms per message with every detector on.
+- 25 new tests (`tests/test_intel.py`, plus two API tests). Version bumped to 1.1.6.
 
 ## 1.1.5
 

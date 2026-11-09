@@ -19,21 +19,11 @@ const INFO: Record<string, { icon: string; group: string; expect: string; time?:
   link_spammer: { icon: "external", group: "attacks", expect: "A new account with a banned phrase and a link scores high enough to be acted on." },
   caps_flood: { icon: "alert", group: "tone", expect: "The shouting and stretched letters are picked up by the caps and repetition checks." },
   disguised_words: { icon: "eyeOff", group: "tone", expect: "A banned phrase is caught even with leetspeak, odd spacing or look-alike letters." },
-  scam_wave: { icon: "alert", group: "smart", expect: "Four different scams are each caught by the scam packs, scam-intent scoring and link checks.", time: "about 6 seconds" },
-  typo_scam: { icon: "eyeOff", group: "smart", expect: "Misspelt and stretched-out scam phrases are caught by typo matching, which exact matching would miss.", time: "about 4 seconds" },
-  lookalike_links: { icon: "external", group: "smart", expect: "A look-alike YouTube address, a gift site, a short link and a bare IP address are all flagged by link intelligence.", time: "about 5 seconds" },
-  impersonator: { icon: "user", group: "smart", expect: "Accounts named like the streamer's support team, and claiming to be staff, are caught by the impersonation guard.", time: "about 2 seconds" },
-  art_spam: { icon: "textSize", group: "smart", expect: "Zalgo text, Cyrillic look-alikes, hidden characters and symbol art are caught as text tricks.", time: "about 5 seconds" },
-  swahili_scam: { icon: "message", group: "smart", expect: "Scams and sub-for-sub lines written in Swahili are caught by the language packs.", time: "about 5 seconds" },
-  raid_wave: { icon: "users", group: "smart", expect: "Eight new accounts arrive within seconds. A wave starts, and a suspicious line from a late newcomer scores higher than the same line would on a quiet night.", time: "about 12 seconds" },
-  warnings_and_questions: { icon: "info", group: "normal", expect: "Viewers warn each other about a scam or ask if it is real. Nothing is flagged, because the bot reads context.", time: "about 6 seconds" },
-  gaming_talk: { icon: "play", group: "normal", expect: "'Kill streak', 'nuke incoming', 'I'm dead lol'. Nothing is flagged, because the safe phrases protect gameplay talk.", time: "about 6 seconds" },
   mixed: { icon: "rocket", group: "full", expect: "Friendly chat, commands, disguised words and a raid, one after another.", time: "about 45 seconds" },
 };
 const GROUPS: { id: string; title: string; text: string }[] = [
   { id: "full", title: "Full run", text: "Everything back to back. The quickest way to see the whole bot work." },
   { id: "attacks", title: "Spam and raids", text: "Behaviour that comes from many accounts or from scripts." },
-  { id: "smart", title: "Smarter detection (1.1.6)", text: "What the new knowledge layer adds: scam packs, typo matching, link and impersonation checks, text tricks, Swahili and raid waves." },
   { id: "tone", title: "Tone and disguises", text: "What one viewer can type to get around a word filter." },
   { id: "normal", title: "Normal chat", text: "Friendly viewers and commands. Nothing should go wrong." },
 ];

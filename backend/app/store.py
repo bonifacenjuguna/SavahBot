@@ -539,3 +539,4 @@ class Store:
         await self.db.execute("DELETE FROM chat_messages WHERE ts < ?", (chat_before,))
         await self.db.execute("DELETE FROM mod_actions WHERE ts < ? AND status <> 'pending'", (actions_before,))
         await self.db.execute("DELETE FROM reminders WHERE status <> 'pending' AND created < ?", (actions_before,))
+        await self.db.execute("DELETE FROM intel_shadow WHERE ts < ?", (chat_before,))

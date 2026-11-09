@@ -1,0 +1,779 @@
+{
+ "id": "corpus-en",
+ "version": "2026.11.1",
+ "updated": "2026-11-06",
+ "language": "en",
+ "user_supplied": false,
+ "sources": [
+  {
+   "title": "YouTube on spam, copy-paste waves, creator impersonation and Robux scams in chat",
+   "url": "https://www.theverge.com/2022/12/13/23508062/youtube-comment-spam-warning-violation-detection-bots"
+  },
+  {
+   "title": "Analysis of spammers' behavior on a live streaming chat (IJ-AI)",
+   "url": "https://ijai.iaescore.com/index.php/IJAI/article/download/20659/13070"
+  },
+  {
+   "title": "Bitdefender: deepfake crypto-doubling streams that ask viewers to scan a QR code",
+   "url": "https://bitdefender.in/crypto-doubling-scams-on-youtube-with-a-twist-cybercriminals-exploit-the-attack-on-donald-trump-to-lure-new-victims"
+  }
+ ],
+ "title": "Training examples: English chat",
+ "category": "learning",
+ "kind": "corpus",
+ "description": "Ordinary stream chat and typical spam, written for this bot. It gives the learning filter a head start before it has learned anything from you. Your own decisions always count for more.",
+ "entries": [
+  {
+   "t": "gg",
+   "l": "ham"
+  },
+  {
+   "t": "lol that was insane",
+   "l": "ham"
+  },
+  {
+   "t": "no way he survived that",
+   "l": "ham"
+  },
+  {
+   "t": "first time watching, love the stream",
+   "l": "ham"
+  },
+  {
+   "t": "hello from Nairobi",
+   "l": "ham"
+  },
+  {
+   "t": "hi from Mombasa",
+   "l": "ham"
+  },
+  {
+   "t": "what game is this",
+   "l": "ham"
+  },
+  {
+   "t": "what's the song playing",
+   "l": "ham"
+  },
+  {
+   "t": "can you play the new update",
+   "l": "ham"
+  },
+  {
+   "t": "nice shot",
+   "l": "ham"
+  },
+  {
+   "t": "that clutch was crazy",
+   "l": "ham"
+  },
+  {
+   "t": "chat is moving so fast",
+   "l": "ham"
+  },
+  {
+   "t": "how long have you been streaming",
+   "l": "ham"
+  },
+  {
+   "t": "love the setup",
+   "l": "ham"
+  },
+  {
+   "t": "your voice is so calm",
+   "l": "ham"
+  },
+  {
+   "t": "turn the music down a bit please",
+   "l": "ham"
+  },
+  {
+   "t": "the audio is a bit low",
+   "l": "ham"
+  },
+  {
+   "t": "can you zoom in",
+   "l": "ham"
+  },
+  {
+   "t": "what's your sensitivity",
+   "l": "ham"
+  },
+  {
+   "t": "what mouse do you use",
+   "l": "ham"
+  },
+  {
+   "t": "good luck on the run",
+   "l": "ham"
+  },
+  {
+   "t": "you got this",
+   "l": "ham"
+  },
+  {
+   "t": "let's go",
+   "l": "ham"
+  },
+  {
+   "t": "pog",
+   "l": "ham"
+  },
+  {
+   "t": "unlucky",
+   "l": "ham"
+  },
+  {
+   "t": "rip",
+   "l": "ham"
+  },
+  {
+   "t": "bro what",
+   "l": "ham"
+  },
+  {
+   "t": "nooo",
+   "l": "ham"
+  },
+  {
+   "t": "that was close",
+   "l": "ham"
+  },
+  {
+   "t": "wait what happened",
+   "l": "ham"
+  },
+  {
+   "t": "can someone explain the rules",
+   "l": "ham"
+  },
+  {
+   "t": "who is winning",
+   "l": "ham"
+  },
+  {
+   "t": "what's the score",
+   "l": "ham"
+  },
+  {
+   "t": "hi everyone",
+   "l": "ham"
+  },
+  {
+   "t": "good morning chat",
+   "l": "ham"
+  },
+  {
+   "t": "good evening everyone",
+   "l": "ham"
+  },
+  {
+   "t": "how is everyone doing today",
+   "l": "ham"
+  },
+  {
+   "t": "thanks for the stream",
+   "l": "ham"
+  },
+  {
+   "t": "see you tomorrow",
+   "l": "ham"
+  },
+  {
+   "t": "goodnight everyone",
+   "l": "ham"
+  },
+  {
+   "t": "this is my favorite part",
+   "l": "ham"
+  },
+  {
+   "t": "that boss is hard",
+   "l": "ham"
+  },
+  {
+   "t": "try the other weapon",
+   "l": "ham"
+  },
+  {
+   "t": "use the shield",
+   "l": "ham"
+  },
+  {
+   "t": "check the map",
+   "l": "ham"
+  },
+  {
+   "t": "left side left side",
+   "l": "ham"
+  },
+  {
+   "t": "behind you",
+   "l": "ham"
+  },
+  {
+   "t": "watch out",
+   "l": "ham"
+  },
+  {
+   "t": "nice play",
+   "l": "ham"
+  },
+  {
+   "t": "well played",
+   "l": "ham"
+  },
+  {
+   "t": "that was smooth",
+   "l": "ham"
+  },
+  {
+   "t": "haha you died",
+   "l": "ham"
+  },
+  {
+   "t": "i laughed so hard",
+   "l": "ham"
+  },
+  {
+   "t": "this game is so good",
+   "l": "ham"
+  },
+  {
+   "t": "the graphics look amazing",
+   "l": "ham"
+  },
+  {
+   "t": "when is the next stream",
+   "l": "ham"
+  },
+  {
+   "t": "what time do you stream",
+   "l": "ham"
+  },
+  {
+   "t": "do you play on pc",
+   "l": "ham"
+  },
+  {
+   "t": "is this the new patch",
+   "l": "ham"
+  },
+  {
+   "t": "how many hours is this game",
+   "l": "ham"
+  },
+  {
+   "t": "i'm new here",
+   "l": "ham"
+  },
+  {
+   "t": "just subscribed, love your content",
+   "l": "ham"
+  },
+  {
+   "t": "been here since the start",
+   "l": "ham"
+  },
+  {
+   "t": "happy birthday!",
+   "l": "ham"
+  },
+  {
+   "t": "congrats on the milestone",
+   "l": "ham"
+  },
+  {
+   "t": "you deserve it",
+   "l": "ham"
+  },
+  {
+   "t": "can you say hi to my brother",
+   "l": "ham"
+  },
+  {
+   "t": "hello from Kenya",
+   "l": "ham"
+  },
+  {
+   "t": "greetings from Uganda",
+   "l": "ham"
+  },
+  {
+   "t": "this chat is wholesome",
+   "l": "ham"
+  },
+  {
+   "t": "my cat is sitting on the keyboard",
+   "l": "ham"
+  },
+  {
+   "t": "i can't believe that worked",
+   "l": "ham"
+  },
+  {
+   "t": "what's the build",
+   "l": "ham"
+  },
+  {
+   "t": "which class is that",
+   "l": "ham"
+  },
+  {
+   "t": "nice outfit",
+   "l": "ham"
+  },
+  {
+   "t": "that map is huge",
+   "l": "ham"
+  },
+  {
+   "t": "the soundtrack is great",
+   "l": "ham"
+  },
+  {
+   "t": "ok that was clean",
+   "l": "ham"
+  },
+  {
+   "t": "chat what should he pick",
+   "l": "ham"
+  },
+  {
+   "t": "pick the red one",
+   "l": "ham"
+  },
+  {
+   "t": "go left",
+   "l": "ham"
+  },
+  {
+   "t": "vote for option two",
+   "l": "ham"
+  },
+  {
+   "t": "!hello",
+   "l": "ham"
+  },
+  {
+   "t": "!uptime",
+   "l": "ham"
+  },
+  {
+   "t": "!quote",
+   "l": "ham"
+  },
+  {
+   "t": "good game everyone",
+   "l": "ham"
+  },
+  {
+   "t": "you play really well",
+   "l": "ham"
+  },
+  {
+   "t": "can you do a tutorial",
+   "l": "ham"
+  },
+  {
+   "t": "subscribed",
+   "l": "ham"
+  },
+  {
+   "t": "just got here, what did i miss",
+   "l": "ham"
+  },
+  {
+   "t": "welcome back",
+   "l": "ham"
+  },
+  {
+   "t": "love from Tanzania",
+   "l": "ham"
+  },
+  {
+   "t": "you won the match, congrats!",
+   "l": "ham"
+  },
+  {
+   "t": "i need to win this round",
+   "l": "ham"
+  },
+  {
+   "t": "that was a free kill",
+   "l": "ham"
+  },
+  {
+   "t": "free to play game right",
+   "l": "ham"
+  },
+  {
+   "t": "he gets free items from the chest",
+   "l": "ham"
+  },
+  {
+   "t": "thanks for the follow",
+   "l": "ham"
+  },
+  {
+   "t": "link to the game anyone?",
+   "l": "ham"
+  },
+  {
+   "t": "what's the discord for the community",
+   "l": "ham"
+  },
+  {
+   "t": "follow the quest marker",
+   "l": "ham"
+  },
+  {
+   "t": "my phone number is hidden in this game lol",
+   "l": "ham"
+  },
+  {
+   "t": "support the streamer by subscribing",
+   "l": "ham"
+  },
+  {
+   "t": "the support character is so good",
+   "l": "ham"
+  },
+  {
+   "t": "admin of my school discord says hi",
+   "l": "ham"
+  },
+  {
+   "t": "official trailer is out",
+   "l": "ham"
+  },
+  {
+   "t": "the giveaway last week was fun, who won",
+   "l": "ham"
+  },
+  {
+   "t": "i sent a message to the mods about the bug",
+   "l": "ham"
+  },
+  {
+   "t": "FREE ROBUX at robux-gift.xyz click now",
+   "l": "spam"
+  },
+  {
+   "t": "sub4sub check my channel",
+   "l": "spam"
+  },
+  {
+   "t": "buy followers and viewers on bigfollows dot com",
+   "l": "spam"
+  },
+  {
+   "t": "hot girls in my profile click here 18+",
+   "l": "spam"
+  },
+  {
+   "t": "DM me on telegram to earn $500 daily",
+   "l": "spam"
+  },
+  {
+   "t": "you have won a free iphone, click the link to claim your prize",
+   "l": "spam"
+  },
+  {
+   "t": "send 0.1 BTC and get 0.2 BTC back, giveaway only valid during this stream",
+   "l": "spam"
+  },
+  {
+   "t": "scan the QR code on screen to join the Elon Musk crypto giveaway",
+   "l": "spam"
+  },
+  {
+   "t": "your channel will be terminated, verify your account now at youtube-support-team.top",
+   "l": "spam"
+  },
+  {
+   "t": "contact youtube support team on whatsapp",
+   "l": "spam"
+  },
+  {
+   "t": "free nitro https://discord-nitro-free.click",
+   "l": "spam"
+  },
+  {
+   "t": "whatsapp +254 700 000 000 for sure odds fixed matches",
+   "l": "spam"
+  },
+  {
+   "t": "earn $300 a day from home no experience join telegram",
+   "l": "spam"
+  },
+  {
+   "t": "i made $5000 with trading signals dm me",
+   "l": "spam"
+  },
+  {
+   "t": "claim your airdrop connect your wallet now",
+   "l": "spam"
+  },
+  {
+   "t": "follow for follow",
+   "l": "spam"
+  },
+  {
+   "t": "check out my channel i sub back",
+   "l": "spam"
+  },
+  {
+   "t": "visit my profile for 18+ content",
+   "l": "spam"
+  },
+  {
+   "t": "limited time giveaway only 10 spots left dm to claim",
+   "l": "spam"
+  },
+  {
+   "t": "free v-bucks generator no survey",
+   "l": "spam"
+  },
+  {
+   "t": "free steam gift card giveaway link in bio",
+   "l": "spam"
+  },
+  {
+   "t": "i am the admin send me your password to verify",
+   "l": "spam"
+  },
+  {
+   "t": "recover your lost crypto contact recovery expert on telegram",
+   "l": "spam"
+  },
+  {
+   "t": "i lost money until i met this trading mentor message him",
+   "l": "spam"
+  },
+  {
+   "t": "hello dear i am lonely chat me on whatsapp",
+   "l": "spam"
+  },
+  {
+   "t": "you were selected for a cash prize text me",
+   "l": "spam"
+  },
+  {
+   "t": "make money online fast guaranteed profit",
+   "l": "spam"
+  },
+  {
+   "t": "get 10k subscribers cheap views service dm",
+   "l": "spam"
+  },
+  {
+   "t": "promo for promo come watch my stream",
+   "l": "spam"
+  },
+  {
+   "t": "buy cheap views and subscribers today",
+   "l": "spam"
+  },
+  {
+   "t": "CLICK THE LINK IN MY BIO FOR FREE MONEY",
+   "l": "spam"
+  },
+  {
+   "t": "free cs2 skins at skin-drop-win.top",
+   "l": "spam"
+  },
+  {
+   "t": "official giveaway winner announced dm to claim",
+   "l": "spam"
+  },
+  {
+   "t": "ur account has been hacked send ur otp to secure it",
+   "l": "spam"
+  },
+  {
+   "t": "double your bitcoin in 24 hours",
+   "l": "spam"
+  },
+  {
+   "t": "mrbeast giveaway claim reward here",
+   "l": "spam"
+  },
+  {
+   "t": "invest $100 get $1000 in 24 hours guaranteed",
+   "l": "spam"
+  },
+  {
+   "t": "crypto signals vip group join now",
+   "l": "spam"
+  },
+  {
+   "t": "free followers instagram tiktok youtube instant",
+   "l": "spam"
+  },
+  {
+   "t": "work from home earn daily whatsapp me",
+   "l": "spam"
+  },
+  {
+   "t": "sell your skins for cash dm",
+   "l": "spam"
+  },
+  {
+   "t": "fr33 r0bux at my pr0file",
+   "l": "spam"
+  },
+  {
+   "t": "f r e e  n i t r o  g i v e a w a y",
+   "l": "spam"
+  },
+  {
+   "t": "hey check my stream i am live now come watch",
+   "l": "spam"
+  },
+  {
+   "t": "best viewers service bit.ly/3xyz",
+   "l": "spam"
+  },
+  {
+   "t": "new giveaway scan qr code send eth receive double",
+   "l": "spam"
+  },
+  {
+   "t": "official youtube support: your video has a copyright strike, reply to appeal on telegram",
+   "l": "spam"
+  },
+  {
+   "t": "join my telegram for daily crypto pumps",
+   "l": "spam"
+  },
+  {
+   "t": "ELON MUSK LIVE BITCOIN GIVEAWAY 5000 BTC send now get double",
+   "l": "spam"
+  },
+  {
+   "t": "i can make your channel go viral dm for price",
+   "l": "spam"
+  },
+  {
+   "t": "amazon gift card giveaway first 100 people claim at gift-claim.top",
+   "l": "spam"
+  },
+  {
+   "t": "get paid to watch videos whatsapp me for details",
+   "l": "spam"
+  },
+  {
+   "t": "nude photos in my profile see here",
+   "l": "spam"
+  },
+  {
+   "t": "you won 1000 dollars congratulations click here",
+   "l": "spam"
+  },
+  {
+   "t": "free money cash app giveaway dm me your tag",
+   "l": "spam"
+  },
+  {
+   "t": "hello sir i have a business proposal for you",
+   "l": "spam"
+  },
+  {
+   "t": "your steam account will be banned verify at steam-verify-login.xyz",
+   "l": "spam"
+  },
+  {
+   "t": "buy youtube subscribers real and cheap",
+   "l": "spam"
+  },
+  {
+   "t": "stream sniper service dm for rates",
+   "l": "spam"
+  },
+  {
+   "t": "tired of being broke? message me now",
+   "l": "spam"
+  },
+  {
+   "t": "win a free ps5 click this link",
+   "l": "spam"
+  },
+  {
+   "t": "free gems generator no human verification",
+   "l": "spam"
+  },
+  {
+   "t": "crypto mentor will turn $200 into $2000 this week",
+   "l": "spam"
+  },
+  {
+   "t": "unlock free premium account today only",
+   "l": "spam"
+  },
+  {
+   "t": "sub to me and i sub back guaranteed",
+   "l": "spam"
+  },
+  {
+   "t": "check out this clip https://clips.twitch.tv/AbCdEf",
+   "l": "ham"
+  },
+  {
+   "t": "here is the game https://store.steampowered.com/app/12345",
+   "l": "ham"
+  },
+  {
+   "t": "https://www.youtube.com/watch?v=dQw4w9WgXcQ this is the song",
+   "l": "ham"
+  },
+  {
+   "t": "the vod is on youtube.com/watch if you missed it",
+   "l": "ham"
+  },
+  {
+   "t": "my build is on github.com/someuser/repo",
+   "l": "ham"
+  },
+  {
+   "t": "patch notes https://www.example.com/patch-1-2",
+   "l": "ham"
+  },
+  {
+   "t": "the map is here https://imgur.com/a1b2c3",
+   "l": "ham"
+  },
+  {
+   "t": "this meme https://tenor.com/view/funny-cat-gif",
+   "l": "ham"
+  },
+  {
+   "t": "my clip youtu.be/abc123XYZ was so funny",
+   "l": "ham"
+  },
+  {
+   "t": "wiki page for the boss https://en.wikipedia.org/wiki/Boss_(video_games)",
+   "l": "ham"
+  },
+  {
+   "t": "join the discord https://discord.gg/abcdef if you want to play with us",
+   "l": "ham"
+  },
+  {
+   "t": "follow the streamer on https://www.instagram.com/someone",
+   "l": "ham"
+  },
+  {
+   "t": "tutorial https://www.youtube.com/watch?v=abc123 helped me a lot",
+   "l": "ham"
+  },
+  {
+   "t": "lol watch this https://www.tiktok.com/@someone/video/123",
+   "l": "ham"
+  },
+  {
+   "t": "speedrun leaderboard https://www.speedrun.com/game",
+   "l": "ham"
+  }
+ ]
+}

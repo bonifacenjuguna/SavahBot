@@ -162,46 +162,29 @@ class QuotaSet(_In):
     used: int = Field(ge=0, le=1_000_000)
 
 
-# ---- 1.1.6 knowledge ------------------------------------------------------------------------------
-class PackPatch(_In):
-    mode: str | None = Field(default=None, max_length=10)   # off | shadow | live | "" (back to default)
-    scale: float | None = Field(default=None, ge=0.1, le=3.0)
-
-
-class EntriesAdd(_In):
-    phrases: list[str] = Field(min_length=1, max_length=500)
-    weight: int = Field(default=0, ge=0, le=100)
-
-
-class EntryPatch(_In):
-    phrase: str = Field(max_length=300)
-    enabled: bool | None = None
-    weight: int | None = Field(default=None, ge=0, le=100)
-
-
-class EntryRef(_In):
-    phrase: str = Field(max_length=300)
-
-
-class DetectorPatch(_In):
-    mode: str | None = Field(default=None, max_length=10)
-    scale: float | None = Field(default=None, ge=0.1, le=3.0)
-
-
-class KnowledgeTest(_In):
-    text: str = Field(min_length=1, max_length=600)
-    author: str = Field(default="tester", max_length=60)
-
-
-class FeedPatch(_In):
+# ---- 1.1.6 intelligence
+class IntelEnable(_In):
     enabled: bool
 
 
-class FeedRefresh(_In):
-    force: bool = False
+class IntelEntry(_In):
+    value: str = Field(min_length=2, max_length=200)
+    weight: int = Field(default=0, ge=0, le=100)
 
 
-class FeedAdd(_In):
-    title: str = Field(max_length=60)
-    url: str = Field(max_length=500)
-    format: str = Field(max_length=10)
+class IntelMute(_In):
+    value: str = Field(min_length=1, max_length=300)
+    muted: bool
+
+
+class IntelTest(_In):
+    text: str = Field(max_length=1000)
+    name: str = Field(default="", max_length=100)
+    level: str = "everyone"
+
+
+class IntelTeach(_In):
+    label: str = Field(pattern="^(spam|ham)$")
+    text: str = Field(default="", max_length=1000)
+    action_id: int | None = None
+    author: str = Field(default="", max_length=100)

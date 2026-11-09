@@ -1,0 +1,71 @@
+{
+ "id": "evasion-maps",
+ "version": "2026.11.1",
+ "updated": "2026-11-06",
+ "language": "en",
+ "user_supplied": false,
+ "sources": [
+  {
+   "title": "Analysis of spammers' behavior on a live streaming chat (IJ-AI)",
+   "url": "https://ijai.iaescore.com/index.php/IJAI/article/download/20659/13070"
+  }
+ ],
+ "title": "Disguise maps",
+ "category": "evasion",
+ "kind": "confusables",
+ "description": "More look-alike letters (small capitals, rare Cyrillic and Latin forms) and symbol pairs ('vv' for w, '|<' for k) that the fuzzy matcher undoes before comparing.",
+ "data": {
+  "map": {
+   "ᴀ": "a",
+   "ʙ": "b",
+   "ᴄ": "c",
+   "ᴅ": "d",
+   "ᴇ": "e",
+   "ꜰ": "f",
+   "ɢ": "g",
+   "ʜ": "h",
+   "ɪ": "i",
+   "ᴊ": "j",
+   "ᴋ": "k",
+   "ʟ": "l",
+   "ᴍ": "m",
+   "ɴ": "n",
+   "ᴏ": "o",
+   "ᴘ": "p",
+   "ʀ": "r",
+   "ꜱ": "s",
+   "ᴛ": "t",
+   "ᴜ": "u",
+   "ᴠ": "v",
+   "ᴡ": "w",
+   "ʏ": "y",
+   "ᴢ": "z",
+   "ѡ": "w",
+   "ԛ": "q",
+   "ԝ": "w",
+   "ɑ": "a",
+   "ĸ": "k",
+   "ǀ": "l",
+   "ƅ": "b",
+   "ɦ": "h",
+   "ʋ": "v",
+   "ɩ": "i",
+   "ᴦ": "r",
+   "ꭈ": "r"
+  },
+  "multi": {
+   "vv": "w",
+   "|<": "k",
+   "|>": "p",
+   "()": "o",
+   "|_|": "u",
+   "\\/": "v",
+   "/\\": "a",
+   "|)": "d",
+   "|3": "b",
+   "><": "x",
+   "|\\|": "n",
+   "\\^/": "w"
+  }
+ }
+}
