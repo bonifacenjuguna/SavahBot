@@ -25,3 +25,21 @@ Telegram already reports approvals, stream events, reminders, raids, quota warni
 
 ## Safety
 Commands from any account other than the owner are ignored. `/lockdown` needs no password because it only reduces access; lifting lockdown needs the dashboard and a full sign-in.
+
+## Telegram controls (Setup, then Telegram)
+
+For when you want to limit the bot, or you suspect it leaks. Every switch is saved in the database and takes effect at once.
+
+| Control | What it does |
+| --- | --- |
+| **Telegram** (master) | Off removes the webhook, stops polling, hears nothing and sends nothing. On registers it again. |
+| **Listen to commands** | Off: commands and buttons are ignored, alerts can still arrive. |
+| **Send messages** | Off: the bot sends nothing, including replies. |
+| **Allow changes** | Off = read-only. `/mode /mod /tgmode /approve /reject /permit /say /demo /note /delnote /remind /delremind /lockdown /unban` and their buttons are refused; lookups still work. |
+| **Allow claiming** | Off: `/claim` is ignored. Leave it off once the bot is claimed. |
+| **Pause** | 30 min, 2 h or 8 h of silence in both directions, then it resumes by itself. |
+| **Alert types** | Approvals, reminders and stream events can each be switched off. |
+
+**If you think it is compromised**, in order: replace the webhook secret, unlink the owner, or press **Cut Telegram off** (does all of it, closes claiming, removes the webhook). Then open @BotFather, send `/revoke`, pick the bot, and set the new `TELEGRAM_BOT_TOKEN`. If `TELEGRAM_OWNER_ID` or `TELEGRAM_WEBHOOK_SECRET` are set in the environment, those keep applying until you change them there.
+
+**Recent activity** shows what happened (command names, ignored strangers, wrong claim passwords, setting changes), never message text, tokens or passwords. The last 300 entries are kept.

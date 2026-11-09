@@ -4,6 +4,7 @@ import { icon } from "../icons.js";
 import { ring } from "../charts.js";
 import { refreshStatus, type Status } from "../state.js";
 import { areaNav } from "./kit.js";
+import { telegramControl } from "./telegram-control.js";
 import { pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 
@@ -199,6 +200,7 @@ export const setup: Page = {
           h("div", { class: "row" }, h("label", { class: "field" }, "Update delivery", sel),
             h("button", { class: "btn ghost", type: "button", onclick: run(async () => { await post("/api/telegram/test"); }, "Test message sent") }, icon("send", 16), "Send test message")),
           h("p", { class: "muted small wrap" }, tg?.mode === "webhook" ? `Webhook: ${tg.webhook_url || "not registered"}` : `Polling: ${tg?.polling ? "running" : "stopped"}`)),
+        tg?.configured ? telegramControl(() => void refreshStatus()) : null,
         pager());
     };
 

@@ -22,6 +22,7 @@ from ..http import NetworkError, request_json
 from ..timeparse import ReminderParseError, parse_reminder
 from ..utils import format_duration, from_epoch, to_epoch, truncate
 from . import telegram_ui as ui
+from .telegram_control import ACTION_COMMANDS, TelegramControl
 from .telegram_ui import Rich, esc
 
 logger = logging.getLogger("savahbot.telegram")
@@ -123,6 +124,7 @@ class TelegramBot:
         self._tasks: set[asyncio.Task] = set()
         self._owner: int | None = None
         self._commands: dict[str, Callable[[str], Awaitable[Any]]] = {}
+        self.control = TelegramControl(self)
 
     # ------------------------------------------------------------------ lifecycle
     @property
@@ -171,6 +173,12 @@ class TelegramBot:
             return
         mode = self.cfg.get("telegram_mode")
         try:
+            if not (await self.control.prefs())["enabled"]:
+                await self._stop_polling()               # switched off: Telegram is told to stop calling us and we stop asking it
+                await self.client.call("deleteWebhook", {"drop_pending_updates": True})
+                self.webhook_url = ""
+                self.last_error = ""
+                return
             if mode == "webhook":
                 await self._stop_polling()
                 base = self.cfg.public_url
@@ -218,6 +226,7 @@ class TelegramBot:
         """Returns False if the request is not from Telegram. Processing continues in the background."""
         expected = await self.webhook_secret()
         if not secret_header or not hmac.compare_digest(secret_header.encode(), expected.encode()):
+            await self.control.log("bad_secret", "a request without the right secret was refused", throttle=60)
             return False
         task = asyncio.ensure_future(self.handle_update(update))
         self._tasks.add(task)
@@ -229,8 +238,12 @@ class TelegramBot:
             "configured": self.configured, "mode": self.cfg.get("telegram_mode"), "bot_username": (self.me or {}).get("username"),
             "owner_bound": bool(self._owner or self.cfg.get("telegram_owner_id")), "webhook_url": self.webhook_url,
             "polling": bool(self._poll_task and not self._poll_task.done()), "last_error": self.last_error,
-            "last_update": self.last_update or None,
+            "last_update": self.last_update or None, "enabled": self._enabled_cached(),
         }
+
+    def _enabled_cached(self) -> bool:
+        c = self.control._cache
+        return True if c is None else bool(c["enabled"])
 
     # ------------------------------------------------------------------ owner
     async def owner_id(self) -> int:
@@ -242,7 +255,7 @@ class TelegramBot:
 
     async def notify(self, text: str, buttons: Any = None) -> None:
         owner = await self.owner_id()
-        if owner and self.configured:
+        if owner and self.configured and await self.control.sending():
             try:
                 await self.client.send(owner, text, buttons)
             except TelegramError as exc:
@@ -253,6 +266,8 @@ class TelegramBot:
     async def handle_update(self, u: dict[str, Any]) -> None:
         try:
             self.last_update = time.time()
+            if not await self.control.listening():
+                return                                   # switched off, paused or not listening: say nothing, do nothing
             if "callback_query" in u:
                 await self._callback(u["callback_query"])
             elif "message" in u:
@@ -270,12 +285,24 @@ class TelegramBot:
         cmd = cmd[1:].split("@")[0].lower()
         arg = arg.strip()
         owner = await self.owner_id()
+        ctl = await self.control.prefs()
         if not owner:
             if cmd == "claim":
-                await self._claim(user_id, arg)
+                if ctl["claim_open"]:
+                    await self._claim(user_id, arg)
+                else:
+                    await self.control.log("blocked", "a /claim was ignored because claiming is closed", throttle=60)
             return
         if user_id != owner or chat.get("id") != owner:
+            await self.control.log("stranger", f"someone else (id ending {str(user_id)[-3:]}) tried /{cmd[:20]}", throttle=30)
             return  # not the owner: say nothing
+        if cmd in ACTION_COMMANDS and not ctl["actions"]:
+            await self.control.log("blocked", f"/{cmd} refused: read-only mode")
+            await self.client.send(owner, "Telegram is in read-only mode, so /" + cmd + " is switched off. Change it in the dashboard under Setup, Telegram.")
+            return
+        if not ctl["send"]:
+            return
+        await self.control.log("command", "/" + cmd[:24])
         handler = {
             "start": self._home, "menu": self._home, "help": self._help, "status": self._status, "stats": self._stats, "quota": self._quota,
             "mode": self._mode, "mod": self._mod, "tgmode": self._tgmode, "pending": self._pending,
@@ -299,8 +326,10 @@ class TelegramBot:
         auth = self.c.auth
         if await auth.throttle.retry_after(key) or not auth.check_password(password):
             await auth.throttle.fail(key)
+            await self.control.log("claim_failed", f"wrong password from id ending {str(user_id)[-3:]}", throttle=10)
             return
         await auth.throttle.success(key)
+        await self.control.log("claim_ok", "a new owner claimed the bot")
         await self.c.db.kv_set("telegram_owner_id", str(user_id))
         self._owner = user_id
         await self.client.send(user_id, Rich("🎉 <b>You are now the owner of this bot.</b>\nOnly your account can use it. Tap /menu to see what it can do."),
@@ -320,6 +349,14 @@ class TelegramBot:
         action, _, raw = data.partition(":")
         msg = q.get("message") or {}
         qid = q["id"]
+        ctl = await self.control.prefs()
+        if action in ("approve", "reject", "set") and not ctl["actions"]:
+            await self.control.log("blocked", f"button '{action}' refused: read-only mode")
+            await self.client.call("answerCallbackQuery", {"callback_query_id": qid, "text": "Read-only mode is on."})
+            return
+        if not ctl["send"]:
+            return
+        await self.control.log("button", action[:16], throttle=5)
         if action in ("approve", "reject") and raw.isdigit():
             await self._decide(q, action, int(raw))
             return

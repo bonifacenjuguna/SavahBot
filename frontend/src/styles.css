@@ -228,7 +228,8 @@ input[type="checkbox"].switch:checked::after { transform: translateX(16px); }
 .input-icon > .ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .input-icon input { padding-left: 34px; }
 
-.seg-control { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; max-width: 100%; }
+.seg-control { display: inline-grid; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr); background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; max-width: 100%; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.seg-control::-webkit-scrollbar { display: none; }
 .seg-control button { background: transparent; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; min-height: 32px; }
 .seg-control button[aria-pressed="true"], .seg-control button[aria-selected="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
 .seg-control .n { font-size: 0.72rem; background: var(--demo); color: #1b1300; border-radius: 999px; padding: 0 6px; font-weight: 700; }
@@ -494,7 +495,7 @@ details.group[open] > summary { border-bottom: 1px solid var(--line); }
   .donut .legend { width: 100%; }
   .toasts { left: 12px; right: 12px; bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); max-width: none; }
   .btn, .seg-control button { min-height: 44px; }
-  .seg-control button { white-space: normal; line-height: 1.2; padding: 6px 8px; }
+  .seg-control button { white-space: nowrap; line-height: 1.2; padding: 6px 12px; }   /* labels never break letter by letter: the bar scrolls sideways instead */
   .btn.small { min-height: 38px; }
   input[type="text"], input[type="password"], input[type="number"], input[type="url"], input[type="search"], select, textarea { font-size: 16px; min-height: 44px; }
   /* tables become stacked cards */

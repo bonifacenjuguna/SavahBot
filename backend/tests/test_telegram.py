@@ -333,3 +333,95 @@ def test_html_that_telegram_rejects_is_resent_as_plain_text():
         assert calls[-1].get("parse_mode") is None and calls[-1]["text"] == "Hello & welcome"
         await c.stop()
     run(go())
+
+
+def test_control_master_switch_pause_and_read_only():
+    async def go():
+        fake = FakeTelegram()
+        c = await boot(fake)
+        ctl = c.telegram.control
+        await say(c, OWNER, "/status")
+        assert len(fake.sent()) == 1
+        # read-only: the show commands work, the changing ones are refused with an explanation
+        await ctl.update({"actions": False})
+        await say(c, OWNER, "/mode live")
+        assert "read-only" in fake.texts()[-1] and c.cfg.get("bot_mode") == "demo"
+        await say(c, OWNER, "/status")
+        assert "mode: demo" in fake.texts()[-1]
+        await c.telegram.handle_update({"update_id": 3, "callback_query": {"id": "q9", "from": {"id": OWNER}, "data": "set:bot:live", "message": {"chat": {"id": OWNER}, "message_id": 1}}})
+        assert c.cfg.get("bot_mode") == "demo"
+        await ctl.update({"actions": True})
+        # pause: silent both ways, then it ends by itself
+        await ctl.update({"pause_minutes": 30})
+        n = len(fake.sent())
+        await say(c, OWNER, "/status")
+        await c.telegram.notify("alert")
+        assert len(fake.sent()) == n
+        await ctl.update({"pause_minutes": 0})
+        await c.telegram.notify("alert")
+        assert len(fake.sent()) == n + 1
+        # master switch: webhook removed, nothing heard, nothing sent
+        await ctl.update({"enabled": False})
+        assert fake.server.calls("/deleteWebhook") and c.telegram.webhook_url == ""
+        n = len(fake.sent())
+        await say(c, OWNER, "/status")
+        await c.telegram.notify("alert")
+        assert len(fake.sent()) == n
+        await ctl.update({"enabled": True})
+        assert c.telegram.webhook_url
+        kinds = {e["kind"] for e in await ctl.entries()}
+        assert {"control", "command", "blocked"} <= kinds
+        await c.stop()
+    run(go())
+
+
+def test_control_unlink_claim_lock_rotate_and_shutdown():
+    async def go():
+        fake = FakeTelegram()
+        c = await boot(fake, TELEGRAM_OWNER_ID="")
+        ctl = c.telegram.control
+        await say(c, 777, "/claim pw-secret")
+        assert await c.telegram.owner_id() == 777
+        old = await c.telegram.webhook_secret()
+        await ctl.rotate_secret()
+        assert await c.telegram.webhook_secret() != old
+        assert await c.telegram.handle_webhook(old, tg_message(777, "/status")) is False
+        await ctl.unlink_owner()
+        assert await c.telegram.owner_id() == 0
+        await ctl.update({"claim_open": False})
+        await say(c, 888, "/claim pw-secret")
+        assert await c.telegram.owner_id() == 0                  # claiming is closed
+        await ctl.update({"claim_open": True})
+        await say(c, 888, "/claim pw-secret")
+        assert await c.telegram.owner_id() == 888
+        out = await ctl.shutdown()
+        assert out["ok"] and "/revoke" in out["next"]
+        p = await ctl.prefs()
+        assert p["enabled"] is False and p["claim_open"] is False and await c.telegram.owner_id() == 0
+        text = " ".join(e["detail"] for e in await ctl.entries())
+        assert "pw-secret" not in text and FakeTelegram.TOKEN not in text
+        await c.stop()
+    run(go())
+
+
+from tests.test_api import e2e  # noqa: E402
+
+
+@e2e
+async def test_telegram_control_api(api):
+    st, b = await api.call("GET", "/api/telegram/control")
+    assert st == 200 and b["state"] == "on" and b["enabled"] and b["actions"]
+    st, b = await api.call("POST", "/api/telegram/control", {"actions": False, "notify": {"reminders": False}})
+    assert st == 200 and b["state"] == "read-only" and b["notify"]["reminders"] is False
+    st, b = await api.call("POST", "/api/telegram/control", {"pause_minutes": 20})
+    assert st == 200 and b["state"] == "paused" and b["pause_until"] > 0
+    assert (await api.call("POST", "/api/telegram/control", {"pause_minutes": 0}))[1]["pause_until"] == 0
+    assert (await api.call("POST", "/api/telegram/control", {"pause_minutes": -5}))[0] == 422
+    assert (await api.call("POST", "/api/telegram/control", {"notify": {"nonsense": True}}))[0] == 422
+    assert (await api.call("POST", "/api/telegram/control", {"bogus": 1}))[0] == 422
+    assert (await api.call("POST", "/api/telegram/shutdown", {}))[0] == 400            # needs confirmation
+    st, b = await api.call("POST", "/api/telegram/shutdown", {"confirm": True})
+    assert st == 200 and b["state"] == "off" and b["claim_open"] is False and "/revoke" in b["next"]
+    st, b = await api.call("GET", "/api/telegram/log")
+    assert st == 200 and any(e["kind"] == "shutdown" for e in b["items"])
+    assert (await api.call("DELETE", "/api/telegram/log"))[0] == 200

@@ -291,9 +291,16 @@ Telegram bot control.
 
 | Method | Path | Notes |
 |---|---|---|
+| GET | `/api/telegram/control` |  |
+| POST | `/api/telegram/control` |  |
+| DELETE | `/api/telegram/log` |  |
+| GET | `/api/telegram/log` |  |
 | POST | `/api/telegram/mode` |  |
+| POST | `/api/telegram/rotate-secret` |  |
+| POST | `/api/telegram/shutdown` |  |
 | GET | `/api/telegram/status` |  |
 | POST | `/api/telegram/test` |  |
+| POST | `/api/telegram/unlink` |  |
 | POST | `/api/telegram/webhook` | public |
 
 ## timers

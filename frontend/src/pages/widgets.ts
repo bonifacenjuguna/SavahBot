@@ -12,7 +12,11 @@ export interface Seg<T extends string> { el: HTMLElement; set(v: T): void; get()
 export function seg<T extends string>(label: string, options: { id: T; label: string; icon?: string }[], value: T, onChange: (v: T) => void): Seg<T> {
   let current = value;
   const buttons = options.map((o) => h("button", { type: "button", "data-id": o.id, "aria-pressed": String(o.id === current) }, o.icon ? icon(o.icon, 15) : null, o.label));
-  const paint = () => buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.getAttribute("data-id") === current)));
+  const paint = () => buttons.forEach((b) => {
+    const on = b.getAttribute("data-id") === current;
+    b.setAttribute("aria-pressed", String(on));
+    if (on) queueMicrotask(() => { try { b.scrollIntoView({ block: "nearest", inline: "center" }); } catch { /* old browsers: the bar simply stays where it is */ } });
+  });
   buttons.forEach((b) => b.addEventListener("click", () => { const v = b.getAttribute("data-id") as T; if (v === current) return; current = v; paint(); onChange(v); }));
   const el = h("div", { class: "seg-control", role: "group", "aria-label": label }, buttons);
   return { el, set: (v) => { current = v; paint(); }, get: () => current };
