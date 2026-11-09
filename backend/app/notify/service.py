@@ -45,6 +45,12 @@ register_schema([
         id {PK}, token_hash TEXT NOT NULL UNIQUE, token_enc TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', platform TEXT NOT NULL DEFAULT '', browser TEXT NOT NULL DEFAULT '',
         installed INTEGER NOT NULL DEFAULT 0, created {REAL} NOT NULL, last_seen {REAL} NOT NULL, last_ok {REAL}, last_error TEXT NOT NULL DEFAULT '', fail_count INTEGER NOT NULL DEFAULT 0,
         enabled INTEGER NOT NULL DEFAULT 1)""",
+], columns=[
+    # a table left behind by an earlier build is topped up with whatever it lacks
+    ("notifications", "ts", "DOUBLE PRECISION NOT NULL DEFAULT 0"), ("notifications", "category", "TEXT NOT NULL DEFAULT ''"), ("notifications", "title", "TEXT NOT NULL DEFAULT ''"),
+    ("notifications", "body", "TEXT NOT NULL DEFAULT ''"), ("notifications", "route", "TEXT NOT NULL DEFAULT ''"), ("notifications", "priority", "TEXT NOT NULL DEFAULT 'normal'"),
+    ("notifications", "kind", "TEXT NOT NULL DEFAULT 'info'"), ("notifications", "icon", "TEXT NOT NULL DEFAULT 'bell'"), ("notifications", "dedupe_key", "TEXT NOT NULL DEFAULT ''"),
+    ("notifications", "count", "INTEGER NOT NULL DEFAULT 1"), ("notifications", "read_ts", "DOUBLE PRECISION"), ("notifications", "data", "TEXT NOT NULL DEFAULT ''"), ("notifications", "ack_ts", "DOUBLE PRECISION"),
 ])
 
 DEFAULT_PREFS: dict[str, Any] = {

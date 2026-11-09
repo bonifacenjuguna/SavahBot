@@ -31,3 +31,5 @@ It must run on https, `FRONTEND_URL` must be your real dashboard address, and yo
 
 ## Where to look
 Railway > Deployments > logs. Lines are tagged `savahbot.<area>` (notify, weather, access, backup). Coordinates, tokens and secrets are never logged.
+
+- Startup on a database that already had an older `notifications` table failed with `column "dedupe_key" does not exist` (indexes were built before missing columns were added). Fixed: tables, then missing columns, then indexes (non-unique index failures only warn).

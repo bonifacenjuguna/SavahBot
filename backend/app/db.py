@@ -136,8 +136,25 @@ def all_schema() -> list[str]:
     return [*SCHEMA, *_EXTRA_SCHEMA]
 
 
+def schema_phases() -> tuple[list[str], list[str]]:
+    """(tables, indexes). Indexes run LAST, after missing columns were added, so a table left over from an older
+    build (without a column an index needs) is repaired instead of stopping the whole startup."""
+    stmts = all_schema()
+    return [x for x in stmts if "INDEX" not in x.lstrip()[:30].upper()], [x for x in stmts if "INDEX" in x.lstrip()[:30].upper()]
+
+
 def all_columns() -> list[tuple[str, str, str]]:
     return [*MIGRATIONS, *_EXTRA_COLUMNS]
+
+
+async def _index(impl: Any, stmt: str) -> None:
+    """An index is an optimisation: if one cannot be built (odd leftover table), say so and carry on starting."""
+    try:
+        await impl.run(stmt, (), "exec")
+    except Exception as exc:
+        if "UNIQUE" in stmt.upper():
+            raise
+        logger.warning("Could not create index (%s): %s", stmt[:80], exc)
 
 
 class _SQLite:
@@ -168,12 +185,16 @@ class _SQLite:
         return await asyncio.to_thread(self._exec, sql, params, mode)
 
     async def init_schema(self) -> None:
-        for stmt in all_schema():
-            await self.run(stmt.replace("{PK}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL"), (), "exec")
+        tables, indexes = schema_phases()
+        fix = lambda st: st.replace("{PK}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL")
+        for stmt in tables:
+            await self.run(fix(stmt), (), "exec")
         for table, column, definition in all_columns():
             have = {r["name"] for r in await self.run(f"PRAGMA table_info({table})", (), "all")}
-            if column not in have:
+            if have and column not in have:
                 await self.run(f"ALTER TABLE {table} ADD COLUMN {column} {definition}", (), "exec")
+        for stmt in indexes:
+            await _index(self, fix(stmt))
 
     async def close(self) -> None:
         with self._lock:
@@ -221,10 +242,14 @@ class _Postgres:
                 return 0
 
     async def init_schema(self) -> None:
-        for stmt in all_schema():
-            await self.run(stmt.replace("{PK}", "SERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION"), (), "exec")
+        tables, indexes = schema_phases()
+        fix = lambda st: st.replace("{PK}", "SERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION")
+        for stmt in tables:
+            await self.run(fix(stmt), (), "exec")
         for table, column, definition in all_columns():
             await self.run(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}", (), "exec")
+        for stmt in indexes:
+            await _index(self, fix(stmt))
 
     async def close(self) -> None:
         if self._pool:

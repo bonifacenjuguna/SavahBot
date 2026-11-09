@@ -299,3 +299,20 @@ def test_fcm_bare_404_is_not_a_dead_token():
     import inspect
     from app.notify import fcm
     assert "status == 404" not in inspect.getsource(fcm.Fcm.send)
+
+
+def test_old_notifications_table_is_repaired_on_startup(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.db"
+    c = sqlite3.connect(path)
+    c.execute("CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, title TEXT NOT NULL)")   # an older shape, no dedupe_key
+    c.commit(); c.close()
+
+    async def go():
+        db = Database(f"sqlite:///{path}")
+        await db.connect()
+        cols = {r["name"] for r in await db._impl.run("PRAGMA table_info(notifications)", (), "all")}
+        await db.close()
+        return cols
+    cols = asyncio.run(go())
+    assert {"dedupe_key", "category", "count", "read_ts"} <= cols
