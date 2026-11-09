@@ -1,93 +1,66 @@
-/** Notification center. Separate from Moderation: moderation is a work queue, notifications are a log of what happened. */
+/** The bell. Since 1.2.0 the server owns notifications: this file only shows them, so the bell, the Notifications page and push all agree. */
 import * as feed from "./events.js";
-import { h, mount, sheet } from "./dom.js";
+import { get, post } from "./api.js";
+import { h, mount, sheet, toast } from "./dom.js";
 import { icon } from "./icons.js";
-import { onStatus, type Status } from "./state.js";
+import type { Status } from "./state.js";
 import { dateRange, type RangeValue } from "./pages/kit.js";
 
 export type Kind = "info" | "ok" | "warn" | "bad";
-export interface Notice { id: string; ts: number; kind: Kind; icon: string; title: string; text: string; href?: string; read: boolean; key?: string; count: number }
+export interface Notice { id: number; ts: number; kind: Kind; icon: string; title: string; text: string; href?: string; read: boolean; count: number; category: string }
+interface Row { id: number; ts: number; kind: Kind; icon: string; title: string; body: string; route: string; read: boolean; count: number; category: string }
 
-const STORE = "savahbot.notices";
-const MAX = 50;
-let items: Notice[] = load();
+const MAX = 100;
+let items: Notice[] = [];
+let unread = 0;
+let loaded = false;
 const subs = new Set<() => void>();
-
-function load(): Notice[] {
-  try { const v = JSON.parse(localStorage.getItem(STORE) ?? "[]"); return Array.isArray(v) ? v.slice(0, MAX) : []; } catch { return []; }
-}
-function save(): void { try { localStorage.setItem(STORE, JSON.stringify(items)); } catch { /* private mode */ } }
-function changed(): void { save(); subs.forEach((f) => f()); }
+const conv = (r: Row): Notice => ({ id: r.id, ts: r.ts, kind: r.kind, icon: r.icon, title: r.title, text: r.body, href: r.route, read: r.read, count: r.count, category: r.category });
+const changed = (): void => subs.forEach((f) => f());
 
 export const notices = (): Notice[] => items;
-export const unreadCount = (): number => items.filter((n) => !n.read).length;
+export const unreadCount = (): number => unread;
 export function onNotices(fn: () => void): () => void { subs.add(fn); return () => subs.delete(fn); }
-export function markAllRead(): void { items.forEach((n) => (n.read = true)); changed(); }
-export function markRead(id: string): void { const n = items.find((x) => x.id === id); if (n && !n.read) { n.read = true; changed(); } }
-export function clearAll(): void { items = []; changed(); }
 
-export function push(n: { kind: Kind; icon: string; title: string; text?: string; href?: string; key?: string; plural?: (count: number) => string }): void {
-  const now = Date.now() / 1000;
-  const prev = n.key ? items.find((x) => x.key === n.key && !x.read && now - x.ts < 300) : undefined;
-  if (prev) {  // many similar events in a row become one entry with a count
-    prev.count += 1;
-    prev.ts = now;
-    if (n.plural) prev.title = n.plural(prev.count);
-    prev.text = n.text ?? prev.text;
-    items = [prev, ...items.filter((x) => x !== prev)];
-  } else {
-    items = [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ts: now, kind: n.kind, icon: n.icon, title: n.title, text: n.text ?? "", href: n.href, read: false, key: n.key, count: 1 }, ...items].slice(0, MAX);
-  }
-  changed();
+export async function refresh(): Promise<void> {
+  try {
+    const r = await get<{ items: Row[]; unread: number }>(`/api/notify/inbox?limit=${MAX}`);
+    items = r.items.map(conv); unread = r.unread; loaded = true; changed();
+  } catch { /* offline or signed out: keep what is shown */ }
+}
+export function markAllRead(): void {
+  items.forEach((n) => (n.read = true)); unread = 0; changed();
+  void post("/api/notify/read", { ids: null }).catch(() => refresh());
+}
+export function markRead(id: number): void {
+  const n = items.find((x) => x.id === id);
+  if (!n || n.read) return;
+  n.read = true; unread = Math.max(0, unread - 1); changed();
+  void post("/api/notify/read", { ids: [id] }).catch(() => refresh());
+}
+export function clearAll(): void {
+  items = []; unread = 0; changed();
+  void post("/api/notify/delete", { ids: null }).catch(() => refresh());
 }
 
-// ------------------------------------------------------------------ sources
-/** Listens to the live feed and to status changes. Returns a function that stops listening. */
-export function startNotifications(getStatus: () => Status | null): () => void {
+// ------------------------------------------------------------------ live updates
+/** Loads the inbox and keeps it current from the live feed. Returns a function that stops listening. `getStatus` is kept for the caller's signature. */
+export function startNotifications(_getStatus: () => Status | null): () => void {
+  void refresh();
   const offs: (() => void)[] = [];
-  const live = () => getStatus()?.hub.mode === "live";
-
-  offs.push(feed.on("mod_pending", (e) => {
-    if (e.data?.merged) return;
-    push({ kind: "warn", icon: "inbox", key: "pending", title: "Approval needed", text: `${e.data?.author ?? "Someone"}: ${e.data?.action ?? "action"}${e.data?.score ? ` (score ${e.data.score})` : ""}`, href: "#/moderation",
-      plural: (c) => `${c} approval requests` });
+  offs.push(feed.on("notify", (e) => {
+    const d = e.data as { id: number; title: string; body: string; route: string; kind: Kind; icon: string; category: string; folded?: boolean } | undefined;
+    if (!d) return;
+    const prev = items.find((x) => x.id === d.id);
+    if (prev) { prev.count += 1; prev.title = d.title; prev.text = d.body; prev.ts = Date.now() / 1000; if (prev.read) { prev.read = false; unread += 1; } items = [prev, ...items.filter((x) => x !== prev)]; }
+    else { items = [{ id: d.id, ts: Date.now() / 1000, kind: d.kind, icon: d.icon, title: d.title, text: d.body, href: d.route, read: false, count: 1, category: d.category }, ...items].slice(0, MAX); unread += 1; }
+    changed();
+    if (document.visibilityState === "visible" && d.category !== "stream.mode") toast(d.title, d.kind === "bad" ? "error" : "ok");
   }));
-  offs.push(feed.on("mod_resolved", (e) => {
-    if (e.data?.status === "failed") push({ kind: "bad", icon: "alert", title: "Moderation action failed", text: `${e.data?.action ?? "Action"} for ${e.data?.author ?? "a chatter"} did not go through.`, href: "#/moderation" });
-  }));
-  offs.push(feed.on("mod_expired", (e) => {
-    const n = Number(e.data?.count ?? 1);
-    push({ kind: "warn", icon: "clock", title: "Approval requests expired", text: `${n} request${n === 1 ? "" : "s"} timed out without a decision.`, href: "#/moderation" });
-  }));
-  offs.push(feed.on("stream", (e) => {
-    if (!live()) return;
-    push(e.data?.live ? { kind: "ok", icon: "radio", title: "Stream is live", text: e.data?.title || "The bot is attached to the chat.", href: "#/desk" } : { kind: "info", icon: "power", title: "Stream ended", text: "The bot is waiting for the next stream.", href: "#/desk" });
-  }));
-  offs.push(feed.on("mode", (e) => {
-    push({ kind: "info", icon: e.data?.mode === "live" ? "radio" : "flask", title: e.data?.mode === "live" ? "Switched to Live" : "Switched to Demo", text: e.data?.mode === "live" ? "Real YouTube chat." : "Simulated chat. Nothing is sent.", key: "mode" });
-  }));
-  offs.push(feed.on("reminder", (e) => push({ kind: "ok", icon: "bell", title: "Reminder", text: String(e.data?.text ?? ""), href: "#/notebook" })));
-  offs.push(feed.on("timer_done", (e) => push({ kind: "info", icon: "timer", title: "Timer finished", text: `"${e.data?.name ?? "A timer"}" posted its last message and switched itself off.`, href: "#/commands?tab=timers" })));
-
-  // problems that show up in the status rather than as events
-  let prev: Status | null = null;
-  let quotaDay = "";
-  let quotaLevel = 0;
-  offs.push(onStatus((s) => {
-    if (prev) {
-      if (s.youtube.last_error && s.youtube.last_error !== prev.youtube.last_error) push({ kind: "bad", icon: "youtube", title: "YouTube problem", text: s.youtube.last_error, href: "#/setup", key: "yt-error" });
-      if (s.youtube.last_action_error && s.youtube.last_action_error !== prev.youtube.last_action_error) push({ kind: "bad", icon: "ban", title: "YouTube refused an action", text: s.youtube.last_action_error, href: "#/setup" });
-      if (s.telegram.last_error && s.telegram.last_error !== prev.telegram.last_error) push({ kind: "bad", icon: "telegram", title: "Telegram problem", text: s.telegram.last_error, href: "#/setup", key: "tg-error" });
-      if (prev.youtube.connected && !s.youtube.connected) push({ kind: "warn", icon: "plug", title: "YouTube disconnected", text: "Reconnect your Google account to keep moderating.", href: "#/setup" });
-    }
-    const q = s.youtube.quota;
-    if (q.day !== quotaDay) { quotaDay = q.day; quotaLevel = Math.floor(q.fraction * 100) >= 90 ? 90 : Math.floor(q.fraction * 100) >= 75 ? 75 : 0; }
-    else if (s.hub.mode === "live") {
-      const lvl = q.fraction >= 0.9 ? 90 : q.fraction >= 0.75 ? 75 : 0;
-      if (lvl > quotaLevel) { quotaLevel = lvl; push({ kind: lvl >= 90 ? "bad" : "warn", icon: "gauge", title: `YouTube quota at ${lvl}%`, text: `${q.used} of ${q.daily} units used today.`, href: "#/setup" }); }
-    }
-    prev = s;
-  }));
+  offs.push(feed.onConnection((up) => { if (up) void refresh(); }));
+  const vis = () => { if (document.visibilityState === "visible") void refresh(); };
+  document.addEventListener("visibilitychange", vis);
+  offs.push(() => document.removeEventListener("visibilitychange", vis));
   return () => offs.forEach((f) => f());
 }
 
@@ -119,11 +92,12 @@ function panelContent(close: () => void): { el: HTMLElement; stop: () => void } 
         h("span", { class: "notice-ico" }, icon(n.icon, 18)),
         h("span", { class: "notice-body" }, h("strong", null, n.title), n.text ? h("span", { class: "small muted" }, n.text) : null, h("span", { class: "small muted" }, ago(n.ts))),
         n.read ? null : h("i", { class: "notice-dot", "aria-label": "Unread" }));
-    }) : h("div", { class: "empty" }, icon("checkCircle", 30), h("span", null, range.active ? `Nothing for ${range.label.toLowerCase()}.` : onlyUnread ? "No unread notifications." : "You are all caught up. Events like stream start, reminders and problems appear here.")));
+    }) : h("div", { class: "empty" }, icon("checkCircle", 30), h("span", null, range.active ? `Nothing for ${range.label.toLowerCase()}.` : onlyUnread ? "No unread notifications." : loaded ? "You are all caught up. Events like stream start, reminders and problems appear here." : "Loading…")));
   }
   draw();
   const off = onNotices(draw);
-  const el = h("div", { class: "notice-panel" }, h("div", { class: "notice-tools" }, filter, h("span", { class: "tb-spacer" }), readAll, clear), dates.el, list);
+  const foot = h("a", { class: "btn small ghost", href: "#/notifications", onclick: () => close() }, icon("sliders", 15), "Notification settings");
+  const el = h("div", { class: "notice-panel" }, h("div", { class: "notice-tools" }, filter, h("span", { class: "tb-spacer" }), readAll, clear), dates.el, list, h("div", { class: "notice-foot" }, foot));
   return { el, stop: off };
 }
 

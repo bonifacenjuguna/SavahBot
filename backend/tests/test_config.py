@@ -97,3 +97,14 @@ def test_env_example_works_as_is_and_edit_me_is_ignored():
     assert sum(v == PLACEHOLDER for v in values.values()) >= 5
     assert Settings(env={"OWNER_PASSWORD": "edit-me", "TELEGRAM_BOT_TOKEN": "Edit-Me"}, env_file="").owner_password == ""
     assert Settings(env={"OWNER_PASSWORD": "real-pass"}, env_file="").owner_password == "real-pass"
+
+
+def test_generated_docs_are_up_to_date():
+    """docs/ENVIRONMENT.md and docs/API.md are generated from the code. Run scripts/gen_env_doc.py and scripts/gen_api_doc.py when this fails."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    for script in ("gen_env_doc.py", "gen_api_doc.py"):
+        r = subprocess.run([sys.executable, "-I", str(root / "scripts" / script), "--check"], cwd=root, capture_output=True)
+        assert r.returncode == 0, f"run: python scripts/{script}"

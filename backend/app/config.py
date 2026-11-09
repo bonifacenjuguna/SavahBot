@@ -48,15 +48,44 @@ _f(G, "bot_mode", "demo", "Active chat source: 'demo' (simulated chat) or 'live'
 _f(G, "api_docs_enabled", False, "Expose /docs and /openapi.json (interactive API docs).")
 _f(G, "sse_max_clients", 10, "Maximum simultaneous dashboard live-feed connections.")
 _f(G, "chat_buffer_size", 500, "How many recent chat messages are kept in memory for the live view.")
-_f(G, "chat_retention_days", 14, "Chat messages older than this are deleted automatically.")
-_f(G, "action_retention_days", 90, "Moderation history older than this is deleted automatically.")
+_f(G, "chat_retention_days", 90, "Chat messages older than this are deleted automatically. Daily totals are kept forever, so charts still reach back further.")
+_f(G, "action_retention_days", 365, "Moderation history older than this is deleted automatically. Daily totals are kept forever.")
 
 G = "Security"
 _f(G, "owner_password", "", "Dashboard login password. If empty, a random one is generated on first boot and printed ONCE in the server logs.")
 _f(G, "jwt_secret", "", "Secret used to sign login tokens. If empty, a random one is generated and stored in the database.")
 _f(G, "jwt_expire_hours", 72, "How long a dashboard login stays valid.")
+_f(G, "session_idle_minutes", 1440, "Sign a dashboard session out after this many minutes without use. 0 turns the idle limit off.")
+_f(G, "security_step_up_minutes", 5, "After you re-confirm it is you, sensitive security actions stay unlocked for this many minutes.")
+_f(G, "security_max_sessions", 10, "Most dashboard sessions open at once. The least recently used is closed when this is exceeded.")
+_f(G, "security_log_retention_days", 365, "How long sign-in activity and the security audit log are kept.")
+_f(G, "webauthn_rp_id", "", "Passkey site id. Leave empty to use the host name of FRONTEND_URL (for example dash.example.app). Must be the dashboard's host, not the API's.")
+_f(G, "webauthn_origins", "", "Comma-separated dashboard origins allowed to use passkeys. Leave empty to use FRONTEND_URL.")
+_f(G, "webauthn_require_uv", False, "Require passkeys to verify you (fingerprint, face or PIN). Turn on if every passkey you use supports it.")
 _f(G, "login_max_attempts", 5, "Failed logins allowed before the lockout starts.")
 _f(G, "login_lockout_minutes", 15, "How long a locked-out client must wait.")
+
+G = "Notifications (Firebase Cloud Messaging)"
+_f(G, "firebase_project_id", "", "Firebase project ID (Project settings > General). Needed to send push notifications.")
+_f(G, "firebase_client_email", "", "Service account e-mail (the client_email in the service-account JSON). Backend only; never shown in the dashboard.")
+_f(G, "firebase_private_key", "", "Service account private key (the private_key in the JSON). Paste it with \\n for line breaks. Backend only; never commit it.")
+_f(G, "firebase_service_account_json", "", "Alternative to the two lines above: the whole service-account JSON, or the same JSON base64 encoded. Backend only.")
+_f(G, "firebase_web_api_key", "", "Firebase web app apiKey (Project settings > Your apps). Public by design; the dashboard needs it to receive pushes.")
+_f(G, "firebase_web_app_id", "", "Firebase web app appId. Public by design.")
+_f(G, "firebase_messaging_sender_id", "", "Firebase messagingSenderId (Cloud Messaging tab). Public by design.")
+_f(G, "firebase_auth_domain", "", "Optional Firebase authDomain. Not needed for push; leave blank.")
+_f(G, "firebase_vapid_key", "", "Web Push certificate public key (Cloud Messaging > Web configuration > Generate key pair). Public by design.")
+_f(G, "notify_retention_days", 30, "Notification history older than this is deleted automatically.")
+_f(G, "notify_max_push_per_hour", 30, "Most push messages sent per hour. Extras are folded into one summary.")
+_f(G, "notify_max_attempts", 5, "Times a failed push is retried (with growing delays) before it is marked failed.")
+
+G = "Weather (Open-Meteo)"
+_f(G, "weather_commercial_api_key", "", "Only if you have bought an Open-Meteo commercial plan: its API key. Leave blank for the free, non-commercial service (no key needed).")
+_f(G, "weather_forecast_ttl_minutes", 15, "How long a fetched forecast counts as fresh before the next request goes to Open-Meteo.")
+_f(G, "weather_stale_max_hours", 12, "If Open-Meteo is unreachable, a forecast up to this old can still be shown (clearly marked as old). Alerts never use it.")
+_f(G, "weather_geocode_ttl_hours", 168, "How long place-search results are remembered.")
+_f(G, "weather_timeout_seconds", 8, "How long to wait for Open-Meteo before giving up on one try.")
+_f(G, "weather_retries", 2, "Extra tries after a temporary failure, with growing pauses.")
 
 G = "Database"
 _f(G, "database_url", "", "PostgreSQL URL (Railway sets DATABASE_URL for you). Empty = local SQLite file, fine for local testing only.")
@@ -135,6 +164,11 @@ _f(G, "mod_strike_decay_minutes", 60, "Strikes expire after this many minutes.")
 _f(G, "mod_strikes_to_timeout", 2, "Strikes before a delete escalates to a timeout.")
 _f(G, "mod_strikes_to_ban", 4, "Strikes before a timeout escalates to a ban.")
 _f(G, "mod_allow_ban_escalation", True, "Allow escalation to bans (bans cost the most YouTube quota).")
+_f(G, "mod_max_punishment", "ban", "The harshest action the bot may ever take: 'delete' (messages only, nobody is timed out or banned), 'timeout' or 'ban'. Lower actions are unaffected.")
+_f(G, "mod_never_punish", "", "Comma-separated names or channel ids that are never timed out or banned. Their bad messages are still deleted.")
+_f(G, "mod_reason_caps", "", "Cap the harshest action for one kind of trigger, as name:action pairs, e.g. 'link:delete,caps:delete,raid:ban'. Names are the signal names shown on each moderation card.")
+_f(G, "mod_auto_punish_daily_cap", 0, "Most automatic timeouts and bans per day. After that the bot only deletes. 0 means no limit.")
+_f(G, "mod_second_chance_hours", 0, "Automatically lift permanent bans the bot made by itself after this many hours (each lift costs YouTube quota). 0 means never.")
 _f(G, "mod_pending_ttl_minutes", 30, "Unanswered approval requests expire after this long, so stale bans are never approved by accident.")
 _f(G, "mod_max_deletes_per_action", 10,"Messages deleted when one grouped action is approved (protects quota).")
 _f(G, "mod_action_cooldown_seconds", 60, "Do not repeat a timeout/ban on the same user within this window.")
@@ -186,33 +220,54 @@ _f(G, "mod_interval_max_mean_gap", 120.0, "Only judge users whose average gap is
 _f(G, "mod_interval_weight", 30, "Score added by the timing signal.")
 
 # ---------------------------------------------------------------------------------------------
-# 1.1.6 Intelligence: knowledge packs plus detectors that need no AI model and no outside service.
-# Every detector can be Off, Shadow (runs and is logged, never acts) or Active (adds to the message score).
-# (id, title, default max points, default sensitivity 0..1). New detectors start in shadow mode.
-INTEL_DETECTORS: list[tuple[str, str, int, float]] = [
-    ("packs", "Knowledge packs", 100, 0.5),
-    ("fuzzy", "Fuzzy matching", 45, 0.5),
-    ("learning", "Learning filter", 45, 0.5),
-    ("links", "Link intelligence", 45, 0.5),
-    ("reputation", "Viewer reputation", 30, 0.5),
-    ("scam", "Scam patterns", 55, 0.5),
-    ("shape", "Bot shape", 30, 0.5),
-    ("evasion", "Evasion tricks", 25, 0.5),
-    ("names", "Lookalike names", 45, 0.5),
-]
 G = "Intelligence"
-_f(G, "intel_enabled", True, "Run the intelligence layer (knowledge packs and detectors). When off, only the original moderation signals run.")
-for _id, _title, _cap, _sens in INTEL_DETECTORS:
-    _f(G, f"intel_{_id}_mode", "shadow", f"{_title}: 'off', 'shadow' (runs and is logged, never acts) or 'active' (adds to the score).")
-    _f(G, f"intel_{_id}_weight", _cap, f"{_title}: the most points this detector can add to a message score.")
-    _f(G, f"intel_{_id}_sensitivity", _sens, f"{_title}: 0 is cautious (fewer catches), 1 is eager (more catches, more mistakes).")
-_f(G, "intel_learn_auto", True, "Learn from your Approve and Reject decisions in Moderation.")
+_f(G, "intel_enabled", True, "Master switch for the intelligence layer (phrase packs, typo matching, link intelligence, scam intent, statistics). Off = the bot behaves exactly as in 1.1.5.")
+_f(G, "intel_max_weight", 60, "The most score the intelligence layer can add to one message on its own. Keeps it from banning anyone by itself.")
+_f(G, "intel_scam_mode", "live", "Scam phrases and scam-intent scoring: off, shadow (logged, never scored) or live.")
+_f(G, "intel_spam_mode", "live", "Spam and promotion phrases: off, shadow or live.")
+_f(G, "intel_abuse_mode", "shadow", "Profanity and insults: off, shadow or live. Shadow by default so you can review what it would catch first.")
+_f(G, "intel_harassment_mode", "live", "Threats and harassment (death wishes, doxxing, swatting): off, shadow or live.")
+_f(G, "intel_typo_mode", "live", "Typo and disguise matching of blocked and known-bad phrases: off, shadow or live.")
+_f(G, "intel_link_risk_mode", "live", "Link intelligence (look-alike domains, shorteners, threat lists): off, shadow or live.")
+_f(G, "intel_impersonation_mode", "live", "Impersonation guard (copied or staff-like account names, 'I am the admin'): off, shadow or live.")
+_f(G, "intel_obfuscation_mode", "live", "Text tricks (zalgo, hidden characters, mixed alphabets, symbol art): off, shadow or live.")
+_f(G, "intel_bot_like_mode", "shadow", "Bot-like account names: off, shadow or live.")
+_f(G, "intel_intent_mode", "shadow", "Naive Bayes spam-likeness: off, shadow or live.")
+_f(G, "intel_known_spam_mode", "shadow", "Similarity to known spam messages (BM25): off, shadow or live.")
+_f(G, "intel_raid_wave_mode", "live", "Raid wave tracker: off, shadow or live.")
+_f(G, "intel_scam_scale", 1.0, "Strength multiplier for the scam detector (0.5 = half as strong, 2 = twice).")
+_f(G, "intel_spam_scale", 1.0, "Strength multiplier for the spam detector.")
+_f(G, "intel_abuse_scale", 1.0, "Strength multiplier for the abuse detector.")
+_f(G, "intel_harassment_scale", 1.0, "Strength multiplier for the threats and harassment detector.")
+_f(G, "intel_typo_scale", 1.0, "Strength multiplier for typo matching.")
+_f(G, "intel_link_risk_scale", 1.0, "Strength multiplier for link intelligence.")
+_f(G, "intel_impersonation_scale", 1.0, "Strength multiplier for the impersonation guard.")
+_f(G, "intel_obfuscation_scale", 1.0, "Strength multiplier for text-trick detection.")
+_f(G, "intel_bot_like_scale", 1.0, "Strength multiplier for bot-like accounts.")
+_f(G, "intel_intent_scale", 1.0, "Strength multiplier for the Naive Bayes detector.")
+_f(G, "intel_known_spam_scale", 1.0, "Strength multiplier for known-spam similarity.")
+_f(G, "intel_raid_wave_scale", 1.0, "Strength multiplier for the raid wave bonus.")
+_f(G, "intel_context_enabled", True, "Understand context: a question about a scam, or a warning to others, scores lower than the scam itself.")
+_f(G, "intel_safe_enabled", True, "Use the safe phrases (gaming talk such as 'kill streak') to stop rules firing on normal chat.")
+_f(G, "intel_languages", "en,sw,sheng", "Which language packs are active, comma separated: en, sw (Swahili), sheng.")
+_f(G, "intel_protected_names", "", "Names the impersonation guard protects, comma separated (your channel name, your moderators). The demo channel name is added automatically.")
+_f(G, "intel_protected_domains", "", "Your own websites, comma separated. Links that look almost like them are flagged as look-alikes, and links to them are never treated as risky.")
+_f(G, "intel_intent_min_tokens", 4, "Messages shorter than this many words are not scored by the statistical detectors.")
+_f(G, "intel_wave_accounts", 6, "A raid wave starts when this many brand-new accounts speak within the window below.")
+_f(G, "intel_wave_window_seconds", 30, "Window for counting new accounts toward a raid wave.")
+_f(G, "intel_wave_duration_seconds", 180, "How long a raid wave stays active once detected.")
+_f(G, "intel_wave_weight", 15, "Score added to suspicious messages from new accounts during a raid wave.")
+_f(G, "intel_learning_mode", "suggest", "What the bot does with what it learns from your approve and reject decisions: off, suggest (you decide) or auto (applies the confident ones, every change is logged and reversible).")
+_f(G, "intel_learn_min_lessons", 10, "The learned model only influences scoring once it has at least this many lessons (spam and fine together). Stops a few early decisions from swinging the bot.")
 _f(G, "intel_learn_from_demo", False, "Also learn from simulated (demo) decisions. Off by default so test data never teaches the bot.")
 _f(G, "intel_learn_trusted_ham", True, "Learn that ordinary messages from regulars, members and mods are fine (a few per minute at most).")
-_f(G, "intel_learn_prior", 0.15, "How much of real chat is expected to be spam (0.01 to 0.5). Lower makes the learning filter more careful.")
-_f(G, "intel_example_cap", 5000, "Most learned messages to keep. The oldest are forgotten first.")
-_f(G, "intel_shadow_retention_days", 14, "How long shadow-mode findings are kept for the report.")
-_f(G, "intel_protected_names", "", "Names to guard against copycats, comma separated (your channel name, your mods). Names of the owner and mods seen in chat are added automatically.")
+_f(G, "intel_example_cap", 5000, "Most lessons kept. When there are more, the oldest are forgotten first.")
+_f(G, "intel_lesson_retention_days", 0, "Delete lessons older than this many days. 0 keeps them until you forget them or the limit above is reached.")
+_f(G, "intel_feeds_enabled", True, "Refresh the live data feeds (public phishing and malware domain lists) in the background.")
+_f(G, "intel_feed_interval_hours", 24, "Minimum hours between refreshes of the same feed. Never lower than 1.")
+_f(G, "intel_feed_max_entries", 15000, "Most domains kept from any one feed.")
+_f(G, "intel_feed_max_bytes", 6000000, "Largest download accepted from a feed.")
+_f(G, "intel_feed_startup_delay_seconds", 120, "Wait this long after boot before the first feed refresh, so start-up stays fast.")
 
 G = "Commands"
 _f(G, "command_prefix", "!", "Character(s) that start a chat command.")
@@ -270,10 +325,6 @@ _f(G, "smtp_password", "", "Reserved: SMTP password.")
 _f(G, "smtp_from", "", "Reserved: sender address for email alerts.")
 _f(G, "outbound_webhook_url", "", "Reserved: POST moderation events to this URL.")
 _f(G, "outbound_webhook_secret", "", "Reserved: HMAC secret for outbound webhooks.")
-_f(G, "ntfy_url", "", "Reserved: ntfy server URL for push alerts.")
-_f(G, "ntfy_topic", "", "Reserved: ntfy topic.")
-_f(G, "weather_api_key", "", "Reserved: weather API key for a $(weather) variable.")
-_f(G, "giphy_api_key", "", "Reserved: GIF API key.")
 _f(G, "ai_enabled", False, "Reserved: AI features (off by design for now).")
 _f(G, "ai_provider", "", "Reserved: AI provider name.")
 _f(G, "ai_api_key", "", "Reserved: AI provider API key.")
@@ -285,16 +336,17 @@ BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 # Settings the dashboard / Telegram may change at runtime. Secrets and infrastructure stay env-only.
 EDITABLE_PREFIXES = (
     "mod_", "command_", "urlfetch_", "demo_", "yt_", "timers_", "reminders_", "scheduler_",
-    "telegram_notify_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
-    "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_",
-    "intel_",
+    "telegram_notify_", "intel_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
+    "notify_", "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_",
 )
 EDITABLE_KEYS = {"bot_mode", "telegram_mode", "owner_timezone"}
 ENUMS: dict[str, list[str]] = {
     "bot_mode": ["demo", "live"],
     "telegram_mode": ["webhook", "polling"],
     "mod_mode": ["off", "suggest", "auto"],
-    **{f"intel_{i}_mode": ["off", "shadow", "active"] for i, *_ in INTEL_DETECTORS},
+    "intel_learning_mode": ["off", "suggest", "auto"],
+    **{f"intel_{d}_mode": ["off", "shadow", "live"] for d in (
+        "scam", "spam", "abuse", "harassment", "typo", "link_risk", "impersonation", "obfuscation", "bot_like", "intent", "known_spam", "raid_wave")},
 }
 
 
@@ -348,7 +400,8 @@ NEEDS_EDIT = frozenset({
     "owner_password", "public_base_url", "frontend_url", "youtube_target_channel_id", "telegram_bot_token", "google_client_id", "google_client_secret", "youtube_api_key",
     "twitch_client_id", "twitch_client_secret", "twitch_channel", "twitch_bot_token", "kick_client_id", "kick_client_secret",
     "discord_bot_token", "discord_webhook_url", "redis_url", "sentry_dsn", "smtp_host", "smtp_user", "smtp_password", "smtp_from",
-    "outbound_webhook_url", "outbound_webhook_secret", "ntfy_url", "ntfy_topic", "weather_api_key", "giphy_api_key", "ai_api_key",
+    "outbound_webhook_url", "outbound_webhook_secret", "ai_api_key",
+    "firebase_project_id", "firebase_client_email", "firebase_private_key", "firebase_web_api_key", "firebase_web_app_id", "firebase_messaging_sender_id", "firebase_vapid_key",
 })
 
 # Blank on purpose; the reason is printed next to the variable in .env.example.
@@ -366,6 +419,9 @@ BLANK_BECAUSE = {
     "urlfetch_allowed_hosts": "blank means any public host is allowed (private networks are always blocked)",
     "ai_provider": "AI is not used in this version",
     "ai_model": "AI is not used in this version",
+    "weather_commercial_api_key": "only for a paid Open-Meteo plan; the free service needs no key",
+    "firebase_service_account_json": "optional: use it instead of FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY",
+    "firebase_auth_domain": "not needed for push notifications",
 }
 
 

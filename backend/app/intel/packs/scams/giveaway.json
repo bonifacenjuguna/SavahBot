@@ -1,0 +1,169 @@
+{
+ "id": "scams.giveaway",
+ "category": "scams",
+ "kind": "phrases",
+ "title": "Fake giveaways and free-stuff bait",
+ "description": "Free Robux, V-Bucks, gift cards, skins and 'you have won' lines. The oldest chat scam there is.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "scam",
+ "weight": 55,
+ "fuzzy": true,
+ "default_mode": "live",
+ "entries": [
+  "free robux",
+  "free v-bucks",
+  "free vbucks",
+  "free gift cards",
+  "free gift card",
+  "free giftcards",
+  "free giftcard",
+  "free steam gift",
+  [
+   "free steam wallet",
+   50
+  ],
+  [
+   "free steam keys",
+   40
+  ],
+  [
+   "free skins",
+   40
+  ],
+  [
+   "free cs2 skins",
+   50
+  ],
+  [
+   "free csgo skins",
+   50
+  ],
+  "free fortnite skins",
+  "free minecraft account",
+  "free netflix account",
+  "free spotify premium",
+  "free discord nitro",
+  "free nitro",
+  "free tiktok followers",
+  "free instagram followers",
+  "free youtube subscribers",
+  "free iphone",
+  "free ps5",
+  "free xbox",
+  "free paypal money",
+  "free cash app",
+  [
+   "free money",
+   40
+  ],
+  [
+   "giveaway winner",
+   25
+  ],
+  [
+   "you have won",
+   25
+  ],
+  [
+   "you are the winner",
+   40
+  ],
+  "congratulations you won",
+  [
+   "you were selected",
+   40
+  ],
+  [
+   "you have been selected",
+   40
+  ],
+  [
+   "lucky winner",
+   35
+  ],
+  [
+   "winner selected",
+   40
+  ],
+  "claim your prize",
+  "claim your reward",
+  "claim your gift",
+  "claim your free",
+  "click here to claim",
+  "claim free",
+  [
+   "live giveaway",
+   35
+  ],
+  [
+   "mega giveaway",
+   40
+  ],
+  [
+   "huge giveaway",
+   40
+  ],
+  [
+   "giveaway is live",
+   35
+  ],
+  [
+   "giveaway ends",
+   30
+  ],
+  "robux generator",
+  "vbucks generator",
+  "v-bucks generator",
+  "free robux generator",
+  "gift card generator",
+  "nitro generator",
+  "skin generator",
+  [
+   "no verification required",
+   45
+  ],
+  [
+   "no survey",
+   40
+  ],
+  [
+   "100% working",
+   40
+  ],
+  [
+   "working method",
+   35
+  ],
+  "no human verification",
+  [
+   "human verification required",
+   40
+  ],
+  [
+   "generator online",
+   40
+  ],
+  "unlimited robux",
+  "unlimited vbucks",
+  "unlimited gems",
+  "free gems generator",
+  "free coins generator",
+  "free diamonds generator",
+  "free robux 2026",
+  "robux 2026",
+  "vbucks 2026",
+  "free pubg uc",
+  "free uc generator",
+  "free cod points",
+  "free cp generator",
+  "free apex coins",
+  "free valorant points",
+  "free vp generator",
+  "free riot points",
+  "free rp generator",
+  "free steam card"
+ ]
+}

@@ -16,6 +16,8 @@ logger = logging.getLogger("savahbot.scheduler")
 
 class Scheduler:
     def __init__(self, cfg: Any, store: Any, hub: Any, bus: Any, active: Any = None) -> None:
+        self.rollups: Any = None      # history.Rollups, set by the container
+        self.hooks: list[Any] = []   # extra async callables(now), e.g. the Knowledge refresh; a failing hook never stops the others
         self.active = active          # 1.1.8: returns False on a standby instance, so only the leader fires timers and reminders
         self.cfg = cfg
         self.store = store
@@ -48,10 +50,13 @@ class Scheduler:
                 logger.exception("Scheduler tick failed")
             await asyncio.sleep(max(1, self.cfg.get("scheduler_tick_seconds")))
 
+    last_tick = 0.0
+
     async def tick(self, now: float | None = None) -> None:
         now = now if now is not None else time.time()
         if self.active is not None and not self.active():
             return
+        self.last_tick = now
         if self.cfg.get("reminders_enabled"):
             await self._reminders(now)
         if self.cfg.get("timers_enabled"):
@@ -63,8 +68,18 @@ class Scheduler:
                 self.bus.publish("mod_expired", {"count": n})
         if now - self._last_housekeeping >= 3600:
             self._last_housekeeping = now
-            await self.store.purge(now - self.cfg.get("chat_retention_days") * 86400,
-                                   now - self.cfg.get("action_retention_days") * 86400)
+            chat_cut, act_cut = now - self.cfg.get("chat_retention_days") * 86400, now - self.cfg.get("action_retention_days") * 86400
+            if self.rollups is not None:   # sum finished days into the long-term tables first, and never delete past what was summed
+                await self.rollups.run(now)
+                chat_cut, act_cut = self.rollups.safe_cutoff(chat_cut), self.rollups.safe_cutoff(act_cut)
+            await self.store.purge(chat_cut, act_cut)
+        for hook in self.hooks:
+            try:
+                await hook(now)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Scheduler hook failed")
 
     async def _reminders(self, now: float) -> None:
         for r in await self.store.due_reminders(now):

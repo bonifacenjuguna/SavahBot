@@ -1,5 +1,5 @@
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(message: string, public status: number, public code: string = "") {
     super(message);
   }
 }
@@ -72,11 +72,14 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
       data = { error: text.slice(0, 200) };
     }
   }
-  if (res.status === 401 && path !== "/api/auth/login") {
+  // A wrong code or password on a sign-in or confirm screen is not a lost session; anything else with 401 is.
+  const signingIn = path.startsWith("/api/auth/") || path === "/api/security/step-up" || path === "/api/security/password";
+  if (res.status === 401 && !signingIn) {
     setToken("");
     loggedOut.dispatchEvent(new Event("out"));
   }
-  if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status}).`, res.status);
+  if (res.status === 403 && data?.code === "lockdown" && !location.hash.startsWith("#/security")) location.hash = "#/security";
+  if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status}).`, res.status, data?.code ?? "");
   return data as T;
 }
 

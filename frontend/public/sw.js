@@ -1,8 +1,12 @@
-/* SavahBot service worker (1.1.9).
+/* SavahBot service worker (1.2.0).
  *
- * Deliberately small. The dashboard is a live, signed-in tool, so there is nothing safe to keep for offline use. This worker exists for two reasons:
+ * Deliberately small. The dashboard is a live, signed-in tool, so there is nothing safe to keep for offline use. This worker exists for three reasons:
  *   1. a friendly "you are offline" page when the installed app is opened without a connection (instead of the browser's error page);
- *   2. broader install support (some browsers only treat a page with a service worker as installable).
+ *   2. broader install support (some browsers only treat a page with a service worker as installable);
+ *   3. push notifications from Firebase Cloud Messaging: it shows them, and opens the right dashboard page when you tap one.
+ *
+ * Push messages carry only a title, a short body and an in-app route. Nothing sensitive is cached, and tapping a notification can only open
+ * a dashboard page (a "#/..." route), never another site.
  *
  * What it caches: ONE static page, /offline.html. Nothing else, ever.
  * What it never touches, so authentication, the API and live events behave exactly as without it:
@@ -13,7 +17,7 @@
  */
 "use strict";
 
-const VERSION = "1.1.9";
+const VERSION = "1.2.0";
 const CACHE = `savahbot-offline-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -58,4 +62,52 @@ self.addEventListener("fetch", (event) => {
       return (await cache.match(OFFLINE_URL)) || Response.error();
     }
   })());
+});
+
+// ------------------------------------------------------------------------------------------------ push
+const ROUTE = /^#\/[A-Za-z0-9_\-/]{0,60}(\?[A-Za-z0-9_=&.\-%]{0,120})?$/;
+const safeRoute = (r) => (typeof r === "string" && ROUTE.test(r) ? r : "#/notifications");
+
+/** FCM wraps our data in { data: {...} }; accept that, a bare object, or a { notification } block. */
+function readPayload(event) {
+  if (!event.data) return null;
+  let raw;
+  try { raw = event.data.json(); } catch { return { title: "SavahBot", body: event.data.text().slice(0, 200) }; }
+  const d = (raw && (raw.data || raw.notification)) || raw || {};
+  return { title: String(d.title || "SavahBot").slice(0, 120), body: String(d.body || "").slice(0, 300), route: safeRoute(d.route), tag: String(d.tag || "").slice(0, 80), priority: d.priority, nid: d.nid, category: d.category };
+}
+
+self.addEventListener("push", (event) => {
+  const p = readPayload(event);
+  if (!p) return;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const watching = wins.some((c) => c.visibilityState === "visible" && c.focused);
+    wins.forEach((c) => c.postMessage({ type: "notify-push", nid: p.nid, category: p.category }));
+    if (watching) return;   // you are looking at the dashboard: the bell and a toast already show it, no second alert on top
+    await self.registration.showNotification(p.title, {
+      body: p.body, icon: "/icon-192.png", badge: "/icon-192.png", tag: p.tag || undefined, renotify: !!p.tag,
+      requireInteraction: p.priority === "critical", data: { route: p.route, nid: p.nid || "" }, timestamp: Date.now(),
+    });
+  })());
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const route = safeRoute(event.notification.data && event.notification.data.route);
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const win = wins.find((c) => "focus" in c);
+    if (win) {
+      await win.focus();
+      win.postMessage({ type: "notify-click", route, nid: event.notification.data && event.notification.data.nid });
+      return;
+    }
+    await self.clients.openWindow("/" + route);
+  })());
+});
+
+// The browser rotated or dropped the push subscription: tell an open dashboard to register again.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => wins.forEach((c) => c.postMessage({ type: "notify-resubscribe" }))));
 });

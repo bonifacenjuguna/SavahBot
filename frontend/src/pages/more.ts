@@ -13,6 +13,11 @@ import type { Page } from "./types.js";
 const BLURB: Record<string, string> = {
   notebook: "Private notes and reminders",
   community: "Quotes and trusted regulars",
+  bans: "Lift bans and soften the bot's actions",
+  security: "Sign-in methods, devices and lockdown",
+  notifications: "Push, bell, quiet hours and history",
+  weather: "Current weather, forecast and weather alerts",
+  backup: "Encrypted export and restore",
   insights: "Charts of chat and moderation",
   demo: "Run simulated chat scenarios",
   setup: "Connect YouTube and Telegram",

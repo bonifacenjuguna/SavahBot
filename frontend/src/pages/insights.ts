@@ -2,6 +2,7 @@ import { get } from "../api.js";
 import { downloadCsv, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { areaChart, donut, hbars, sparkline } from "../charts.js";
+import { expandable, openChartDetail } from "../chart-detail.js";
 import { areaNav } from "./kit.js";
 import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
@@ -63,8 +64,8 @@ export const insights: Page = {
     } }, icon("download", 16), "Export CSV");
     const refreshBtn = h("button", { class: "btn ghost", type: "button", "aria-label": "Refresh", onclick: () => void load().then(() => toast("Updated")).catch((e) => toast(e.message, "error")) }, icon("refresh", 16));
 
-    const kpi = (cls: string, ic: string, label: string, value: string, sub?: string, spark?: SVGElement, delta?: { text: string; dir: "up" | "down" | "flat"; good: boolean | null } | null) =>
-      h("div", { class: `kpi ${cls}` }, h("div", { class: "kpi-top" }, h("span", null, label), icon(ic, 18)), h("div", { class: "kpi-val" }, value),
+    const kpi = (cls: string, ic: string, label: string, value: string, sub?: string, spark?: SVGElement, delta?: { text: string; dir: "up" | "down" | "flat"; good: boolean | null } | null, series?: string[]) =>
+      h("div", { class: `kpi ${cls}${series ? " chart-card-open" : ""}`, ...(series ? { role: "button", tabindex: 0, "aria-label": `${label}: open a bigger chart`, onclick: () => openChartDetail(label, series), onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openChartDetail(label, series); } } } : {}) }, h("div", { class: "kpi-top" }, h("span", null, label), icon(ic, 18)), h("div", { class: "kpi-val" }, value),
         delta ? h("div", { class: `kpi-delta ${delta.dir}${delta.good === true ? " good" : delta.good === false ? " worse" : ""}` }, delta.text, h("span", { class: "muted" }, " vs the period before")) : null,
         sub ? h("div", { class: "kpi-sub" }, sub) : null, spark ?? null);
 
@@ -133,21 +134,21 @@ export const insights: Page = {
 
       mount(body,
         h("div", { class: "kpis", style: "margin-bottom:0" },
-          kpi("", "message", "Messages", n0(msgs), `${avg < 10 ? avg.toFixed(1) : Math.round(avg)} per minute on average`, sparkline(s.timeline.map((b) => b.messages)), dMsg && { ...dMsg, good: dMsg.dir === "flat" ? null : dMsg.dir === "up" }),
+          kpi("", "message", "Messages", n0(msgs), `${avg < 10 ? avg.toFixed(1) : Math.round(avg)} per minute on average`, sparkline(s.timeline.map((b) => b.messages)), dMsg && { ...dMsg, good: dMsg.dir === "flat" ? null : dMsg.dir === "up" }, ["messages", "chatters"]),
           kpi("", "users", "Chatters", n0(t.chatters ?? 0), "Distinct people"),
-          kpi(flagged ? "warn" : "", "flag", "Flagged", n0(flagged), `${flagRate}% of messages`, sparkline(s.timeline.map((b) => b.flagged), "s2"), dFlag && { ...dFlag, good: dFlag.dir === "flat" ? null : dFlag.dir === "down" }),
+          kpi(flagged ? "warn" : "", "flag", "Flagged", n0(flagged), `${flagRate}% of messages`, sparkline(s.timeline.map((b) => b.flagged), "s2"), dFlag && { ...dFlag, good: dFlag.dir === "flat" ? null : dFlag.dir === "down" }, ["flagged", "deleted"]),
           kpi("", "shield", "Actions", n0(t.actions ?? 0), "Deletes, timeouts, bans"),
           kpi(t.pending ? "warn" : "", "inbox", "Waiting", n0(t.pending ?? 0), t.pending ? "Needs a decision" : "All clear"),
           kpi("", "trending", "Peak rate", `${peak < 10 ? peak.toFixed(1) : Math.round(peak)}/min`, "Busiest moment in range")),
         card("sparkle", "What stood out", highlights(s, { peak, peakAt: peakBucket?.t ?? 0, fmt, flagRate }), { flush: true }),
-        card("activity", "Chat activity", h("div", null,
+        expandable(card("activity", "Chat activity", h("div", null,
           anyData ? areaChart(s.timeline.map((b) => ({ t: b.t, a: b.messages, b: b.flagged })), { labelA: "Messages", labelB: "Flagged", fmt, ariaLabel: `Messages over the ${RANGES.find((r) => r[0] === hours)?.[2].toLowerCase() ?? "selected range"}` }) : empty("chart", "No chat in this range yet. Try Demo mode to see charts fill in."),
           h("div", { class: "legend-inline" }, h("span", null, h("i", { class: "sw s1" }), "Messages"), h("span", null, h("i", { class: "sw s2" }), "Flagged"))),
-          { flush: true, actions: h("span", { class: "muted small" }, `One point every ${s.bucket_seconds >= 3600 ? "hour" : `${Math.round(s.bucket_seconds / 60)} min`}`) }),
+          { flush: true, actions: h("span", { class: "muted small" }, `One point every ${s.bucket_seconds >= 3600 ? "hour" : `${Math.round(s.bucket_seconds / 60)} min`}`) }), () => openChartDetail("Chat activity", ["messages", "flagged"], hours > 48 ? "30d" : "7d")),
         s.hours >= 24 && msgs > 0 ? card("clock", "Busiest hours", hourStrip(s), { flush: true }) : null,
         h("div", { class: "cols even" },
           card("users", "Who is chatting", levelSlices.length ? donut(levelSlices, { center: n0(msgs), sub: "messages", ariaLabel: "Messages by chatter level" }) : empty("users", "Nothing to show yet."), { flush: true }),
-          card("shield", "What the bot did", outcomeSlices.length ? donut(outcomeSlices, { center: n0(t.actions ?? 0), sub: "actions", ariaLabel: "Moderation actions by outcome" }) : empty("shield", "No moderation actions in this range."), { flush: true })),
+          expandable(card("shield", "What the bot did", outcomeSlices.length ? donut(outcomeSlices, { center: n0(t.actions ?? 0), sub: "actions", ariaLabel: "Moderation actions by outcome" }) : empty("shield", "No moderation actions in this range."), { flush: true }), () => openChartDetail("What the bot did", ["deleted", "timeouts", "bans"], "30d"))),
         h("div", { class: "cols even" },
           card("user", "Most active chatters", rank(s.top_chatters, people), { flush: true }),
           h("div", { class: "stack" },

@@ -17,6 +17,7 @@ from .commands import CommandEngine
 from .events import EventBus
 from .models import ChatMessage
 from .services.telegram_ui import approval_card, approval_keyboard, flag_card, stream_card
+from .moderation.bans import Bans
 from .moderation import ACTION_RANK, ModerationEngine, ModInput, Verdict
 from .store import Store
 from .utils import split_csv, truncate
@@ -35,6 +36,7 @@ class ChatSource(Protocol):
     async def delete(self, msg_id: str) -> tuple[bool, str]: ...
     async def timeout(self, author_id: str, seconds: int) -> tuple[bool, str]: ...
     async def ban(self, author_id: str) -> tuple[bool, str]: ...
+    async def unban(self, ban_ref: str) -> tuple[bool, str]: ...
     def status(self) -> dict[str, Any]: ...
 
 
@@ -42,6 +44,7 @@ class Hub:
     def __init__(self, cfg: Any, store: Store, bus: EventBus, engine: ModerationEngine, commands: CommandEngine) -> None:
         self.cfg = cfg
         self.store = store
+        self.bans = Bans(store.db, cfg)
         self.bus = bus
         self.engine = engine
         self.commands = commands
@@ -59,6 +62,7 @@ class Hub:
         self.active: Callable[[], bool] | None = None   # 1.1.8: a standby instance must not start a chat source
         self._notify_times: deque[float] = deque()
         self._suppressed = 0
+        self.learning: Any = None   # app.intel.Learning: learns from approve/reject decisions (optional)
         self._mode_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
 
@@ -177,12 +181,15 @@ class Hub:
             msg.from_bot = True
 
         verdict: Verdict | None = None
-        intel = self.engine.intel
         if not msg.backfill and not msg.from_bot and self.cfg.get("mod_mode") != "off":
-            if intel is not None:
-                await intel.prepare(msg)
             verdict = self.engine.evaluate(ModInput(msg.platform, msg.author_id, msg.author_name, msg.text, msg.level, msg.ts))
             msg.score, msg.verdict = verdict.score, verdict.action
+            intel = self.engine.intel
+            if intel is not None and intel.pop_wave_started():
+                self.bus.publish("intel_wave", {"ts": msg.ts, "demo": msg.platform == "demo"})
+                if msg.platform != "demo":
+                    await self._notify("\U0001f30a Raid wave: many brand-new accounts started chatting within seconds. "
+                                       "I am watching messages from new accounts more closely for a few minutes.")
             if verdict.action != "allow":
                 await self._handle_verdict(msg, verdict)
 
@@ -190,10 +197,11 @@ class Hub:
             msg.id = await self.store.add_chat(msg.to_dict() | {"text": msg.text})
         except Exception:
             logger.exception("Could not store chat message")
-        if intel is not None and not msg.backfill and not msg.from_bot:
-            if verdict is not None:
-                await intel.log_shadow(msg, verdict, self.engine.action_for_score)
-            await intel.maybe_learn_trusted(msg, verdict.action if verdict else "allow")
+        if self.learning is not None and not msg.backfill and not msg.from_bot:
+            try:
+                await self.learning.trusted(msg, verdict.action if verdict else "allow")
+            except Exception:
+                logger.exception("Learning from trusted chat failed")
         payload = msg.to_dict() | {"reasons": verdict.reasons if verdict else []}
         self.buffer.append(payload)
         self.bus.publish("chat", payload)
@@ -214,11 +222,14 @@ class Hub:
     async def _handle_verdict(self, msg: ChatMessage, v: Verdict) -> None:
         mode = self.cfg.get("mod_mode")
         now = time.time()
-        action = v.action
+        auto_mode = mode == "auto"
+        action, duration, softened = await self.bans.limit(
+            v.action, v.duration, [sg.name for sg in v.signals], msg.author_id, msg.author_name,
+            auto_mode and v.action in split_csv(self.cfg.get("mod_auto_actions")), now)
         record: dict[str, Any] = {
             "ts": now, "platform": msg.platform, "author_id": msg.author_id, "author_name": msg.author_name,
             "message_ids": [msg.msg_id] if msg.msg_id else [], "text": msg.text, "action": action,
-            "duration": v.duration, "score": v.score, "reasons": v.reasons, "mode": mode, "demo": msg.demo,
+            "duration": duration, "score": v.score, "reasons": v.reasons + ([f"Softened: {softened}"] if softened else []), "mode": mode, "demo": msg.demo,
         }
         if v.blacklist_ids:
             await self.store.bump_blacklist(v.blacklist_ids)
@@ -237,7 +248,7 @@ class Hub:
             record["duration"] = None
         if auto:
             id_ = await self.store.create_action(record | {"status": "pending"})
-            await self._execute(id_)
+            await self._execute(id_, source="auto")
             return
 
         if action in ("timeout", "ban"):
@@ -268,7 +279,7 @@ class Hub:
         self._suppressed = 0
         await self._notify(approval_card(id_, r, extra), approval_keyboard(id_))
 
-    async def _execute(self, id_: int) -> dict[str, Any]:
+    async def _execute(self, id_: int, source: str = "approved") -> dict[str, Any]:
         a = await self.store.get_action(id_)
         if not a or a["status"] != "pending":
             return {"ok": False, "error": "This request is no longer pending."}
@@ -303,28 +314,55 @@ class Hub:
             self.engine.add_strike(key)
             if a["action"] in ("timeout", "ban"):
                 self._recent_punish[key] = time.time()
-            if self.engine.intel is not None and not a["demo"]:
-                self.engine.intel.note_punished(a["platform"], a["author_id"], a.get("body", ""))
+                await self.bans.record(
+                    author_id=a["author_id"], author_name=a["author_name"], kind=a["action"], duration=a["duration"] if a["action"] == "timeout" else None,
+                    ban_ref="" if simulated else str(getattr(src, "last_ban_id", "") or ""), action_id=id_, source=source,
+                    reason=", ".join(a.get("reasons") or [])[:300], platform=a["platform"], demo=simulated)
+                self.bus.publish("ban_made", {"author": a["author_name"], "kind": a["action"], "source": source})
         self.bus.publish("mod_resolved", {"id": id_, "status": status, "action": a["action"], "author": a["author_name"]})
         return {"ok": status != "failed", "status": status, "error": "; ".join(errors)}
 
-    async def _teach(self, a: dict[str, Any] | None, label: str) -> None:
-        """Your decision is a lesson: Approve means this was spam, Reject means it was fine."""
-        intel = self.engine.intel
-        if a is None or intel is None or not a.get("body"):
+    async def unban(self, ban_id: int, by: str = "dashboard") -> dict[str, Any]:
+        """Lift one ban or timeout from the ledger. YouTube must confirm it before it is marked as lifted."""
+        row = await self.bans.get(ban_id)
+        if not row:
+            return {"ok": False, "error": "That ban is not in the ledger.", "code": 404}
+        if row["status"] != "active":
+            return {"ok": False, "error": f"That ban is already {row['status']}."}
+        if not row["demo"]:
+            src = self.sources.get(row["platform"]) or self.source
+            if src is None or not hasattr(src, "unban"):
+                return {"ok": False, "error": "The chat connection is not available right now."}
+            ok, err = await src.unban(row["ban_ref"])
+            if not ok:
+                await self.bans.mark_error(ban_id, err)
+                return {"ok": False, "error": err}
+        await self.bans.mark_lifted(ban_id, by)
+        self.engine.strikes_clear(f"{row['platform']}:{row['author_id']}")
+        self.bus.publish("ban_lifted", {"id": ban_id, "author": row["author_name"], "by": by})
+        return {"ok": True}
+
+    async def second_chance(self, now: float) -> None:
+        """Lift permanent bans the bot made itself once they are older than your second-chance setting."""
+        for row in await self.bans.due_second_chance(now):
+            res = await self.unban(row["id"], by="second chance")
+            if not res["ok"] and "quota" in res["error"].lower():
+                break
+
+    async def _learn(self, action: dict[str, Any] | None, label: str) -> None:
+        """Every approve/reject is a training label ("spam" for Approve, "ham" for Reject). Learning must never get in the way of moderation."""
+        if self.learning is None or action is None:
             return
-        await intel.learn_decision(a["body"], label, a.get("author_name", ""), bool(a.get("demo")))
-        if intel.store is not None:
-            try:
-                await intel.store.label_shadow(a["author_id"], a["body"], label)
-            except Exception:
-                logger.exception("Could not label shadow findings")
+        try:
+            await self.learning.feedback(action, label)
+        except Exception:
+            logger.exception("Learning from a decision failed")
 
     async def approve(self, id_: int) -> dict[str, Any]:
         a = await self.store.get_action(id_)
         res = await self._execute(id_)
         if res.get("ok"):
-            await self._teach(a, "spam")
+            await self._learn(a, "spam")
         return res
 
     async def reject(self, id_: int) -> dict[str, Any]:
@@ -332,7 +370,7 @@ class Hub:
         if not a or a["status"] != "pending":
             return {"ok": False, "error": "This request is no longer pending."}
         await self.store.update_action(id_, status="rejected", resolved_ts=time.time())
-        await self._teach(a, "ham")
+        await self._learn(a, "ham")
         self.bus.publish("mod_resolved", {"id": id_, "status": "rejected", "action": a["action"], "author": a["author_name"]})
         return {"ok": True, "status": "rejected"}
 

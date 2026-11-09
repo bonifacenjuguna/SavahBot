@@ -10,6 +10,7 @@ from typing import Any
 class EventBus:
     def __init__(self) -> None:
         self._subs: set[asyncio.Queue] = set()
+        self._taps: list[Any] = []
         self._shared: Any = None
 
     def attach_shared(self, shared: Any, channel: str = "events") -> None:
@@ -48,7 +49,20 @@ class EventBus:
             except (RuntimeError, TypeError, ValueError):
                 pass   # no running loop (a sync test) or data that cannot be sent: local delivery already happened
 
+    def tap(self, fn: Any) -> None:
+        """Server-side listener (not a dashboard client): fn(event) is called synchronously and must not block."""
+        self._taps.append(fn)
+
+    def untap(self, fn: Any) -> None:
+        if fn in self._taps:
+            self._taps.remove(fn)
+
     def _deliver(self, event: dict) -> None:
+        for fn in list(self._taps):
+            try:
+                fn(event)
+            except Exception:
+                pass
         for q in list(self._subs):
             try:
                 q.put_nowait(event)

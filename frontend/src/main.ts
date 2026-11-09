@@ -1,7 +1,9 @@
 import "./styles.css";
 import "./redesign.css";
 import "./manage.css";
-import { ApiError, apiBase, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
+import "./knowledge.css";
+import "./appearance.css";
+import { ApiError, apiBase, get, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
@@ -9,11 +11,20 @@ import { refreshStatus, onStatus, type Status } from "./state.js";
 import { resetClock } from "./pages/kit.js";
 
 let resetTimer = 0;
-import { onNotices, openNotifications, startNotifications, unreadCount } from "./notifications.js";
+import { onNotices, openNotifications, refresh as refreshBell, startNotifications, unreadCount } from "./notifications.js";
+import { initAppearance } from "./appearance.js";
 import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
 import { APP_VERSION } from "./version.js";
 import { initPWA, mountInstallButton } from "./pwa.js";
 import { desk } from "./pages/desk.js";
+import { type LoginReply, passkeyFirst, secondStep } from "./login-flow.js";
+import { bans } from "./pages/bans.js";
+import { backup, restoreForm } from "./pages/backup.js";
+import { security } from "./pages/security.js";
+import { notifications } from "./pages/notifications.js";
+import { weather } from "./pages/weather.js";
+import { weatherSettings } from "./pages/weather-settings.js";
+import { listenForTaps, resumePush } from "./push.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
 import { notebook } from "./pages/notebook.js";
@@ -27,10 +38,10 @@ import type { Page } from "./pages/types.js";
 
 export { APP_VERSION };
 
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, insights, demo, setup, settings, more];
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, backup, insights, demo, setup, settings, more];
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Operate", ids: ["desk", "moderation", "commands"] },
-  { title: "Manage", ids: ["notebook", "community", "insights", "demo"] },
+  { title: "Manage", ids: ["notebook", "community", "bans", "security", "notifications", "weather", "backup", "insights", "demo"] },
   { title: "System", ids: ["setup", "settings"] },
 ];
 const TAB_IDS = ["desk", "moderation", "commands", "insights"];
@@ -39,6 +50,7 @@ let statusTimer: number | undefined;
 let shellCleanup: (() => void) | null = null;
 
 initTheme();
+initAppearance();
 initPWA();
 
 function route(): { id: string; query: URLSearchParams } {
@@ -60,6 +72,17 @@ function signOut(): void {
 }
 
 // ------------------------------------------------------------------------------------------------ login
+/** On a brand-new deployment the server prints a one-time token; this lets you restore a backup before signing in. */
+function restoreLink(): HTMLElement | null {
+  if (!apiBase()) return null;
+  const holder = h("div", null);
+  void get<{ available: boolean }>("/api/backup/first-run").then((r) => {
+    if (!r.available) return;
+    holder.append(h("button", { class: "lc-link", type: "button", onclick: () => { sheet("Restore from a backup", restoreForm({ firstRun: true })); } }, icon("upload", 14), "Restore from a backup"));
+  }).catch(() => undefined);
+  return holder;
+}
+
 function showLogin(): void {
   shellCleanup?.();
   shellCleanup = null;
@@ -88,6 +111,15 @@ function showLogin(): void {
     connLink!.setAttribute("aria-expanded", String(open));
     if (open) base.focus();
   } }, icon("sliders", 14), "Connection settings");
+  const pane = h("div", { class: "login-pane" });
+  const finish = (r: LoginReply): void => {
+    if (r.token) {
+      setToken(r.token);
+      boot();
+      if (r.lockdown) location.hash = "#/security";
+      else if (r.setup_needed) window.setTimeout(() => toast("Only your password protects this dashboard. Add a passkey or an authenticator app on the Security page."), 1200);
+    } else if (r.step === "more") pane.replaceChildren(secondStep(r, finish, showLogin));
+  };
   const setBusy = (on: boolean) => { btn.disabled = on; btn.replaceChildren(...(on ? [h("span", { class: "spin" }), "Signing in"] : [icon("lock", 16), "Sign in"])); };
   const form = h(
     "form",
@@ -99,8 +131,8 @@ function showLogin(): void {
         err.textContent = "";
         if (base.value.trim()) setApiBase(base.value);
         setBusy(true);
-        post<{ token: string }>("/api/auth/login", { password: pass.value })
-          .then((r) => { setToken(r.token); boot(); })
+        post<LoginReply>("/api/auth/login", { password: pass.value })
+          .then((r) => finish(r))
           .catch((ex) => { err.textContent = ex instanceof ApiError && ex.status === 401 ? "That password is not right. Try again." : ex instanceof ApiError ? ex.message : "Could not reach the server. Check your connection."; pass.select(); })
           .finally(() => setBusy(false));
       },
@@ -112,8 +144,10 @@ function showLogin(): void {
     needsBase ? connBox : null,
     err,
     btn,
+    passkeyFirst(finish, (m) => { err.textContent = m; }),
     connLink,
     needsBase ? null : connBox,
+    restoreLink(),
     h("p", { class: "lc-foot" }, icon("shield", 13), `Private, owner access only \u00b7 v${APP_VERSION}`),
   );
   const hero = h("aside", { class: "login-hero", "aria-hidden": "false" },
@@ -125,7 +159,8 @@ function showLogin(): void {
         [["shield", "Every moderation decision explains itself"], ["flask", "Practice safely in demo mode"], ["chart", "Live view of chat activity"]]
           .map(([i, t]) => h("li", null, icon(i, 20), h("span", null, t))))),
     h("small", null, "Owner access only"));
-  mount(root, h("main", { class: "login" }, h("div", { class: "login-bg", "aria-hidden": "true" }), hero, h("div", { class: "login-pane" }, form)));
+  mount(root, h("main", { class: "login" }, h("div", { class: "login-bg", "aria-hidden": "true" }), hero, pane));
+  pane.replaceChildren(form);
   pass.focus({ preventScroll: true });
 }
 
@@ -319,6 +354,8 @@ function showShell(): void {
   offs.push(onNotices(syncBell));
   syncBell();
   offs.push(startNotifications(() => lastStatus));
+  offs.push(listenForTaps((route) => { location.hash = route; }, () => void refreshBell(), () => void resumePush()));
+  void resumePush();
   offs.push(installShortcuts(ctx));
 
   render();

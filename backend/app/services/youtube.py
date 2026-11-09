@@ -294,6 +294,7 @@ class YouTubeSource:
         self._detect_day = ""
         self._detect_spent = 0
         # what YouTube itself has answered about this account's permissions (None = never tested; nothing is assumed)
+        self.last_ban_id = ""
         self.perms: dict[str, bool | None] = {"read": None, "delete": None, "ban": None, "send": None}
         self._denied: dict[str, tuple[float, str]] = {}   # action -> (retry not before, the refusal message)
         self._errors = 0                                   # consecutive failures, for exponential backoff
@@ -742,6 +743,7 @@ class YouTubeSource:
             return False, str(exc)
         if status in (200, 204):
             self.perms[key] = True
+            self.last_ban_id = str(data.get("id", "")) if isinstance(data, dict) and kind == "ban" and method == "POST" else ""
             return True, ""
         reason = _reason(data)
         if reason in QUOTA_REASONS:
@@ -780,6 +782,15 @@ class YouTubeSource:
     async def timeout(self, author_id: str, seconds: int) -> tuple[bool, str]:
         return await self._action("ban", "POST", "/liveChat/bans", params={"part": "snippet"}, body={"snippet": {
             "liveChatId": self.chat_id, "type": "temporary", "banDurationSeconds": int(seconds), "bannedUserDetails": {"channelId": author_id}}})
+
+    async def unban(self, ban_ref: str) -> tuple[bool, str]:
+        """Lift a ban or timeout using the id YouTube returned when it was made (liveChatBans.delete, 200 quota units)."""
+        if not ban_ref:
+            return False, "YouTube needs the ban's id to lift it, and this ban has none. Lift it in YouTube Studio."
+        ok, err = await self._action("ban", "DELETE", "/liveChat/bans", params={"id": ban_ref})
+        if not ok and "notfound" in err.lower().replace(" ", ""):
+            return True, ""
+        return ok, err
 
     async def ban(self, author_id: str) -> tuple[bool, str]:
         return await self._action("ban", "POST", "/liveChat/bans", params={"part": "snippet"}, body={"snippet": {

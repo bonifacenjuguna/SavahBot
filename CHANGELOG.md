@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2.0
+
+One coordinated release. Guides for everything are in `docs/` (start at `docs/README.md`).
+
+### Notification Centre (Firebase Cloud Messaging)
+- Push to phones and computers through Firebase, an in-app bell and history that now live on the server, and Telegram, all through one pipeline. ntfy is gone.
+- 17 notification kinds, each raised by real code. Per category: on/off, channels, priority. Duplicate folding, quiet hours (hold-and-summarise or silent), pause, hourly cap, critical alerts that break through, retries with growing delays, dead tokens cleaned up automatically, leader-only sending.
+- Seven-tab Notifications page. Service worker handles push and opens the right page on tap. Device tokens are encrypted and never shown. Guide with a Firebase console walkthrough: `docs/NOTIFICATIONS.md`; platform limits: `docs/PWA_AND_PUSH_PLATFORMS.md`.
+
+### Weather (Open-Meteo)
+- Provider interface with Open-Meteo, normalization, retries and backoff, memory + Redis cache, stale data clearly labelled, one provider call for simultaneous requests.
+- Places (search, coordinates, device-location button only on press), units, dashboard, settings page, alert rules through the Notification Centre, Telegram `/weather /forecast /hourly /locations`. No API key; attribution shown. See `docs/WEATHER.md`.
+
+### Security & Access Centre
+- Password, passkeys and authenticator app: any two once two are set up. Recovery codes, sessions and devices, sign-in activity, audit log, step-up checks, lockdown. See `docs/SECURITY.md`. **Everyone is signed out once on upgrade.**
+
+### Settings & Control Centre
+- Settings is now a hub: verified status cards, a "needs a look" list, search, Appearance (theme, accent, density, text size, motion), Privacy & data, Device & app, Developer (health, config check). See `docs/SETTINGS.md`.
+
+### Backup & recovery
+- Encrypted `.svbak` export and import with a key shown once, dry-run, merge or replace, safety snapshot with undo, first-run restore. `docs/BACKUP_AND_RECOVERY.md`.
+
+### Also
+- Knowledge: transplanted tools, packs and learning 2.0 (`docs/KNOWLEDGE.md`). Ban management with unban and limits (`docs/BANS.md`). Interactive charts and long history (`docs/HISTORY.md`).
+- GIPHY removed. Docs split into per-subsystem guides; `ENVIRONMENT.md` and `API.md` are generated from the code and checked by tests. README is short.
+- Removed variables: `NTFY_URL`, `NTFY_TOPIC`, `WEATHER_API_KEY`, `GIPHY_API_KEY`. New: `FIREBASE_*`, `NOTIFY_*`, `WEATHER_*` (see ENVIRONMENT.md).
+- Service worker version 1.2.0.
+
 ## 1.1.9
 
 ### Install SavahBot as an app (PWA)

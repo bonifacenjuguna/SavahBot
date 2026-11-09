@@ -63,7 +63,24 @@ SCHEMA: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_chat_ts ON chat_messages (ts)",
     "CREATE INDEX IF NOT EXISTS idx_actions_status ON mod_actions (status, ts)",
     "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (status, due)",
-    # 1.1.6 intelligence: what the bot learned, what its shadow detectors saw, and your pack choices
+    # 1.1.6 Knowledge (packs, feeds, suggestions, change log)
+    "CREATE TABLE IF NOT EXISTS knowledge_packs (id TEXT PRIMARY KEY, mode TEXT NOT NULL DEFAULT '', scale {REAL} NOT NULL DEFAULT 1, updated {REAL})",
+    """CREATE TABLE IF NOT EXISTS knowledge_entries (id {PK}, pack_id TEXT NOT NULL, phrase TEXT NOT NULL,
+        is_regex INTEGER NOT NULL DEFAULT 0, weight INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user', gen INTEGER NOT NULL DEFAULT 0, created {REAL},
+        UNIQUE (pack_id, phrase, source, gen))""",
+    "CREATE INDEX IF NOT EXISTS idx_kentries_pack ON knowledge_entries (pack_id)",
+    """CREATE TABLE IF NOT EXISTS knowledge_feeds (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1,
+        gen INTEGER NOT NULL DEFAULT 0, last_run {REAL}, last_ok {REAL}, status TEXT NOT NULL DEFAULT '',
+        entries INTEGER NOT NULL DEFAULT 0, prev_entries INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
+        etag TEXT NOT NULL DEFAULT '')""",
+    """CREATE TABLE IF NOT EXISTS knowledge_suggestions (id {PK}, kind TEXT NOT NULL, pack_id TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', weight INTEGER NOT NULL DEFAULT 0,
+        evidence INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new', created {REAL})""",
+    """CREATE TABLE IF NOT EXISTS knowledge_log (id {PK}, ts {REAL} NOT NULL, kind TEXT NOT NULL, summary TEXT NOT NULL,
+        undo TEXT NOT NULL DEFAULT '', undone INTEGER NOT NULL DEFAULT 0)""",
+    # Legacy 1.1.9 tables, kept so existing data survives the move to the 1.1.6 Knowledge engine (migrated, never deleted)
+    # (1.1.9) what the bot learned, what its shadow detectors saw, and your pack choices
     """CREATE TABLE IF NOT EXISTS intel_examples (
         id {PK}, ts {REAL} NOT NULL, label TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'teach', body TEXT NOT NULL,
         author TEXT NOT NULL DEFAULT '', pred {REAL}, weight {REAL} NOT NULL DEFAULT 1, demo INTEGER NOT NULL DEFAULT 0)""",
@@ -88,6 +105,39 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("timers", "max_runs", "INTEGER NOT NULL DEFAULT 0"),
     ("timers", "runs", "INTEGER NOT NULL DEFAULT 0"),
 ]
+
+
+# 1.2.0: subsystems (security, notifications, weather, bans, stats...) keep their own tables next to their code and register them here.
+# Statements use the same {PK}/{REAL} placeholders and must be idempotent (CREATE ... IF NOT EXISTS).
+_EXTRA_SCHEMA: list[str] = []
+_EXTRA_COLUMNS: list[tuple[str, str, str]] = []
+# Data migrations that need Python (backfills, conversions). Each runs exactly once, in version order, and is recorded in kv "schema_version".
+_STEPS: list[tuple[int, str, Any]] = []
+
+
+def register_schema(statements: Sequence[str] = (), columns: Sequence[tuple[str, str, str]] = ()) -> None:
+    """Add tables, indexes and added columns. Safe to call more than once with the same text."""
+    for stmt in statements:
+        if stmt not in _EXTRA_SCHEMA:
+            _EXTRA_SCHEMA.append(stmt)
+    for col in columns:
+        if col not in _EXTRA_COLUMNS:
+            _EXTRA_COLUMNS.append(col)
+
+
+def register_step(version: int, name: str, fn: Any) -> None:
+    """Register `async def fn(db)` to run once when the stored schema version is lower than `version`."""
+    if not any(v == version for v, _, _ in _STEPS):
+        _STEPS.append((version, name, fn))
+        _STEPS.sort(key=lambda t: t[0])
+
+
+def all_schema() -> list[str]:
+    return [*SCHEMA, *_EXTRA_SCHEMA]
+
+
+def all_columns() -> list[tuple[str, str, str]]:
+    return [*MIGRATIONS, *_EXTRA_COLUMNS]
 
 
 class _SQLite:
@@ -118,9 +168,9 @@ class _SQLite:
         return await asyncio.to_thread(self._exec, sql, params, mode)
 
     async def init_schema(self) -> None:
-        for stmt in SCHEMA:
+        for stmt in all_schema():
             await self.run(stmt.replace("{PK}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL"), (), "exec")
-        for table, column, definition in MIGRATIONS:
+        for table, column, definition in all_columns():
             have = {r["name"] for r in await self.run(f"PRAGMA table_info({table})", (), "all")}
             if column not in have:
                 await self.run(f"ALTER TABLE {table} ADD COLUMN {column} {definition}", (), "exec")
@@ -171,9 +221,9 @@ class _Postgres:
                 return 0
 
     async def init_schema(self) -> None:
-        for stmt in SCHEMA:
+        for stmt in all_schema():
             await self.run(stmt.replace("{PK}", "SERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION"), (), "exec")
-        for table, column, definition in MIGRATIONS:
+        for table, column, definition in all_columns():
             await self.run(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}", (), "exec")
 
     async def close(self) -> None:
@@ -199,10 +249,31 @@ class Database:
         if isinstance(self._impl, _Postgres):
             await self._impl.connect()
         await self._impl.init_schema()
-        logger.info("Database ready (%s)", self.backend)
+        await self._run_steps()
+        logger.info("Database ready (%s, schema v%s)", self.backend, await self.schema_version())
 
     async def close(self) -> None:
         await self._impl.close()
+
+    async def schema_version(self) -> int:
+        try:
+            return int(await self.kv_get("schema_version", "0") or 0)
+        except ValueError:
+            return 0
+
+    async def _run_steps(self) -> None:
+        """Run each pending data migration once. A failing step stops the chain (later steps may depend on it) and is logged, never silently skipped."""
+        current = await self.schema_version()
+        for version, name, fn in _STEPS:
+            if version <= current:
+                continue
+            try:
+                await fn(self)
+            except Exception:
+                logger.exception("Migration %s (%s) failed; the app keeps running on the previous schema version", version, name)
+                return
+            await self.kv_set("schema_version", str(version))
+            logger.info("Applied migration %s: %s", version, name)
 
     async def execute(self, sql: str, params: Sequence[Any] = ()) -> int:
         if self.echo:

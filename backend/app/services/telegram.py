@@ -39,12 +39,17 @@ HELP = Rich(ui.card("SavahBot commands", [
     "/pending  what waits for you",
     "/approve &lt;id|all&gt;    /reject &lt;id|all&gt;",
     "/permit &lt;user&gt; [seconds]  allow links briefly",
+    "/lockdown  sign every dashboard device out now\n    /bans  active bans and timeouts    /unban &lt;id|name&gt;  lift one",
     "/history [date] [status]  what the bot did",
     "",
     "💬 <b>Chat</b>",
     "/say &lt;text&gt;  post in the stream chat",
     "/find &lt;text&gt; [date]  search saved chat",
     "/demo [scenario]  simulated chat",
+    "",
+    "🌦 <b>Weather</b>",
+    "/weather [place]  now    /forecast [place]  days    /hourly [place]  next hours",
+    "/locations [number]  saved places, set the default",
     "",
     "🗒 <b>Notes and reminders</b>",
     "/note &lt;text&gt;    /notes    /delnote &lt;id&gt;",
@@ -135,6 +140,8 @@ class TelegramBot:
                 {"command": "pending", "description": "Requests waiting for you"}, {"command": "mode", "description": "demo or live"},
                 {"command": "mod", "description": "off, suggest or auto"}, {"command": "stats", "description": "Chat numbers"},
                 {"command": "find", "description": "Search saved chat, with dates"}, {"command": "history", "description": "What the bot did"},
+                {"command": "weather", "description": "Weather now (add a place)"}, {"command": "forecast", "description": "Daily forecast"},
+                {"command": "hourly", "description": "Next hours"}, {"command": "locations", "description": "Saved weather places"},
                 {"command": "help", "description": "All commands"}]})
             await self.apply_mode()  # sets last_error itself if the mode cannot be applied
         except TelegramError as exc:
@@ -275,7 +282,8 @@ class TelegramBot:
             "approve": self._approve, "reject": self._reject, "permit": self._permit, "say": self._say, "demo": self._demo,
             "note": self._note, "notes": self._notes, "delnote": self._delnote,
             "remind": self._remind, "reminders": self._reminders, "delremind": self._delremind,
-            "history": self._history, "find": self._find,
+            "history": self._history, "find": self._find, "bans": self._bans, "lockdown": self._lockdown, "unban": self._unban,
+            "weather": self._weather, "forecast": self._forecast, "hourly": self._hourly, "locations": self._locations,
         }.get(cmd)
         if handler is None:
             await self.client.send(owner, "Unknown command. Send /help for the list, or /menu for buttons.")
@@ -571,6 +579,67 @@ class TelegramBot:
         rows = [f"<code>#{r['id']}</code> <code>{from_epoch(r['due']).replace(tzinfo=timezone.utc).astimezone(tz):%d %b %H:%M}</code>  {esc(truncate(r['body'], 100))}"
                 + (f"  🔁 {esc(r['repeat_kind'])}" if r["repeat_kind"] != "none" else "") for r in rows_db[:15]]
         return Rich(ui.card("Reminders", rows, "Cancel with /delremind &lt;id&gt;", "⏰")), [ui.back_row()]
+
+    # ---- weather: every answer comes from the central WeatherService (never a direct provider call from here)
+    async def _wx(self, arg: str, render: Any) -> Any:
+        from ..weather import WeatherServiceError
+        from ..weather import format as wf
+        try:
+            loc = await self.c.weather.resolve(arg) if arg.strip() else await self.c.weather.get_location()
+            if loc is None:
+                return "No place found." if arg.strip() else "No default location yet. Add one on the dashboard (Weather), or send /weather <place>."
+            return Rich(render(wf, await self.c.weather.overview_for(loc)))
+        except WeatherServiceError as exc:
+            return f"Weather is unavailable right now: {exc.message}"
+
+    async def _weather(self, arg: str) -> Any:
+        return await self._wx(arg, lambda wf, o: wf.now_text(o))
+
+    async def _forecast(self, arg: str) -> Any:
+        return await self._wx(arg, lambda wf, o: wf.forecast_text(o))
+
+    async def _hourly(self, arg: str) -> Any:
+        return await self._wx(arg, lambda wf, o: wf.hourly_text(o))
+
+    async def _locations(self, arg: str) -> Any:
+        from ..weather import WeatherServiceError
+        from ..weather import format as wf
+        locs = await self.c.weather.locations()
+        if arg.strip().isdigit() and 1 <= int(arg) <= len(locs):
+            try:
+                await self.c.weather.set_default(locs[int(arg) - 1]["id"])
+            except WeatherServiceError as exc:
+                return exc.message
+            locs = await self.c.weather.locations()
+        return Rich(wf.locations_text(locs))
+
+    async def _lockdown(self, arg: str) -> str:
+        await self.c.access.set_lockdown(True, None, "telegram")
+        return "🚨 Lockdown is ON. Every dashboard session was signed out. Sign in again on the dashboard (password plus a second method) and lift it on the Security page."
+
+    async def _bans(self, arg: str) -> str:
+        res = await self.c.hub.bans.search("active", arg, 0, 15)
+        if not res["items"]:
+            return "No active bans or timeouts in the ledger."
+        lines = [f"#{b['id']}  {esc(b['author_name'] or b['author_id'])}  {'ban' if b['kind'] == 'ban' else 'timeout'}"
+                 f"{'' if b['can_lift'] else ' (cannot be lifted from here)'}" for b in res["items"]]
+        return "Active bans and timeouts:\n" + "\n".join(lines) + "\n\nLift one with /unban <id>."
+
+    async def _unban(self, arg: str) -> str:
+        arg = arg.strip()
+        if not arg:
+            return "Usage: /unban <id or name>. See /bans."
+        rows = [await self.c.hub.bans.get(int(arg))] if arg.isdigit() else await self.c.hub.bans.find_active(arg)
+        rows = [r for r in rows if r and r["status"] == "active"]
+        if not rows:
+            return "No active ban matches that. Bans made before 1.2.0 or in YouTube Studio must be lifted in YouTube Studio."
+        done, problems = 0, []
+        for r in rows[:5]:
+            res = await self.c.hub.unban(r["id"], by="telegram")
+            done += bool(res["ok"])
+            if not res["ok"]:
+                problems.append(res["error"])
+        return (f"Lifted {done}." if done else "Nothing was lifted.") + ("\n" + "\n".join(problems[:2]) if problems else "")
 
     async def _delremind(self, arg: str) -> str:
         return "Cancelled." if arg.isdigit() and await self.c.store.cancel_reminder(int(arg)) else "No such pending reminder."

@@ -1,51 +1,56 @@
-# Knowledge and intelligence (1.1.6)
+# Knowledge guide
 
-SavahBot can recognise spam and scams far beyond a phrase list, **without any AI model or outside service**. It uses
-plain algorithms and data files that run on your own server.
+Knowledge is SavahBot's built-in spam, scam and abuse intelligence. It runs entirely inside your bot: no AI service, and no outside call is made to judge a message. Find it in **Settings > Knowledge**.
 
-## The idea
-* **Knowledge** is data, split by category into packs (spam, scams, links, disguises, names, training examples).
-* **Detectors** are algorithms that use that knowledge. There are nine.
-* **Learning** adjusts one detector (the learning filter) from your own Approve and Reject decisions.
-* Every detector is **Off**, **Shadow** or **Active**. New ones start in **Shadow**: they run and are logged but never
-  change what happens in chat. You turn one on after its shadow findings look right.
-* Intelligence alone can add at most just under the timeout score, so it never times out or bans anyone by itself.
-  Combined with your original rules it can.
+## The six tabs
 
-## The detectors
-| Detector | How it works |
+| Tab | What it is for |
 |---|---|
-| Knowledge packs | Aho-Corasick matching of every enabled phrase pack, after undoing spacing, leetspeak and look-alike letters |
-| Fuzzy matching | trigram index, then edit distance (swap = 1 edit) over windows of the message, plus a consonant-skeleton route for dropped vowels |
-| Learning filter | Naive Bayes over words, word pairs and 4-letter fragments; learns from your decisions; test-then-train accuracy |
-| Link intelligence | shorteners, abused endings, punycode and mixed alphabets, raw IPs, the @ trick, brand lookalikes, brand-in-subdomain, scam words |
-| Viewer reputation | per-chatter history; trust discount (never above 40% of a score); repeat offenders; blocked text reappearing on a new account |
-| Scam patterns | scam message shapes combined as independent hints (noisy-or); a few shapes are strong alone |
-| Bot shape | keyboard-mashing, template spam by character-trigram overlap, channel waves against the chat's own baseline |
-| Evasion tricks | mixed alphabets, stacked accents, invisible characters, spaced letters, leetspeak |
-| Lookalike names | official-sounding names, copies of the owner or mods (even with look-alike letters), contact details in names |
+| Overview | State of the knowledge, what it knows, shadow-mode catches, accuracy check, and the Tools card |
+| Knowledge | Packs of phrases, domains, word lists and example messages. Switch each Off / Shadow / Live, adjust strength, add or edit entries |
+| Detectors | The readers that use the packs (scam, spam, abuse, link risk, impersonation and more). Each has Off / Shadow / Live |
+| Learning | Lessons from your decisions: Review queue, Lessons, Quality, History |
+| Live data | Phishing and malware lists fetched on a schedule, with rollback |
+| Test lab | Paste a message and see exactly which packs, links and word statistics produced its score |
 
-## Where to find it
-**Settings, Knowledge** (on a phone: More, Settings, Knowledge):
-* Overview: the state of everything and the next useful step
-* Packs: browse, search, switch on or off, add your own entries, mute entries
-* Detectors: mode, sensitivity and most points for each; a box to try any message
-* Learning: lessons, accuracy over time, the words it distrusts, forget any lesson, reset
-* Shadow report: what detectors would have done, and how often your decisions agreed
+**Shadow mode** means a detector notices and records a message but changes nothing. Use it to trust a detector before turning it Live.
 
-In **Moderation, History**, "Why and teach" shows why a message was flagged and lets you teach the bot.
+## Learning 2.0
 
-## Settings (all `INTEL_*`, also editable in the dashboard)
-`INTEL_ENABLED`, and for each of `PACKS FUZZY LEARNING LINKS REPUTATION SCAM SHAPE EVASION NAMES`:
-`INTEL_<ID>_MODE` (off, shadow, active), `INTEL_<ID>_WEIGHT` (most points), `INTEL_<ID>_SENSITIVITY` (0 to 1).
-Learning: `INTEL_LEARN_AUTO`, `INTEL_LEARN_FROM_DEMO`, `INTEL_LEARN_TRUSTED_HAM`, `INTEL_LEARN_PRIOR`, `INTEL_EXAMPLE_CAP`.
-Also `INTEL_SHADOW_RETENTION_DAYS` and `INTEL_PROTECTED_NAMES`.
+Every Approve, Reject and "teach" is a **lesson**: one message with one label (`spam` or `ham`). Lessons live in a database table (`learning_lessons`), so you can search, relabel and forget single ones; the word-statistics model is rebuilt from what remains.
 
-## Adding knowledge
-Drop a JSON file in `backend/app/intel/knowledge/packs/` (format in the README there) and restart. Or use the dashboard
-for your own phrases. The shipped packs were researched in November 2026 and list their sources.
+- **Honest accuracy.** Each lesson stores what the model predicted *before* learning it. Quality shows accuracy on messages the model had not seen yet, never on its own training data.
+- **Drift warning.** The last 14 days are compared with the 30 before. A drop of more than 10 points (with at least 10 samples each side) raises a warning.
+- **Cold-start guard.** Until `INTEL_LEARN_MIN_LESSONS` lessons exist the model does not influence scores.
+- **Review queue.** Recent real chat messages the model is least sure about (spam probability 0.25 to 0.75) come first, so each decision teaches the most.
+- **Trusted regulars.** Normal chat from trusted viewers can be learned as `ham` (at most 3 per minute).
+- **Snapshots.** Up to 8, taken automatically before reset, restore and import. Restore any of them.
+- **Export / import.** Lessons use the `savahbot-lessons` JSON format (up to 5000 per file).
+- **Learning mode** (`INTEL_LEARNING_MODE`): `off`, `suggest` (you accept each change) or `auto` (confident suggestions applied, every change logged and undoable).
 
-## Honest limits
-It does not understand meaning, sarcasm or context, so a clever message can slip through and an unusual honest one
-can occasionally be flagged. That is why detectors start in Shadow and why the Shadow report shows how often your own
-decisions agreed. Packs are static data: refresh them by updating the files, never by letting the live bot download rules.
+## Tools (Overview tab)
+
+- **Check pack health** flags phrases that appear in the known-normal benchmark messages, very short one-word triggers, duplicates inside a pack, and phrases repeated across packs.
+- **Detector hits** shows how often each detector has really fired.
+- **Export / Import bundle** moves your own Knowledge (phrases you added, pack settings, lessons) to another install as one JSON file. It carries a SHA-256 checksum: an edited or damaged file is refused. Import first shows a preview, takes a lessons snapshot, and skips entries that already exist. Built-in packs and feed data are not included. For a full encrypted backup of everything, see `docs/BACKUP_AND_RECOVERY.md` once it is written.
+
+## API
+
+All routes need the dashboard login and sit under `/api/knowledge/`: `overview`, `packs/{id}`, `detectors/{id}`, `test`, `benchmark`, `learning`, `learning/quality`, `learning/queue`, `learning/reset`, `lessons` (+ `export`, `import`, `{id}`, `{id}/flip`), `snapshots`, `suggestions/bulk`, `feeds`, `health`, `hits`, `bundle`, `bundle/import` (`?dry=1` previews).
+
+## Comparing versions
+
+| | 1.1.6 | 1.1.9 | 1.2.0 |
+|---|---|---|---|
+| Knowledge UI | Six tabs | Rebuilt, different layout | The 1.1.6 tabs and look |
+| Learning storage | Settings blobs | Settings blobs | Database ledger |
+| Accuracy figure | None | Measured on training data | Prequential (before learning) |
+| Drift warning, snapshots, review queue | No | No | Yes |
+| Pack health, hits, bundle export | No | No | Yes |
+| Phrase coverage | Base packs | ~120 extra phrases | Both merged |
+
+## Troubleshooting
+
+- *A phrase flags normal chat:* find it in the Test lab, then lower the pack strength or disable that entry.
+- *Learning never changes anything:* check the lessons count against `INTEL_LEARN_MIN_LESSONS`.
+- *Bundle import says checksum mismatch:* the file was edited or truncated; export again.
