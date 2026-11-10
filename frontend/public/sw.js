@@ -84,7 +84,11 @@ self.addEventListener("push", (event) => {
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const watching = wins.some((c) => c.visibilityState === "visible" && c.focused);
     wins.forEach((c) => c.postMessage({ type: "notify-push", nid: p.nid, category: p.category }));
-    if (watching) return;   // you are looking at the dashboard: the bell and a toast already show it, no second alert on top
+    // Keep ordinary foreground events in the in-app bell, but always display an explicit
+    // test push. Otherwise pressing "Send a test" while this dashboard is open appears
+    // to do nothing: the worker receives the push, then silently suppresses its only
+    // visible confirmation.
+    if (watching && p.category !== "test.test") return;
     await self.registration.showNotification(p.title, {
       body: p.body, icon: "/icon-192.png", badge: "/icon-192.png", tag: p.tag || undefined, renotify: !!p.tag,
       requireInteraction: p.priority === "critical", data: { route: p.route, nid: p.nid || "" }, timestamp: Date.now(),
