@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.4
+
+Desktop layout. Phones and tablets are unchanged (checked pixel for pixel against 1.3.3); everything new applies only at 1100px wide and up.
+
+### Changed (desktop only)
+- **Cards flow into balanced columns** instead of one long full-width column: Security, Bans, Backup, Notifications, Moderation and Community use two columns (three on screens 1700px and wider). Cards never split across columns, and cards with a table span the full width.
+- **Desk:** the chat fills the height of the screen and stays in place while the side cards scroll.
+- **Weather:** now and the 7-day forecast sit side by side, the next 24 hours run across the page.
+- **Insights:** charts no longer grow to a huge height; "What stood out" and "Busiest hours" sit side by side; the paired cards are the same height.
+- **Settings and More tiles:** the status chip sits under the text instead of squeezing it.
+- **Card finish:** soft shadows, a tinted header, a coloured top edge on figure cards, a small lift on hover.
+- Moderation history keeps its buttons and times on one line in a half-width card (icon-only review button; the Why column is hidden between 1100 and 1299px).
+
+### Notes
+- New file `frontend/src/desktop.css`, imported last in `main.ts`. To undo everything, remove that import.
+- Checked with screenshots of a build against sample data at 390, 820, 1100, 1440 and 1920px, light and dark. Not checked: Knowledge pages, Setup tabs and live data. `vite build` and `pytest` could not be run here; run them before deploying.
+
 ## 1.3.3
 
 Notification switches, pop-up notices you can control, and a much faster chat reader.

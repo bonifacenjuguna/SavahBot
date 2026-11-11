@@ -1,0 +1,142 @@
+/* SavahBot 1.3.4 - desktop layout.
+ *
+ * Everything in this file is inside min-width media queries, so phones and tablets (below 1100px) are exactly as they were.
+ * The idea: on a wide screen a page is not one long column of full-width cards. Cards flow into balanced columns
+ * (no blank corners), figures sit in one row, the chat fills the screen height, and wide cards that hold a table or a chart
+ * span the whole width.
+ */
+
+@media (min-width: 1100px) {
+  :root { --gap: 20px; }
+
+  /* ------------------------------------------------------------------ card finish */
+  .block, .sp-card, .kpi, .fig { box-shadow: var(--shadow-1); }
+  .block { transition: box-shadow 0.2s var(--ease, ease), border-color 0.2s; }
+  .block:hover { box-shadow: 0 1px 2px rgba(10, 16, 32, 0.06), 0 10px 28px rgba(10, 16, 32, 0.09); }
+  .block > header { background: color-mix(in srgb, var(--ink) 2.5%, var(--panel)); }
+  .block > header h2 .ico { color: var(--accent); }
+  .block > header h2 { font-size: 1rem; letter-spacing: -0.005em; }
+  .kpi { transition: transform 0.18s var(--ease, ease), box-shadow 0.2s; }
+  .kpi:hover { transform: translateY(-2px); }
+  .kpi::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 30%, transparent)); opacity: 0.9; }
+  .kpi.warn::before { background: linear-gradient(90deg, var(--demo), color-mix(in srgb, var(--demo) 30%, transparent)); }
+  .kpi.bad::before { background: linear-gradient(90deg, var(--bad), color-mix(in srgb, var(--bad) 30%, transparent)); }
+  .kpi.ok::before { background: linear-gradient(90deg, var(--ok), color-mix(in srgb, var(--ok) 30%, transparent)); }
+  .page-head { margin-bottom: 22px; }
+
+  /* ------------------------------------------------------------------ balanced columns
+   * A page whose cards sit directly in it (or in its card stack) becomes two balanced columns. Anything that is not a card
+   * (tabs, figures, notes, banners) spans the full width, and cards break between columns, never in the middle. */
+  .page:has(> .block, > .sp-card),
+  .page > .k-stack:has(> .block, > .sp-card),
+  .page > .k-stack > .k-stack:has(> .block, > .sp-card),
+  .main > .stack:has(> .block, > .sp-card):not(.ins):not(.pane),
+  .masonry {
+    display: block;
+    columns: 2;
+    column-gap: var(--gap);
+    orphans: 1; widows: 1;
+  }
+  :is(.page:has(> .block, > .sp-card), .page > .k-stack:has(> .block, > .sp-card), .page > .k-stack > .k-stack:has(> .block, > .sp-card),
+  .page > .k-stack > .k-stack:has(> .block, > .sp-card), .main > .stack:has(> .block, > .sp-card):not(.ins):not(.pane), .masonry) > * {
+    break-inside: avoid;
+    column-span: all;
+  }
+  :is(.page:has(> .block, > .sp-card), .page > .k-stack:has(> .block, > .sp-card), .page > .k-stack > .k-stack:has(> .block, > .sp-card),
+  .page > .k-stack > .k-stack:has(> .block, > .sp-card), .main > .stack:has(> .block, > .sp-card):not(.ins):not(.pane), .masonry) > :is(.block, .sp-card, .n-log) {
+    column-span: none;
+    margin: 0 0 var(--gap) !important;
+    display: block;
+  }
+  /* cards that are really tables or wide charts take the whole row */
+  :is(.page, .k-stack, .masonry) > .block:has(table, .table-wrap, .wide-card) { column-span: all; }
+  /* a page with exactly one card in it should not be squeezed into half a row */
+  .page:has(> .block:only-of-type), .page > .k-stack:has(> .block:only-of-type) { columns: 1; }
+
+  /* ------------------------------------------------------------------ figures: one tidy row */
+  .figures { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: var(--gap); }
+  .fig { padding: 14px 18px; }
+  .kpis { gap: 16px; }
+
+  /* ------------------------------------------------------------------ Desk: chat fills the screen, side cards scroll with the page */
+  .cols:has(> .chat-card) { grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr); gap: var(--gap); }
+  .cols > .chat-card:not(.zoomed) {
+    position: sticky; top: calc(var(--topbar-h) + 16px);
+    display: flex; flex-direction: column;
+    height: calc(100vh - var(--topbar-h) - 40px); height: calc(100dvh - var(--topbar-h) - 40px);
+    min-height: 520px; max-height: 920px;
+  }
+  .cols > .chat-card:not(.zoomed) > header { flex: none; }
+  .cols > .chat-card:not(.zoomed) .chat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .chat-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .feed-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .feed { height: auto; flex: 1; min-height: 0; }
+  .cols > .chat-card:not(.zoomed) .say { flex: none; }
+
+  /* ------------------------------------------------------------------ two-column pages whose columns were uneven (Moderation, Community):
+   * the columns are dissolved and the cards re-flow into balanced columns, so there is no hole under the shorter one. */
+  .cols:not(:has(> .chat-card)):has(> .stack:first-child:nth-last-child(2)),
+  .nb-cols.even:has(> .stack.pane) {
+    display: block; columns: 2; column-gap: var(--gap);
+  }
+  :is(.cols:not(:has(> .chat-card)):has(> .stack:first-child:nth-last-child(2)), .nb-cols.even:has(> .stack.pane)) > .stack { display: contents; }
+  :is(.cols:not(:has(> .chat-card)):has(> .stack:first-child:nth-last-child(2)), .nb-cols.even:has(> .stack.pane)) .stack > * { break-inside: avoid; margin: 0 0 var(--gap) !important; }
+
+  /* tables inside half-width cards keep their buttons and times on one line */
+  .cols .table-wrap td .btn, .cols .table-wrap td:first-child, .cols .table-wrap th { white-space: nowrap; }
+  .cols .table-wrap td:last-child .btn { font-size: 0; gap: 0; min-width: 34px; padding: 3px 8px; }
+  .cols .table-wrap td:last-child .btn svg { width: 16px; height: 16px; }
+  .cols .table-wrap td, .cols .table-wrap th { padding-left: 12px; padding-right: 12px; }
+
+  /* ------------------------------------------------------------------ Insights */
+  .stack.ins { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
+  .stack.ins > * { grid-column: 1 / -1; }
+  .stack.ins > .block:nth-child(2) { grid-column: 1; order: 2; }          /* what stood out */
+  .stack.ins > .block:nth-child(4) { grid-column: 2; order: 3; }          /* busiest hours */
+  .stack.ins > .block:nth-child(3) { order: 4; }                           /* chat activity, full width */
+  .stack.ins > :nth-child(n+5) { order: 5; }
+  .stack.ins > .kpis { order: 1; margin-bottom: 0; }
+  .stack.ins + div { margin-top: var(--gap); }
+  .stack.ins .chart { max-height: 300px; }
+  .stack.ins .chart-svg { max-height: 270px; }
+  .stack.ins .cols.even { gap: var(--gap); align-items: stretch; }
+  .stack.ins .cols.even > .stack { grid-auto-rows: 1fr; }
+  .stack.ins .cols.even > .block, .stack.ins .cols.even > .stack > .block { height: 100%; }
+
+  /* ------------------------------------------------------------------ Weather: now + week side by side, hours across */
+  .page:has(.wx-day) { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--gap); columns: auto; align-items: stretch; }
+  .page:has(.wx-day) > * { grid-column: 1 / -1; column-span: none; }
+  .page:has(.wx-day) > .block { margin: 0 !important; }
+  .page:has(.wx-day) > section.block:nth-of-type(1) { grid-column: 1; grid-row: 4; }
+  .page:has(.wx-day) > section.block:nth-of-type(2) { grid-column: 1; grid-row: 5; }
+  .page:has(.wx-day) > section.block:nth-of-type(3) { grid-column: 2; grid-row: 4 / span 2; display: flex; flex-direction: column; }
+  .page:has(.wx-day) > section.block:nth-of-type(3) > :last-child { flex: 1; display: grid; grid-auto-rows: 1fr; }
+  .page:has(.wx-day) > .wx-attr { grid-row: 6; }
+
+  /* ------------------------------------------------------------------ Settings tiles: the status chip no longer squeezes the words */
+  .set-grid { grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 14px; }
+  .set-tile, .set-hit { background: var(--raised); box-shadow: var(--shadow-1); }
+  .set-tile { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 4px 14px; padding: 16px; }
+  .set-tile:hover { transform: translateY(-2px); }
+  .set-tile > .set-ic { grid-row: 1 / span 2; width: 44px; height: 44px; }
+  .set-tile > .chip { grid-column: 2; justify-self: start; margin-top: 4px; }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .tile { box-shadow: var(--shadow-1); }
+
+  /* ------------------------------------------------------------------ forms inside a card never run the whole width of the screen */
+  .block > .body > .form-grid, .block .toolbar { max-width: 100%; }
+  .block > .body > p, .block > .body > .muted { max-width: 70ch; }
+}
+
+@media (min-width: 1100px) and (max-width: 1299px) {
+  .cols .table-wrap :is(th, td):nth-child(5) { display: none; }
+}
+
+@media (min-width: 1700px) {
+  :root { --gap: 24px; }
+  .page:has(> .block, > .sp-card):not(:has(.wx-day)),
+  .page > .k-stack:has(> .block, > .sp-card),
+  .page > .k-stack > .k-stack:has(> .block, > .sp-card),
+  .masonry { columns: 3 440px; }
+  .main { max-width: 1760px; }
+}
