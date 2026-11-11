@@ -94,6 +94,7 @@ Bans and timeouts.
 |---|---|---|
 | GET | `/api/demo` |  |
 | POST | `/api/demo/ambient` |  |
+| POST | `/api/demo/sample` |  |
 | POST | `/api/demo/scenario` |  |
 
 ## events
@@ -172,6 +173,7 @@ Knowledge packs, detectors, learning, live lists.
 | GET | `/api/live/events` |  |
 | GET | `/api/live/stats` |  |
 | GET | `/api/live/streams` |  |
+| GET | `/api/live/streams/{video_id}` |  |
 
 ## mode
 

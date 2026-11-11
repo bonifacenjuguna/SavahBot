@@ -140,3 +140,12 @@ async def test_chat_person_card_and_costs(api):
     st, k = await api.call("GET", "/api/chat/costs")
     assert st == 200 and k["ban"] > k["delete"] > 0
     assert (await api.call("POST", "/api/chat/act", {"id": 12345, "action": "ban"}))[0] == 404
+
+
+@e2e
+async def test_demo_sample_history(api):
+    await api.call("POST", "/api/mode", {"mode": "demo"})
+    st, r = await api.call("POST", "/api/demo/sample")
+    assert st == 200 and r["bans"] == 4
+    st, b = await api.call("GET", "/api/bans")
+    assert b["total"] >= 4 and {i["status"] for i in b["items"]} >= {"active", "lifted"}

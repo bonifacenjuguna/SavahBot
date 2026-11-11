@@ -101,6 +101,8 @@ class ActivityLog:
             job = self.record("moderation", "ban", f"{(d.get('kind') or 'action').capitalize()} for {d.get('author', 'someone')} ({d.get('source', 'bot')})", "notable", actor=str(d.get("source", "bot")))
         elif t == "ban_lifted":
             job = self.record("moderation", "unban", f"Lifted the ban on {d.get('author', 'someone')}", "notable", actor=str(d.get("by", "owner")))
+        elif t == "chat_deleted":
+            job = self.record("chat", "delete", f"Deleted a message from {d.get('author', 'someone')} from the chat" + (" (demo)" if d.get("simulated") else ""), "routine")
         elif t == "backup":
             job = self.record("data", "backup", str(d.get("title", "Backup")) + ": " + str(d.get("text", "")), "sensitive")
         if job is not None:

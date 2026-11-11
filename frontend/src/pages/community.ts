@@ -1,3 +1,4 @@
+import { foldChildren } from "../nav.js";
 import { del, get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
@@ -95,6 +96,7 @@ export const community: Page = {
         h("div", { class: "r-main" }, h("strong", { class: looksLikeId(r.ident) ? "mono wrap" : "wrap" }, r.label || r.ident), r.label ? h("span", { class: `muted small${looksLikeId(r.ident) ? " mono" : ""} wrap` }, r.ident) : null),
         h("div", { class: "acts" }, h("span", { class: "chip ok" }, icon("star", 12), "Trusted"),
           confirmAct({ icon: "x", label: `Remove ${r.ident}`, onConfirm: async () => { try { await del(`/api/regulars/${r.id}`); await loadReg(); toast("Removed from regulars"); } catch (e) { toast((e as Error).message, "error"); } } }))))));
+      foldChildren(regList.querySelector(".r-list"), "regulars", 10);
     };
     const loadReg = async () => { regulars = (await get<{ items: Regular[] }>("/api/regulars")).items; drawFigures(); drawReg(); tabs.refreshBadges(); };
 

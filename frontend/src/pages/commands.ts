@@ -1,3 +1,4 @@
+import { foldChildren } from "../nav.js";
 import { del, get, patch, post } from "../api.js";
 import { ago, busy, debounce, duration, h, mount, sheet, toast } from "../dom.js";
 import { icon } from "../icons.js";
@@ -117,6 +118,7 @@ export const commands: Page = {
             h("td", { "data-label": "" }, h("div", { class: "row", style: "gap:6px" }, h("button", { class: "btn small ghost", "aria-label": `Edit !${c.name}`, onclick: () => editor(c) }, icon("pencil", 15), "Edit"),
               h("button", { class: "btn small danger", "aria-label": `Delete !${c.name}`, onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await del(`/api/commands/${c.id}`); await load(); }) }, icon("trash", 15), "Delete"))))))))
           : empty("terminal", items.length ? "No commands match." : "No commands yet. Add your first one."));
+      foldChildren(rowsBox.querySelector("tbody"), "commands", 12);
       };
       drawRows();
       mount(listBox,
@@ -271,6 +273,7 @@ export const commands: Page = {
       ]);
       levels = c.levels; builtin = c.builtin; items = c.items; timers = tm.items; triggers = tr.items; triggersOn = tr.enabled;
       drawList(); drawReplies(); drawTimers(); drawTabs();
+      foldChildren(replyBox.querySelector(".cards-grid"), "auto-replies", 8); foldChildren(timerBox.querySelector(".cards-grid"), "timers", 8);
     };
 
     const actions = h("div", { class: "row" });

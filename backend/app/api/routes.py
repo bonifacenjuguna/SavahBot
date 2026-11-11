@@ -553,6 +553,30 @@ async def demo_scenario(request: Request, c: Any) -> dict:
     return {"ok": True}
 
 
+@R.add("/demo/sample", ["POST"])
+async def demo_sample(request: Request, c: Any) -> dict:
+    """Fills Demo with a few hours of believable history (chat, a flagged message, bans in different states) so pages that need history are not empty.
+    Everything is marked demo, so it never mixes with live data, and "Clear demo data" removes it."""
+    if c.hub.mode != "demo":
+        raise ApiError("Switch to demo mode first. Sample history is only added in demo.", 409)
+    now = time.time()
+    people = [("u-ana", "Ana"), ("u-ben", "Ben"), ("u-cy", "Cy"), ("u-dee", "Dee"), ("u-eli", "Eli"), ("u-fay", "Fay")]
+    lines = ["hello everyone", "great stream today", "that was close", "gg", "can you play the new level?", "lol", "first time here, hi!", "love this song", "how long have you been streaming?", "nice one"]
+    n = 0
+    for i in range(120):
+        pid, name = people[i % len(people)]
+        flagged = i % 29 == 7
+        await c.store.add_chat({"platform": "demo", "msg_id": f"sample-{i}", "author_id": pid, "author_name": name, "ts": now - (120 - i) * 90, "demo": True,
+                                "text": "free followers at spammy-site.example now!!!" if flagged else lines[i % len(lines)], "score": 80 if flagged else 0, "verdict": "flag" if flagged else "allow"})
+        n += 1
+    made = []
+    for who, kind, secs in (("u-ben", "timeout", 600), ("u-cy", "ban", None), ("u-dee", "timeout", 60), ("u-fay", "ban", None)):
+        name = dict(people)[who]
+        made.append(await c.hub.bans.record(author_id=who, author_name=name, kind=kind, duration=secs, ban_ref="", action_id=None, source="auto" if who == "u-cy" else "dashboard", reason="Sample", platform="demo", demo=True))
+    await c.hub.unban(made[3])
+    return {"chat_lines": n, "bans": len(made)}
+
+
 @R.add("/demo/ambient", ["POST"])
 async def demo_ambient(request: Request, c: Any) -> dict:
     b = await parse(request, S.AmbientIn)
@@ -746,7 +770,7 @@ async def chat_person(request: Request, c: Any) -> dict:
     db = c.store.db
     stats = await db.fetchone("SELECT COUNT(*) AS n, MIN(ts) AS first, MAX(ts) AS last, MAX(author_name) AS name FROM chat_messages WHERE platform = ? AND author_id = ? AND level != 'bot'", (platform, aid))
     recent = await db.fetchall("SELECT id, ts, body, verdict FROM chat_messages WHERE platform = ? AND author_id = ? ORDER BY ts DESC, id DESC LIMIT 12", (platform, aid))
-    actions = await db.fetchall("SELECT ts, kind, status, source FROM bans WHERE platform = ? AND author_id = ? ORDER BY ts DESC LIMIT 10", (platform, aid))
+    actions = await db.fetchall("SELECT id, ts, kind, status, source, ban_ref FROM bans WHERE platform = ? AND author_id = ? ORDER BY ts DESC LIMIT 10", (platform, aid))
     notes = [n for n in await c.store.list_notes() if stats["name"] and f"@{stats['name']}".lower() in (n.get("body") or "").lower()][:5]
     return {"name": stats["name"], "messages": stats["n"], "first_seen": stats["first"], "last_seen": stats["last"], "recent": recent, "actions": actions,
             "notes": notes, "regular": bool(c.store.is_regular(aid, stats["name"] or ""))}
@@ -773,9 +797,30 @@ async def live_events(request: Request, c: Any) -> dict:
     return {"items": await c.extras.recent_events(30)}
 
 
+def demo_streams() -> list[dict]:
+    """Three made-up past streams for Demo mode, so the Insights table and the per-stream graph can be tried."""
+    now = time.time()
+    return [{"video_id": f"demo-{i}", "started": now - (i + 1) * 86400 - 7200, "ended": now - (i + 1) * 86400, "peak_viewers": 60 + 25 * (3 - i), "likes": 140 + 60 * (3 - i), "samples": 120, "sample": True} for i in range(3)]
+
+
 @R.add("/live/streams", ["GET"])
 async def live_streams(request: Request, c: Any) -> dict:
-    return {"items": await c.extras.streams(20)}
+    if c.hub.mode == "demo":
+        return {"items": demo_streams(), "sample": True}
+    return {"items": await c.extras.streams(20), "sample": False}
+
+
+@R.add("/live/streams/{video_id}", ["GET"])
+async def live_stream_detail(request: Request, c: Any) -> dict:
+    """The recorded likes and viewers of one past stream, oldest first, for its graph."""
+    import math
+    vid = request.path_params["video_id"]
+    if vid.startswith("demo-") and c.hub.mode == "demo":
+        n = int(vid[5:] or 0) if vid[5:].isdigit() else 0
+        base = time.time() - (n + 1) * 86400 - 7200
+        return {"video_id": vid, "sample": True, "series": [{"ts": base + i * 60, "likes": 20 + i * (3 - n) * 2 + int(5 * math.sin(i / 5)), "viewers": 30 + int((20 + 10 * (3 - n)) * math.sin(i / 20 * math.pi / 2 + .3)) + i // 3} for i in range(120)]}
+    rows = await c.db.fetchall("SELECT ts, likes, viewers FROM live_samples WHERE video_id = ? ORDER BY ts LIMIT 2000", (vid[:40],))
+    return {"video_id": vid, "sample": False, "series": rows}
 
 
 def demo_live_stats() -> dict:

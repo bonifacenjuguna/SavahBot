@@ -86,6 +86,7 @@ class Container:
         self.scheduler.hooks.append(self.weather.tick)       # refresh + alert rules; the scheduler only calls hooks on the leader
         self.scheduler.hooks.append(self.notifier.tick)
         self.activity.notify = self.notifier
+        self.notifier.activity = self.activity
         self.extras = LiveExtras(self)
         self.voices = VoiceStore(self.cfg.get("voice_dir"), int(self.cfg.get("voice_pack_max_mb")))
         self.renderer.live = self.extras

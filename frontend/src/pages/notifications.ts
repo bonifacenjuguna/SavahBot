@@ -73,16 +73,33 @@ async function overview(el: HTMLElement): Promise<void> {
     row("In-app bell and history", null, sw(prefs.inapp, "In-app", (v) => void savePrefs({ inapp: v }).catch(fail))),
     row("Telegram", "Only for events Telegram does not already report itself.", sw(prefs.telegram, "Telegram", (v) => void savePrefs({ telegram: v }).catch(fail))),
     row("Pause push", prefs.paused ? `Paused until ${clock(prefs.pause_until)}. Critical alerts still come through.` : prefs.quiet_now ? `Quiet hours until ${prefs.quiet_ends ? clock(prefs.quiet_ends) : "later"}.` : "Silence push for a while. The bell keeps filling.",
-      h("div", { class: "row wrap" }, prefs.paused ? pause(null, "Resume") : [pause(60, "1 hour"), pause(480, "8 hours")]))), { flush: true });
+      h("div", { class: "row wrap" }, prefs.paused ? pause(null, "Resume") : [pause(15, "15 min"), pause(60, "1 hour"), pause(480, "8 hours"), pause(minsToMorning(), "Until morning")]))), { flush: true });
   mount(el, figures([{ value: String(inbox.unread), label: "unread", tone: inbox.unread ? "warn" : "" }, { value: String(devs.devices.filter((d) => d.enabled).length), label: "push devices", tone: devs.devices.length ? "ok" : "" }, { value: prefs.paused ? "paused" : prefs.quiet_now ? "quiet" : "active", label: "right now", tone: prefs.paused || prefs.quiet_now ? "warn" : "ok" }]), deviceCard, controls, setup);
 }
 
 // ------------------------------------------------------------------ categories
+/** Minutes from now until 07:00 (tomorrow if it is already past), for "Until morning". */
+function minsToMorning(): number {
+  const t = new Date(); t.setHours(7, 0, 0, 0);
+  if (t.getTime() <= Date.now() + 60_000) t.setDate(t.getDate() + 1);
+  return Math.round((t.getTime() - Date.now()) / 60_000);
+}
+
 async function categories(el: HTMLElement): Promise<void> {
   const r = await get<{ groups: Record<string, string>; items: Cat[] }>("/api/notify/categories");
   const groups = [...new Set(r.items.map((i) => i.group))];
   const save = (id: string, body: Partial<Eff>) => void savePrefs({ categories: { [id]: body } }).catch(fail);
-  mount(el, groups.filter((g) => g !== "test").map((g) => card(null, r.groups[g] ?? g, h("div", { class: "k-stack", style: "padding:6px 14px 12px" }, r.items.filter((i) => i.group === g).map((c) => {
+  const preset = (label: string, hint: string, pick: (c: Cat) => Partial<Eff>) => h("button", { class: "btn small", type: "button", title: hint, onclick: (e: Event) => void busy(e.currentTarget as HTMLButtonElement, async () => {
+    await savePrefs({ categories: Object.fromEntries(r.items.filter((i) => i.group !== "test").map((i) => [i.id, pick(i)])) }); toast("Applied"); void categories(el).catch(fail);
+  }) }, label);
+  const urgent = (c: Cat) => c.group === "security" || c.effective.priority === "high" || c.effective.priority === "critical";
+  const presets = card("sliders", "Quick presets", h("div", { style: "padding:6px 14px 12px" },
+    h("p", { class: "muted small" }, "Change every kind at once. You can still adjust each one below."),
+    h("div", { class: "row wrap", style: "gap:8px" },
+      preset("Essentials only", "Only security and urgent kinds stay on", (c) => ({ enabled: urgent(c) })),
+      preset("No push, bell only", "Keep everything in the bell but stop push", (c) => ({ push: false })),
+      preset("Everything on", "Turn every kind back on", () => ({ enabled: true })))), { flush: true });
+  mount(el, presets, ...groups.filter((g) => g !== "test").map((g) => card(null, r.groups[g] ?? g, h("div", { class: "k-stack", style: "padding:6px 14px 12px" }, r.items.filter((i) => i.group === g).map((c) => {
     const chan = (k: Chan, label: string, disabled = false, hint = "") => h("label", { class: "n-chan", title: hint }, sw(c.effective[k], `${c.label}: ${label}`, (v) => { c.effective[k] = v; save(c.id, { [k]: v }); }, disabled), label);
     const prio = h("select", { "aria-label": `${c.label} priority`, onchange: (e: Event) => save(c.id, { priority: (e.target as HTMLSelectElement).value }) }, PRIORITY.map(([v, l]) => h("option", { value: v, selected: v === c.effective.priority }, l)));
     return h("div", { class: "n-cat" }, h("div", { class: "n-row" },

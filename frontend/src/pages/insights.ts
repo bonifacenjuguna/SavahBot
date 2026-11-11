@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { downloadCsv, h, mount, toast } from "../dom.js";
+import { downloadCsv, h, mount, sheet, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { areaChart, donut, hbars, sparkline } from "../charts.js";
 import { expandable, openChartDetail } from "../chart-detail.js";
@@ -156,12 +156,20 @@ export const insights: Page = {
             card("ban", "Actions by type", hbars(Object.entries(s.actions_by_type).map(([name, count]) => ({ name: nice(ACTION, name), count })), "s4"), { flush: true }))));
     };
     const streams = h("div");
+    const openStream = async (id: string, when: string) => {
+      const d = await get<{ sample: boolean; series: { ts: number; likes: number | null; viewers: number | null }[] }>(`/api/live/streams/${encodeURIComponent(id)}`);
+      const v = d.series.map((p) => p.viewers ?? 0), l = d.series.filter((p) => p.likes !== null).map((p) => p.likes as number);
+      sheet(`Stream from ${when}`, h("div", { class: "stack" },
+        d.sample ? h("p", { class: "muted small" }, "Sample data: Demo mode has no real streams.") : null,
+        h("div", null, h("strong", null, "People watching"), h("div", { class: "muted small" }, v.length ? `peak ${Math.max(...v).toLocaleString()}` : "none recorded"), v.length > 1 ? h("div", { style: "height:70px" }, sparkline(v)) : null),
+        h("div", null, h("strong", null, "Likes"), h("div", { class: "muted small" }, l.length ? `${Math.max(...l).toLocaleString()} at the end` : "hidden by the creator or not recorded"), l.length > 1 ? h("div", { style: "height:70px" }, sparkline(l)) : null)));
+    };
     const loadStreams = async () => {
-      const r = await get<{ items: { video_id: string; started: number; ended: number; peak_viewers: number | null; likes: number | null; samples: number }[] }>("/api/live/streams");
+      const r = await get<{ sample?: boolean; items: { video_id: string; started: number; ended: number; peak_viewers: number | null; likes: number | null; samples: number }[] }>("/api/live/streams");
       const fmt = (t: number) => new Date(t * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
       mount(streams, card("activity", "Past streams", r.items.length
-        ? h("div", { class: "table-wrap" }, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["Started", "Length", "Peak watching", "Likes"].map((c) => h("th", null, c)))),
-          h("tbody", null, r.items.map((x) => h("tr", null, h("td", { "data-label": "Started" }, fmt(x.started)), h("td", { "data-label": "Length" }, `${Math.max(1, Math.round((x.ended - x.started) / 60))} min`),
+        ? h("div", { class: "table-wrap" }, r.sample ? h("p", { class: "muted small", style: "padding:8px 14px 0" }, "Sample data: Demo mode has no real streams. Click a row to see its graph.") : null, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["Started", "Length", "Peak watching", "Likes"].map((c) => h("th", null, c)))),
+          h("tbody", null, r.items.map((x) => h("tr", { style: "cursor:pointer", tabindex: "0", role: "button", "aria-label": "Show the graph for this stream", onclick: () => void openStream(x.video_id, fmt(x.started)), onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter") void openStream(x.video_id, fmt(x.started)); } }, h("td", { "data-label": "Started" }, fmt(x.started)), h("td", { "data-label": "Length" }, `${Math.max(1, Math.round((x.ended - x.started) / 60))} min`),
             h("td", { "data-label": "Peak watching" }, x.peak_viewers === null ? "n/a" : x.peak_viewers.toLocaleString()), h("td", { "data-label": "Likes" }, x.likes === null ? "hidden" : x.likes.toLocaleString()))))))
         : empty("activity", "Likes and viewers are recorded while you are live. Streams show up here afterwards."), { flush: true }));
     };

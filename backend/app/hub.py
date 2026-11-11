@@ -361,6 +361,8 @@ class Hub:
                                             ban_ref="" if simulated else str(getattr(src, "last_ban_id", "") or ""), action_id=None, source="dashboard", reason="Chosen from the chat",
                                             platform=row["platform"], demo=simulated)
             self.bus.publish("ban_made", {"author": row["author_name"], "kind": action, "source": "dashboard"})
+        else:
+            self.bus.publish("chat_deleted", {"author": row["author_name"], "simulated": simulated})
         return {"ok": True, "ban_id": ban_id, "simulated": simulated}
 
     async def unban(self, ban_id: int, by: str = "dashboard") -> dict[str, Any]:

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.1
+
+Finishes the items 1.3.0 left partial.
+
+- **Chat actions:** lift a ban or timeout from the person card, "Always allow links to this site", a fuller "Why it was flagged" sheet, single-message deletes are logged.
+- **Activity log:** retention days and "notify me about sensitive entries" are controls on the page; notification-setting changes are now logged.
+- **Insights:** click a past stream to see its viewers and likes graph.
+- **Long lists:** timers, auto-replies, commands and regulars show the first few with "Show all", and Recent deliveries too.
+- **Notifications:** quick presets (Essentials only, No push, Everything on) and mute for 15 min / 1 h / 8 h / until morning.
+- **Demo:** "Add sample history" fills chat, a flagged message and bans in different states; past streams and their graphs have labelled sample data; "Clear demo data" now also removes demo bans.
+
+Not changed: the stray Chrome notification could not be reproduced here. The service worker is unchanged except its version; see REPORT.md.
+
 ## 1.3.0
 
 A bug-fix and polish release with several new features. Guides are in `docs/`.

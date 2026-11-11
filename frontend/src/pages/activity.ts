@@ -1,4 +1,4 @@
-import { get } from "../api.js";
+import { get, patch } from "../api.js";
 import { busy, dateTime, h, mount, toast } from "../dom.js";
 import { icon, statusIcon } from "../icons.js";
 import { empty, pageHead } from "./shared.js";
@@ -58,9 +58,20 @@ export const activity: Page = {
       e.preventDefault();
       void fetch(`/api/activity/export?${qs()}`, { credentials: "include" }).then((r) => r.blob()).then((b) => { const a = h("a", { href: URL.createObjectURL(b), download: "savahbot-activity.csv" }) as HTMLAnchorElement; a.click(); }).catch(() => toast("Export failed"));
     } }, icon("download", 15), "Export");
+    const keep = h("input", { type: "number", min: 0, max: 3650, style: "width:90px", "aria-label": "Days to keep the log" }) as HTMLInputElement;
+    const notifySw = h("input", { type: "checkbox", class: "switch", "aria-label": "Notify me about sensitive entries" }) as HTMLInputElement;
+    const policy = h("div", { class: "sp-card" }, h("h3", null, "Keeping and alerts"),
+      h("div", { class: "row between", style: "align-items:center;gap:12px;padding:8px 0" }, h("div", null, h("strong", null, "Keep entries for"), h("div", { class: "muted small" }, "Days. 0 keeps everything. Older entries, including sensitive ones, are then removed automatically.")), h("span", { class: "row", style: "gap:6px;align-items:center" }, keep, h("span", { class: "muted small" }, "days"))),
+      h("div", { class: "row between", style: "align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)" }, h("div", null, h("strong", null, "Notify me about sensitive entries"), h("div", { class: "muted small" }, "A security-alert notification when a sensitive change is logged.")), notifySw));
+    void get<{ items: { name: string; value: unknown }[] }>("/api/settings").then((r) => {
+      keep.value = String(r.items.find((i) => i.name === "activity_retention_days")?.value ?? 365);
+      notifySw.checked = Boolean(r.items.find((i) => i.name === "activity_notify_sensitive")?.value);
+    }).catch(() => undefined);
+    const savePolicy = (values: Record<string, unknown>) => void patch("/api/settings", { values }).then(() => toast("Saved")).catch((e) => toast(e instanceof Error ? e.message : "Could not save", "error"));
+    keep.onchange = () => { const n = Number(keep.value); if (!Number.isFinite(n) || n < 0 || n > 3650) { toast("Use 0 to 3650", "error"); return; } savePolicy({ activity_retention_days: n }); };
+    notifySw.onchange = () => savePolicy({ activity_notify_sensitive: notifySw.checked });
     mount(root, h("div", { class: "page" }, pageHead("checklist", "Activity log", "What changed, newest first. Secrets, tokens, passwords and message text are never recorded. Sensitive entries cannot be deleted here; they leave when the retention period ends.", h("div", { class: "row", style: "gap:8px" }, h("a", { class: "btn small", href: "#/settings" }, "Back to Settings"), exp)),
-      h("div", { class: "sp-card" }, h("div", { class: "row wrap", style: "gap:8px" }, search, area, imp, rng), list),
-      h("p", { class: "muted small" }, "Retention and the optional notification for sensitive entries are in Settings, Developer & advanced: activity_retention_days and activity_notify_sensitive.")));
+      h("div", { class: "sp-card" }, h("div", { class: "row wrap", style: "gap:8px" }, search, area, imp, rng), list), policy));
     void load();
   },
 };

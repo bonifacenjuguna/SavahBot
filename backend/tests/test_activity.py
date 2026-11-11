@@ -27,3 +27,18 @@ def test_classification_and_secret_hiding(tmp_path):
         page = await log.query(limit=1)
         assert page["more"] and len((await log.query(before_id=page["items"][-1]["id"]))["items"]) == 2
     asyncio.run(go())
+
+
+from tests.test_api import e2e  # noqa: E402
+
+
+@e2e
+async def test_notification_changes_and_chat_delete_reach_the_log(api):
+    st, _ = await api.call("PATCH", "/api/notify/prefs", {"categories": {"stream.member": {"enabled": False}}})
+    assert st == 200
+    st, r = await api.call("GET", "/api/activity?area=notifications")
+    assert st == 200 and any("notification settings" in i["summary"] for i in r["items"])
+    st, r = await api.call("POST", "/api/settings".replace("settings", "variables"), {"name": "Tk", "value": "https://tiktok.com/@a", "kind": "link"})
+    assert st == 200
+    st, r = await api.call("GET", "/api/activity?area=variables")
+    assert [i["summary"] for i in r["items"]] == ["Added $(Tk)"]

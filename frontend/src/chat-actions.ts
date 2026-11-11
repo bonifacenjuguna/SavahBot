@@ -1,4 +1,4 @@
-import { get, post } from "./api.js";
+import { get, patch, post } from "./api.js";
 import { h, mount, sheet, toast, toastAction } from "./dom.js";
 import { icon } from "./icons.js";
 
@@ -77,14 +77,34 @@ async function personCard(m: ChatLine): Promise<void> {
   const body = h("div", { class: "stack" }, h("p", { class: "muted" }, "Loading…"));
   sheet(m.author_name, body);
   try {
-    const p = await get<{ messages: number; first_seen: number | null; recent: { ts: number; body: string; verdict: string }[]; actions: { ts: number; kind: string; status: string }[]; notes: { body: string }[]; regular: boolean }>(`/api/chat/person?author_id=${encodeURIComponent(m.author_id ?? "")}&platform=${m.platform ?? "youtube"}`);
+    const p = await get<{ messages: number; first_seen: number | null; recent: { ts: number; body: string; verdict: string }[]; actions: { id: number; ts: number; kind: string; status: string }[]; notes: { body: string }[]; regular: boolean }>(`/api/chat/person?author_id=${encodeURIComponent(m.author_id ?? "")}&platform=${m.platform ?? "youtube"}`);
     const when = (t: number) => new Date(t * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
     mount(body,
       h("p", null, `${p.messages.toLocaleString()} message${p.messages === 1 ? "" : "s"} stored`, p.first_seen ? ` · first seen ${when(p.first_seen)}` : "", p.regular ? " · regular" : ""),
-      p.actions.length ? h("div", null, h("strong", null, "Bans and timeouts"), ...p.actions.map((a) => h("div", { class: "muted small" }, `${when(a.ts)}: ${a.kind}, ${a.status}`))) : h("p", { class: "muted small" }, "Never banned or timed out."),
+      p.actions.length ? h("div", null, h("strong", null, "Bans and timeouts"), ...p.actions.map((a) => h("div", { class: "row between", style: "align-items:center" }, h("span", { class: "muted small" }, `${when(a.ts)}: ${a.kind}, ${a.status}`),
+        a.status === "active" ? h("button", { class: "btn small", type: "button", onclick: (e: Event) => { const b = e.currentTarget as HTMLButtonElement; b.disabled = true; void post(`/api/bans/${a.id}/lift`).then(() => { toast("Lifted"); b.textContent = "Lifted"; }).catch((er) => { b.disabled = false; toast(er instanceof Error ? er.message : "Could not lift", "error"); }); } }, "Lift") : null))) : h("p", { class: "muted small" }, "Never banned or timed out."),
       p.notes.length ? h("div", null, h("strong", null, "Notes"), ...p.notes.map((n) => h("div", { class: "muted small wrap" }, n.body))) : null,
       h("div", null, h("strong", null, "Recent messages"), ...(p.recent.length ? p.recent.map((r) => h("div", { class: "muted small wrap" }, `${when(r.ts)}: ${r.body}${r.verdict !== "allow" ? ` (${r.verdict})` : ""}`)) : [h("div", { class: "muted small" }, "None stored.")])));
   } catch (e) { mount(body, h("p", { class: "muted" }, e instanceof Error ? e.message : "Could not load")); }
+}
+
+/** A plain explanation of why a line was flagged. The scores and the blocked words stay on the Moderation page. */
+function whySheet(m: ChatLine): void {
+  const verdict = m.verdict === "block" ? "held back and not shown" : m.verdict === "flag" ? "flagged for your attention" : "allowed";
+  sheet("Why it was flagged", h("div", { class: "stack" }, h("p", { class: "wrap" }, `The message from ${m.author_name} was ${verdict}.`),
+    m.reasons?.length ? h("div", null, h("strong", null, "Reasons"), ...m.reasons.map((r) => h("div", { class: "muted small wrap" }, r))) : h("p", { class: "muted small" }, "No reasons were recorded for this line."),
+    h("p", { class: "muted small" }, "If this was wrong, close this and choose \"Teach the bot: this is fine\". Full details and the rules are on the Moderation page."),
+    h("a", { class: "btn small", href: "#/moderation" }, "Open Moderation")));
+}
+
+async function allowDomain(host: string): Promise<void> {
+  try {
+    const snap = await get<{ items: { name: string; value: unknown }[] }>("/api/settings");
+    const cur = String(snap.items.find((i) => i.name === "mod_allowed_domains")?.value ?? "");
+    if (cur.split(",").map((x) => x.trim().toLowerCase()).includes(host)) { toast(`${host} is already allowed`); return; }
+    await patch("/api/settings", { values: { mod_allowed_domains: cur ? `${cur},${host}` : host } });
+    toast(`Links to ${host} are now allowed`);
+  } catch (e) { toast(e instanceof Error ? e.message : "Could not save", "error"); }
 }
 
 export function openSheet(m: ChatLine, ctx: ActionCtx): void {
@@ -95,6 +115,7 @@ export function openSheet(m: ChatLine, ctx: ActionCtx): void {
   };
   const group = (title: string, ...items: (HTMLElement | null)[]) => h("div", null, h("div", { class: "muted small", style: "margin:12px 0 2px" }, title), ...items.filter(Boolean) as HTMLElement[]);
   const flagged = m.verdict && m.verdict !== "allow";
+  const link = /https?:\/\/([^\s/]+)/i.exec(m.text)?.[1]?.replace(/^www\./, "").toLowerCase() ?? "";
   const canAct = m.level !== "owner" && m.level !== "bot";
   const body = h("div", null,
     h("div", { class: "wrap", style: "padding:4px 0 8px" }, h("strong", null, m.author_name), h("div", { class: "muted small wrap" }, m.text)),
@@ -104,13 +125,15 @@ export function openSheet(m: ChatLine, ctx: ActionCtx): void {
       it("check", "Select several messages", () => ctx.select(m)), ...(ctx.extra?.(m, () => box.close()) ?? [])),
     group("This person", it("user", `About ${m.author_name}`, () => void personCard(m)),
       it("edit", "Add a note to the Notebook", () => void post("/api/notes", { body: `@${m.author_name}: ${m.text}`.slice(0, 1000), tags: ["chat"], pinned: false }).then(() => toast("Added to the Notebook")).catch((e) => toast(e.message, "error")))),
-    flagged ? group("Moderation", it("flag", "Why it was flagged", () => toast(m.reasons?.length ? `Flagged for: ${m.reasons.join(", ")}` : "The bot flagged this message; details are on the Moderation page.")),
+    flagged ? group("Moderation", it("flag", "Why it was flagged", () => whySheet(m)),
       it("shield", "Teach the bot: this is spam", () => void post("/api/knowledge/lessons", { label: "spam", text: m.text, author: m.author_name }).then(() => toast("Learned as spam")).catch((e) => toast(e.message, "error"))),
       it("check", "Teach the bot: this is fine", () => void post("/api/knowledge/lessons", { label: "ham", text: m.text, author: m.author_name }).then(() => toast("Learned as fine")).catch((e) => toast(e.message, "error")))) : group("Moderation",
       it("shield", "Teach the bot: this is spam", () => void post("/api/knowledge/lessons", { label: "spam", text: m.text, author: m.author_name }).then(() => toast("Learned as spam")).catch((e) => toast(e.message, "error")))),
+    link ? group("Links", it("check", `Always allow links to ${link}`, () => void allowDomain(link))) : null,
     group("Block this phrase", it("ban", "Add this message to the blocked phrases", () => void post("/api/blacklist", { phrase: m.text.slice(0, 200), is_regex: false, weight: 0, enabled: true }).then(() => toast("Added to blocked phrases")).catch((e) => toast(e.message, "error")))),
     canAct ? group("Act on the channel", it("trash", "Delete message", () => void confirmAction(m, "delete", 0, "Delete", () => void act(m, "delete")), "danger"),
       ...TIMEOUTS.map(([l, s]) => it("timer", `Time out ${l}`, () => void confirmAction(m, "timeout", s, `Time out ${l}`, () => void act(m, "timeout", s)), "danger")),
+      it("shield", "Lift a ban or timeout", () => void personCard(m)),
       it("ban", `Ban ${m.author_name}`, () => void confirmAction(m, "ban", 0, "Ban", () => void act(m, "ban")), "danger")) : null);
   const box = sheet("Message", body);
 }

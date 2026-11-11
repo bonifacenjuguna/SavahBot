@@ -185,6 +185,10 @@ class Notifier:
                 cur[k] = v
         self._prefs = self._merge(cur)
         await self.db.kv_set("notify_prefs", json.dumps(self._prefs))
+        act = getattr(self, "activity", None)
+        if act is not None and patch.get("pause_until") is None:
+            what = [k for k in patch if k != "categories"] + [f"{len(patch['categories'])} kind(s)"] * bool(patch.get("categories"))
+            await act.record("notifications", "prefs", "Changed notification settings: " + ", ".join(what).replace("_", " ")[:150], "notable" if "categories" in patch or "enabled" in patch else "routine")
         return self._prefs
 
     def effective(self, prefs: dict[str, Any], cid: str) -> dict[str, Any]:

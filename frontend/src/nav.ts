@@ -130,3 +130,22 @@ export function folded<T>(items: T[], make: (t: T) => Node, o: FoldOpts<T>): Nod
   } }, h("span", null, `Show all ${items.length} ${o.noun}`), icon("chevronRight", 16));
   return [...head, open];
 }
+
+/**
+ * For lists that are already drawn (cards, table rows): show the first few, then one "Show all N" button that reveals the rest and ends
+ * with a clear "That is everything" line. Works on any container whose children are the items, so search and filters keep working.
+ */
+export function foldChildren(box: HTMLElement | null, noun: string, initial = 8): void {
+  if (!box) return;
+  box.querySelectorAll(":scope > .fold-tail").forEach((n) => n.remove());
+  const kids = [...box.children].filter((c) => !c.classList.contains("fold-tail")) as HTMLElement[];
+  kids.forEach((k) => { k.hidden = false; });
+  if (kids.length <= initial) return;
+  kids.slice(initial).forEach((k) => { k.hidden = true; });
+  const tail = h("div", { class: "fold-tail", style: "grid-column:1/-1;text-align:center;padding:8px" });
+  const more = h("button", { class: "fold-more", type: "button" }, `Show all ${kids.length} ${noun}`, h("span", { class: "muted small" }, `showing ${initial}`));
+  more.onclick = () => { kids.forEach((k) => { k.hidden = false; }); mount(tail, h("p", { class: "fold-end muted small" }, `That is everything: ${kids.length} ${noun}.`)); };
+  mount(tail, more);
+  if (box.tagName === "UL" || box.tagName === "OL") box.appendChild(h("li", { class: "fold-tail", style: "list-style:none" }, tail));
+  else if (box.tagName === "TBODY") { const tr = h("tr", { class: "fold-tail" }, h("td", { colspan: "9" }, tail)); box.appendChild(tr); } else box.appendChild(tail);
+}

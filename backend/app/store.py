@@ -440,6 +440,7 @@ class Store:
     async def clear_demo_data(self) -> None:
         await self.db.execute("DELETE FROM chat_messages WHERE demo = 1")
         await self.db.execute("DELETE FROM mod_actions WHERE demo = 1")
+        await self.db.execute("DELETE FROM bans WHERE demo = 1")
 
     # ------------------------------------------------------------------ moderation actions
     @staticmethod
