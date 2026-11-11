@@ -34,7 +34,7 @@ export const moderation: Page = {
 
     // ----- auto levels: ready-made thresholds, shown under the mode cards
     interface Lv { current: string; levels: { id: string; label: string; blurb: string }[] }
-    const levelBox = h("div", { class: "stack", style: "margin-top:12px" });
+    const levelBox = h("div", { class: "stack mod-levels" });
     const drawLevels = async () => {
       try {
         const d = await get<Lv>("/api/moderation/level");
@@ -50,24 +50,35 @@ export const moderation: Page = {
     void drawLevels();
 
     // ----- queue and history
-    const pending = h("div"), history = h("div");
+    const pending = h("div", { class: "mod-scroll" }), history = h("div");
+    const queueCount = h("span", { class: "chip warn", hidden: true });
     let historyItems: Action[] = [];
     let hFilter = "all";
     let hNeedle = "";
     let hRange: RangeValue = { label: "", active: false };
     let hMore = false;
     const PAGE = 60;
-    const loadPending = async () => mount(pending, approvalList((await get<{ items: Action[] }>("/api/moderation/pending")).items, async () => { await loadPending(); await loadHistory(); }));
+    const loadPending = async () => {
+      const items = (await get<{ items: Action[] }>("/api/moderation/pending")).items;
+      queueCount.hidden = !items.length;
+      queueCount.textContent = `${items.length} waiting`;
+      mount(pending, approvalList(items, async () => { await loadPending(); await loadHistory(); }));
+    };
 
     const historyTable = (rows: Action[]): HTMLElement => rows.length
-      ? h("div", { class: "table-wrap" }, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["When", "Who", "Action", "Outcome", "Why", ""].map((c) => h("th", null, c)))),
-        h("tbody", null, rows.map((a) => h("tr", null,
-          h("td", { "data-label": "When" }, dateTime(a.ts)),
-          h("td", { "data-label": "Who" }, h("span", null, a.author_name, a.demo ? h("span", { class: "chip", style: "margin-left:6px" }, "demo") : null)),
-          h("td", { "data-label": "Action" }, actionLabel(a)),
-          h("td", { "data-label": "Outcome" }, h("div", null, h("span", { class: `chip ${chipFor(a.status)}` }, a.status), a.error ? h("div", { class: "reasons" }, a.error) : null)),
-          h("td", { class: "small muted", "data-label": "Why" }, a.reasons.join(", ") || "-"),
-          h("td", { class: "small", "data-label": "Review" }, h("button", { class: "btn small ghost", type: "button", onclick: () => openWhy(a) }, icon("sparkle", 14), "Why and teach")))))))
+      ? h("div", { class: "table-wrap" }, h("table", { class: "cards mod-table" },
+        h("thead", null, h("tr", null, [["When", "mh-when"], ["Who", "mh-who"], ["Action", "mh-act"], ["Outcome", "mh-out"], ["Why", "mh-why"], ["", "mh-go"]].map(([c, k]) => h("th", { class: k }, c)))),
+        h("tbody", null, rows.map((a) => {
+          const why = a.reasons.join(", ");
+          return h("tr", null,
+            h("td", { class: "mh-when", "data-label": "When" }, dateTime(a.ts)),
+            h("td", { class: "mh-who", "data-label": "Who" }, h("div", { class: "mh-name" }, h("strong", null, a.author_name), a.demo ? h("span", { class: "chip" }, "demo") : null),
+              a.body ? h("div", { class: "mh-msg", title: a.body }, a.body) : null),
+            h("td", { class: "mh-act", "data-label": "Action" }, h("span", { class: `chip tier-${a.action}` }, actionLabel(a))),
+            h("td", { class: "mh-out", "data-label": "Outcome" }, h("div", null, h("span", { class: `chip ${chipFor(a.status)}` }, a.status), a.error ? h("div", { class: "reasons" }, a.error) : null)),
+            h("td", { class: "mh-why small muted", "data-label": "Why" }, h("span", { class: "mh-clamp", title: why }, why || "-")),
+            h("td", { class: "mh-go small", "data-label": "Review" }, h("button", { class: "btn small ghost", type: "button", onclick: () => openWhy(a) }, icon("sparkle", 14), "Why and teach")));
+        }))))
       : empty("history", hRange.active || hNeedle || hFilter !== "all" ? `No actions match${hRange.active ? ` for ${hRange.label.toLowerCase()}` : ""}.` : "No moderation actions yet.");
     const historyBody = h("div");
     const summary = h("div", { class: "muted small hist-summary" });
@@ -104,8 +115,8 @@ export const moderation: Page = {
     const lab = testLab({ block: (text) => { current = "phrases"; applyTabs(); phrasesTool.prefill(text); } });
 
     // ----- layout and narrow-screen tabs
-    const queueCard = card("inbox", "Waiting for you", pending, { flush: true });
-    const historyCard = card("history", "History", history, { flush: true });
+    const queueCard = card("inbox", "Waiting for you", pending, { flush: true, actions: queueCount, cls: "mod-queue" });
+    const historyCard = card("history", "History", history, { flush: true, cls: "mod-history" });
     const panes: Record<string, HTMLElement[]> = { queue: [queueCard], history: [historyCard], phrases: [lab.el, phrasesTool.el] };
     const ids = Object.keys(panes);
     const names: Record<string, string> = { queue: "Queue", history: "History", phrases: "Rules" };
@@ -120,12 +131,9 @@ export const moderation: Page = {
 
     mount(root,
       pageHead("shield", "Moderation", "Decide what the bot does, review what it did, and tune what it looks for."),
-      card("sliders", "Mode", h("div", { class: "body" }, modeBox, levelBox)),
-      h("div", { style: "height:20px" }),
+      card("sliders", "Mode", h("div", { class: "body mod-mode" }, h("strong", { class: "mod-sub" }, "What should the bot do?"), modeBox, levelBox)),
       tabs,
-      h("div", { class: "cols" },
-        h("div", { class: "stack" }, queueCard, historyCard),
-        h("div", { class: "stack" }, lab.el, phrasesTool.el)));
+      h("div", { class: "mod-grid" }, queueCard, h("div", { class: "mod-rules" }, lab.el, phrasesTool.el), historyCard));
 
     const all = () => Promise.all([loadPending(), loadHistory()]).catch((e) => toast(e.message, "error"));
     void all();

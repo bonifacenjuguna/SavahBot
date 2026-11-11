@@ -5,6 +5,8 @@ import "./knowledge.css";
 import "./appearance.css";
 import "./polish.css";
 import "./desktop.css";
+import "./moderation.css";
+import "./chat-zoom.css";
 import { ApiError, apiBase, get, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";

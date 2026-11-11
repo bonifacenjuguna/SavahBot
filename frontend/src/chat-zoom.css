@@ -1,0 +1,16 @@
+/* SavahBot 1.3.5 - expanded chat (Desk) on desktop.
+ *
+ * The chat and the "Waiting for you" panel share one grid row. That row was sized by its content, so a long waiting list
+ * (dozens of requests) made the row thousands of pixels tall: the card clipped it, the message box fell out of view and the feed
+ * had nothing to scroll. The row is now exactly the height of the card, and each side scrolls inside itself.
+ */
+.chat-card.zoomed .chat-body { grid-template-rows: minmax(0, 1fr); }
+.chat-card.zoomed .chat-main,
+.chat-card.zoomed .zoom-side { min-height: 0; max-height: 100%; }
+.chat-card.zoomed .feed-wrap { min-height: 0; }
+.chat-card.zoomed .feed { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.chat-card.zoomed .zs-body { min-height: 0; overflow-y: auto; }
+.chat-card.zoomed .say { flex: none; }
+.chat-card.zoomed .zs-head { flex: none; }
+/* the waiting list keeps its own approve-all row in view while it scrolls */
+.chat-card.zoomed .zs-body .ap-bulk { top: -10px; margin: -10px -10px 0; padding-top: 10px; }

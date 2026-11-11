@@ -67,13 +67,19 @@ export function approvalList(items: Action[], reload: () => Promise<void> | void
   const all = (verb: "approve" | "reject") => (e: Event) =>
     busy(e.currentTarget as HTMLButtonElement, async () => { await post(`/api/moderation/${verb}-all`); await reload(); });
   return h("ul", { class: "list" },
-    items.length > 1 ? h("li", { class: "row" }, h("button", { class: "btn small primary", onclick: all("approve") }, icon("check", 15), "Approve all"), h("button", { class: "btn small ghost", onclick: all("reject") }, icon("x", 15), "Reject all")) : null,
-    items.map((a) =>
-      h("li", { class: "approval" },
-        h("div", { class: "row between" }, h("strong", null, a.author_name), h("span", { class: "chip warn" }, `${actionLabel(a)} · score ${a.score}`)),
+    items.length > 1 ? h("li", { class: "row ap-bulk" }, h("button", { class: "btn small primary", onclick: all("approve") }, icon("check", 15), "Approve all"), h("button", { class: "btn small ghost", onclick: all("reject") }, icon("x", 15), "Reject all")) : null,
+    items.map((a) => {
+      const why = a.reasons.join(", ");
+      const reasons = h("div", { class: "reasons", title: why, tabindex: 0, role: "button", "aria-expanded": "false" }, why);
+      const flip = () => { const open = reasons.classList.toggle("open"); reasons.setAttribute("aria-expanded", String(open)); };
+      reasons.addEventListener("click", flip);
+      reasons.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+      return h("li", { class: "approval" },
+        h("div", { class: "ap-head" }, h("strong", null, a.author_name), h("span", { class: `chip ${a.action === "ban" ? "bad" : "warn"}` }, `${actionLabel(a)} · score ${a.score}`), h("span", { class: "ap-time muted small" }, dateTime(a.ts))),
         a.body ? h("q", null, a.body) : null,
-        h("div", { class: "reasons" }, a.reasons.join(", ")),
-        h("div", { class: "row" }, h("button", { class: "btn small primary", onclick: decide(a.id, "approve") }, icon("check", 15), "Approve"),
-          h("button", { class: "btn small ghost", onclick: decide(a.id, "reject") }, icon("x", 15), "Reject"), h("span", { class: "muted small" }, dateTime(a.ts))))),
+        why ? reasons : null,
+        h("div", { class: "ap-actions" }, h("button", { class: "btn small primary", onclick: decide(a.id, "approve") }, icon("check", 15), "Approve"),
+          h("button", { class: "btn small ghost", onclick: decide(a.id, "reject") }, icon("x", 15), "Reject")));
+    }),
   );
 }
