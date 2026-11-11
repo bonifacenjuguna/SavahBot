@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.3
+
+Notification switches, pop-up notices you can control, and a much faster chat reader.
+
+### Fixed
+- **"Unknown item: categories" on every Notifications switch.** Flipping Notifications, Push to devices, In-app bell or Telegram saved the setting and then failed, because the activity-log line was built from a `categories` key that a plain switch does not send. The switches now save and answer normally (regression test added). The red errors you saw were this bug, one per tap.
+
+### Added
+- **Pop-up notices are yours to control** (Settings → Appearance → Pop-up notices, also linked from Notifications): show **All**, **Errors only** or **Off**; put them at the **top** or **bottom**; choose how long they stay (1 to 15 seconds, errors stay twice as long). Saved on the device. "Show a sample" previews it.
+- **Swipe a notice left or right to dismiss it** (or tap it). A finger on a notice keeps it from disappearing under you.
+- **The same message no longer stacks.** Four identical errors become one with a ×4 counter.
+- **Faster mode for the neural voice** (Chat reader settings): tries the phone's graphics chip (WebGPU) and falls back to the processor by itself. Off by default because it downloads a larger file (about 300 MB, one time).
+
+### Performance
+- **Chat reader: many more lines per minute.** Before, one line was made into sound, played to the end, and only then the next was started, so the processor sat idle during every playback. Now the next clips are made while the current one plays (two ahead), lines that pile up are joined into one clip (up to 3, same voice), the silent edges of each clip are trimmed, playback speeds up slightly (10 to 20 %) while a queue builds, and up to 12 lines wait instead of 4. If the neural voice fails, every waiting line goes to the built-in voice instead of being lost.
+- Stopping or clearing the reader while a line is playing can no longer leave the player waiting forever.
+
+### Notes
+- Backend tests and `vite build` could not be run in the build environment (no packages). `py_compile` passes, `tsc --noEmit` passes, and the new reader logic was exercised in Node with a simulated worker and audio. Run `pytest` and `npm run build` before deploying.
+- Real speed depends on the phone. If one line is still slower than it is spoken, the neural voice cannot keep up on that device: turn on Faster mode, or use the built-in voice.
+
 ## 1.3.2
 
 Fixes from phone testing: tab rows, layers, cut-off cards, the stream-ended bug and a freezing chat reader.

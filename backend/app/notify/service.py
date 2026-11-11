@@ -187,7 +187,10 @@ class Notifier:
         await self.db.kv_set("notify_prefs", json.dumps(self._prefs))
         act = getattr(self, "activity", None)
         if act is not None and patch.get("pause_until") is None:
-            what = [k for k in patch if k != "categories"] + [f"{len(patch['categories'])} kind(s)"] * bool(patch.get("categories"))
+            # `[x] * bool(...)` built x first and raised KeyError("categories") on every toggle that did not touch categories (1.3.2): the API then answered "Unknown item: categories"
+            what = [k for k in patch if k != "categories"]
+            if patch.get("categories"):
+                what.append(f"{len(patch['categories'])} kind(s)")
             await act.record("notifications", "prefs", "Changed notification settings: " + ", ".join(what).replace("_", " ")[:150], "notable" if "categories" in patch or "enabled" in patch else "routine")
         return self._prefs
 

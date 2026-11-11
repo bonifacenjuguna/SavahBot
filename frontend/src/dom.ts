@@ -1,4 +1,5 @@
 import { icon } from "./icons.js";
+import { toastMode, toastSecs } from "./appearance.js";
 
 export type Child = Node | string | number | null | undefined | false | Child[];
 type Props = Record<string, unknown> | null;
@@ -42,26 +43,93 @@ function host(): HTMLElement {
   }
   return toastHost;
 }
-export function toast(message: string, kind: "ok" | "error" = "ok"): void {
-  const t = h("div", { class: `toast ${kind}` }, icon(kind === "error" ? "alert" : "check", 18), h("span", { class: "grow" }, message));
-  host().appendChild(t);
-  while (host().childElementCount > 4) host().firstElementChild?.remove();
-  setTimeout(() => t.remove(), kind === "error" ? 6000 : 3000);
+
+// ---- pop-up notices (1.3.3) ----------------------------------------------------------------------------------------
+// Settings → Appearance decides whether they show, where (top or bottom) and for how long. Each one can be swiped left or right
+// (or tapped) to send it away, and the same message arriving again folds into one toast with a counter instead of stacking up.
+const timers = new WeakMap<HTMLElement, number>();
+const byKey = new Map<string, HTMLElement>();
+
+function leave(t: HTMLElement, dir = 0): void {
+  if (!t.isConnected || t.dataset.leaving) return;
+  t.dataset.leaving = "1";
+  window.clearTimeout(timers.get(t));
+  const key = t.dataset.key;
+  if (key && byKey.get(key) === t) byKey.delete(key);
+  t.style.transition = "transform .18s ease, opacity .18s ease";
+  t.style.opacity = "0";
+  t.style.transform = dir ? `translateX(${dir * 110}%)` : "scale(.97)";
+  window.setTimeout(() => t.remove(), 190);
+}
+function arm(t: HTMLElement, ms: number): void {
+  window.clearTimeout(timers.get(t));
+  timers.set(t, window.setTimeout(() => leave(t), ms));
 }
 
-/** A toast with one button, e.g. "Note deleted" with Undo. It stays a little longer so there is time to tap it. */
-export function toastAction(message: string, label: string, run: () => void | Promise<unknown>, ms = 7000): void {
-  const t = h("div", { class: "toast ok has-action" }, icon("check", 18), h("span", { class: "grow" }, message));
-  const b = h("button", { class: "toast-act", type: "button" }, label);
-  b.addEventListener("click", () => {
-    b.disabled = true;
-    Promise.resolve().then(run).catch((e: unknown) => toast(e instanceof Error ? e.message : String(e), "error")).finally(() => t.remove());
+/** Swipe sideways past a third of the width (or flick) to dismiss; a short drag springs back; a plain tap dismisses too. */
+function swipeable(t: HTMLElement, ms: number): void {
+  let id = -1, x0 = 0, y0 = 0, dx = 0, at = 0, drag = false;
+  const reset = () => { t.style.transition = "transform .18s ease, opacity .18s ease"; t.style.transform = ""; t.style.opacity = ""; };
+  t.addEventListener("pointerdown", (e) => {
+    if ((e.target as HTMLElement).closest("button")) return;       // the Undo button is a button, not part of the gesture
+    id = e.pointerId; x0 = e.clientX; y0 = e.clientY; dx = 0; at = performance.now(); drag = false;
+    window.clearTimeout(timers.get(t));                           // keeps the toast while a finger is on it
   });
-  t.appendChild(b);
-  host().appendChild(t);
-  while (host().childElementCount > 4) host().firstElementChild?.remove();
-  setTimeout(() => t.remove(), ms);
+  t.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== id) return;
+    dx = e.clientX - x0;
+    if (!drag && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - y0)) { drag = true; try { t.setPointerCapture(id); } catch { /* not capturable */ } t.style.transition = "none"; }
+    if (drag) { t.style.transform = `translateX(${dx}px)`; t.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / (t.offsetWidth * 0.9))); }
+  });
+  const end = (e: PointerEvent) => {
+    if (e.pointerId !== id) return;
+    id = -1;
+    const speed = Math.abs(dx) / Math.max(1, performance.now() - at);        // px per ms
+    if (drag && (Math.abs(dx) > t.offsetWidth * 0.33 || (Math.abs(dx) > 40 && speed > 0.5))) { leave(t, dx < 0 ? -1 : 1); return; }
+    if (drag) reset();
+    else if (e.type === "pointerup" && Math.abs(dx) < 6 && !t.classList.contains("has-action") && !(e.target as HTMLElement).closest("button")) { leave(t); return; }
+    arm(t, ms);
+  };
+  t.addEventListener("pointerup", end);
+  t.addEventListener("pointercancel", (e) => { if (e.pointerId === id) { drag = false; reset(); end(e); } });
 }
+
+function present(message: string, kind: "ok" | "error", action?: { label: string; run: () => void | Promise<unknown> }, actionMs?: number): void {
+  const mode = toastMode();
+  if (mode === "off" || (mode === "errors" && kind !== "error" && !action)) return;
+  const secs = toastSecs();
+  const ms = action ? Math.max(actionMs ?? 7000, secs * 1000) : kind === "error" ? Math.max(6000, secs * 2000) : secs * 1000;     // errors stay twice as long as notices
+  const key = action ? "" : `${kind}:${message}`;
+  const prev = key ? byKey.get(key) : undefined;
+  if (prev && prev.isConnected && !prev.dataset.leaving) {          // the same message again: count it instead of adding a copy
+    const n = Number(prev.dataset.n || "1") + 1;
+    prev.dataset.n = String(n);
+    let badge = prev.querySelector(".toast-n");
+    if (!badge) { badge = h("span", { class: "toast-n" }); prev.appendChild(badge); }
+    badge.textContent = `×${n}`;
+    arm(prev, ms);
+    return;
+  }
+  const t = h("div", { class: `toast ${kind}${action ? " has-action" : ""}` }, icon(kind === "error" ? "alert" : "check", 18), h("span", { class: "grow" }, message));
+  if (action) {
+    const b = h("button", { class: "toast-act", type: "button" }, action.label);
+    b.addEventListener("click", () => {
+      b.disabled = true;
+      Promise.resolve().then(action.run).catch((e: unknown) => toast(e instanceof Error ? e.message : String(e), "error")).finally(() => leave(t));
+    });
+    t.appendChild(b);
+  } else { t.dataset.key = key; byKey.set(key, t); }
+  const box = host();
+  box.appendChild(t);
+  while (box.childElementCount > 4) { const old = box.firstElementChild as HTMLElement; leave(old); box.removeChild(old); }
+  swipeable(t, ms);
+  arm(t, ms);
+}
+
+export function toast(message: string, kind: "ok" | "error" = "ok"): void { present(message, kind); }
+
+/** A toast with one button, e.g. "Note deleted" with Undo. It stays a little longer so there is time to tap it. */
+export function toastAction(message: string, label: string, run: () => void | Promise<unknown>, ms = 7000): void { present(message, "ok", { label, run }, ms); }
 
 export function clock(ts: number): string {
   return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });

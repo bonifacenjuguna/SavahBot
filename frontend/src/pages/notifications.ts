@@ -72,6 +72,7 @@ async function overview(el: HTMLElement): Promise<void> {
     row("Push to devices", null, sw(prefs.push, "Push", (v) => void savePrefs({ push: v }).catch(fail))),
     row("In-app bell and history", null, sw(prefs.inapp, "In-app", (v) => void savePrefs({ inapp: v }).catch(fail))),
     row("Telegram", "Only for events Telegram does not already report itself.", sw(prefs.telegram, "Telegram", (v) => void savePrefs({ telegram: v }).catch(fail))),
+    row("Pop-up messages on screen", "The small \"Saved\" and error messages. Turn off, move to the top or change how long they stay.", h("a", { class: "btn small", href: "#/settings?tab=appearance" }, "Appearance")),
     row("Pause push", prefs.paused ? `Paused until ${clock(prefs.pause_until)}. Critical alerts still come through.` : prefs.quiet_now ? `Quiet hours until ${prefs.quiet_ends ? clock(prefs.quiet_ends) : "later"}.` : "Silence push for a while. The bell keeps filling.",
       h("div", { class: "row wrap" }, prefs.paused ? pause(null, "Resume") : [pause(15, "15 min"), pause(60, "1 hour"), pause(480, "8 hours"), pause(minsToMorning(), "Until morning")]))), { flush: true });
   mount(el, figures([{ value: String(inbox.unread), label: "unread", tone: inbox.unread ? "warn" : "" }, { value: String(devs.devices.filter((d) => d.enabled).length), label: "push devices", tone: devs.devices.length ? "ok" : "" }, { value: prefs.paused ? "paused" : prefs.quiet_now ? "quiet" : "active", label: "right now", tone: prefs.paused || prefs.quiet_now ? "warn" : "ok" }]), deviceCard, controls, setup);

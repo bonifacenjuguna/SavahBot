@@ -2,7 +2,7 @@
 import { get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
-import { ACCENTS, accentPref, densityPref, motionPref, setAccent, setDensity, setMotion, setText, textPref, type Accent } from "../appearance.js";
+import { ACCENTS, TOAST_SECS, accentPref, densityPref, motionPref, setAccent, setDensity, setMotion, setText, setToastMode, setToastPos, setToastSecs, textPref, toastMode, toastPos, toastSecs, type Accent, type ToastMode, type ToastPos } from "../appearance.js";
 import { applyTheme, themePref, type ThemePref } from "../ui.js";
 import { getPWAState, installApp, openInstallGuide } from "../pwa.js";
 import { card } from "./shared.js";
@@ -28,7 +28,25 @@ export function renderAppearance(el: HTMLElement): void {
     lede("These are saved on this device only, so your phone and your computer can look different. They never touch the server."),
     row("Theme", "System follows your device's light or dark setting.", theme), row("Accent colour", "Buttons, links and highlights.", swatches),
     row("Density", "Compact fits more on screen.", density), row("Text size", "Makes everything bigger, not just the text.", text),
-    row("Reduce motion", "Also on automatically if your device asks for it.", motion)), ));
+    row("Reduce motion", "Also on automatically if your device asks for it.", motion)), ),
+    toastCard());
+}
+
+/** 1.3.3: the small pop-up messages ("Saved", "Copied", errors): on or off, top or bottom, and how long they stay. Swipe one sideways to dismiss it. */
+function toastCard(): HTMLElement {
+  const mode = seg<ToastMode>("Pop-up notices", [{ id: "all", label: "All" }, { id: "errors", label: "Errors only" }, { id: "off", label: "Off" }], toastMode(), (v) => { setToastMode(v); if (v === "off") return; toast(v === "errors" ? "Only errors will pop up" : "Pop-up notices are on"); }).el;
+  const pos = seg<ToastPos>("Pop-up position", [{ id: "bottom", label: "Bottom" }, { id: "top", label: "Top" }], toastPos(), (v) => { setToastPos(v); toast("Notices will appear here"); }).el;
+  const label = h("span", { class: "muted small", style: "min-width:34px;text-align:right" }, `${toastSecs()} s`);
+  const slider = h("input", { type: "range", min: TOAST_SECS.min, max: TOAST_SECS.max, step: 1, value: String(toastSecs()), "aria-label": "Seconds a notice stays on screen", style: "flex:1;min-width:110px",
+    oninput: (e: Event) => { label.textContent = `${(e.target as HTMLInputElement).value} s`; },
+    onchange: (e: Event) => { setToastSecs(Number((e.target as HTMLInputElement).value)); toast("Notices will stay this long"); } });
+  const sample = h("button", { class: "btn small", type: "button", onclick: () => { toast("This is a notice. Swipe it left or right to dismiss."); toast("This is what an error looks like.", "error"); } }, "Show a sample");
+  return card("bell", "Pop-up notices", body(
+    lede("The small messages that slide in over the page. Saved on this device only. Swipe one left or right, or tap it, to dismiss it."),
+    row("Show", "Errors only hides \"Saved\" and \"Copied\" but still tells you when something fails. Off hides every pop-up.", mode),
+    row("Position", "Put them at the top if the bottom is in your way.", pos),
+    row("Stay for", "Errors stay twice as long.", h("div", { class: "row", style: "gap:8px;align-items:center;min-width:170px" }, slider, label)),
+    h("div", { class: "row" }, sample)));
 }
 
 // ------------------------------------------------------------------ Privacy & data

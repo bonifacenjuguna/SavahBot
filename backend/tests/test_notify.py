@@ -88,6 +88,26 @@ def test_master_and_category_switches():
     run(go())
 
 
+def test_plain_switch_toggles_record_activity_without_error():
+    """1.3.2 regression: with the activity log attached, flipping Notifications / Push / Bell / Telegram raised KeyError('categories') after saving,
+    and the API answered 'Unknown item: categories'."""
+    async def go():
+        n = await make()
+        seen = []
+
+        class Act:
+            async def record(self, *args):
+                seen.append(args)
+
+        n.activity = Act()
+        for key in ("enabled", "push", "inapp", "telegram"):
+            p = await n.set_prefs({key: False})
+            assert p[key] is False
+        await n.set_prefs({"categories": {"moderation.failed": {"push": False}}})
+        assert len(seen) == 5 and "1 kind(s)" in seen[-1][2]
+    run(go())
+
+
 def test_dedupe_folds_and_pushes_once():
     async def go():
         n = await make()

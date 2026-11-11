@@ -93,3 +93,19 @@
 /* expand / close button: icon only, a square like its neighbours */
 .chat-card.zoomed .expand-btn { width: 40px; height: 40px; padding: 0; }
 .chat-card.zoomed .close-label { display: none; }
+
+/* ---- pop-up notices (1.3.3) -----------------------------------------------------------------------------------------
+   Position comes from Settings → Appearance (html[data-toast-pos]). Each toast can be swiped sideways, so it must not let the browser
+   take over horizontal drags (touch-action: pan-y), and the empty space around the stack must not block taps on the page. */
+.toasts { pointer-events: none; }
+.toast { pointer-events: auto; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; animation: toast-in .18s ease-out; }
+.toast .toast-n { margin-left: auto; padding: 0 8px; border-radius: 999px; background: rgba(255,255,255,0.22); font-weight: 700; font-size: 0.8rem; line-height: 1.6; align-self: center; flex: none; }
+.toast.error .toast-n { background: rgba(0,0,0,0.22); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+html[data-toast-pos="top"] .toast { animation-name: toast-in-top; }
+@keyframes toast-in-top { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+html[data-motion="reduce"] .toast { animation: none; }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+html[data-toast-pos="top"] .toasts { top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px) + 8px); bottom: auto; }
+@media (max-width: 719px) { html[data-toast-pos="top"] .toasts { top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px) + 8px); bottom: auto; } }

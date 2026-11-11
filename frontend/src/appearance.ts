@@ -13,7 +13,7 @@ export const ACCENTS: { id: Accent; label: string; swatch: string }[] = [
   { id: "green", label: "Green", swatch: "#15803d" },
 ];
 
-const KEYS = { accent: "savahbot.accent", density: "savahbot.density", motion: "savahbot.motion", text: "savahbot.text" } as const;
+const KEYS = { accent: "savahbot.accent", density: "savahbot.density", motion: "savahbot.motion", text: "savahbot.text", toastMode: "savahbot.toast.mode", toastPos: "savahbot.toast.pos", toastSecs: "savahbot.toast.secs" } as const;
 const read = (k: string): string => { try { return localStorage.getItem(k) ?? ""; } catch { return ""; } };
 const write = (k: string, v: string, fallback: string): void => { try { if (v === fallback) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* private mode: lasts for this visit */ } };
 
@@ -30,4 +30,16 @@ export function setAccent(a: Accent): void { write(KEYS.accent, a, "default"); s
 export function setDensity(d: Density): void { write(KEYS.density, d, "comfortable"); set("data-density", d, "comfortable"); }
 export function setMotion(m: Motion): void { write(KEYS.motion, m, "system"); set("data-motion", m, "system"); }
 export function setText(t: TextSize): void { write(KEYS.text, t, "normal"); set("data-text", t, "normal"); }
-export function initAppearance(): void { set("data-text", textPref(), "normal"); set("data-accent", accentPref(), "default"); set("data-density", densityPref(), "comfortable"); set("data-motion", motionPref(), "system"); }
+export function initAppearance(): void { set("data-toast-pos", toastPos(), "bottom"); set("data-text", textPref(), "normal"); set("data-accent", accentPref(), "default"); set("data-density", densityPref(), "comfortable"); set("data-motion", motionPref(), "system"); }
+
+// ---------------------------------------------------------------- pop-up notices (toasts), 1.3.3
+/** The small messages that slide in over the page ("Saved", "Copied", errors). Kept on this device. */
+export type ToastMode = "all" | "errors" | "off";
+export type ToastPos = "bottom" | "top";
+export const TOAST_SECS = { min: 1, max: 15, def: 3 } as const;
+export const toastMode = (): ToastMode => (read(KEYS.toastMode) === "errors" || read(KEYS.toastMode) === "off" ? (read(KEYS.toastMode) as ToastMode) : "all");
+export const toastPos = (): ToastPos => (read(KEYS.toastPos) === "top" ? "top" : "bottom");
+export const toastSecs = (): number => { const n = Number(read(KEYS.toastSecs)); return Number.isFinite(n) && n >= TOAST_SECS.min && n <= TOAST_SECS.max ? n : TOAST_SECS.def; };
+export function setToastMode(m: ToastMode): void { write(KEYS.toastMode, m, "all"); }
+export function setToastPos(p: ToastPos): void { write(KEYS.toastPos, p, "bottom"); set("data-toast-pos", p, "bottom"); }
+export function setToastSecs(n: number): void { write(KEYS.toastSecs, String(Math.round(n)), String(TOAST_SECS.def)); }

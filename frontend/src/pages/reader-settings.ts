@@ -35,6 +35,7 @@ async function render(body: HTMLElement): Promise<void> {
   const sources = [["", "The public model host (Hugging Face)"], ...(vp.host ? [[vp.host, "Your host link"] as [string, string]] : []), ...vp.packs.map((p) => [`${filesBase}${p.name}`, `Uploaded pack: ${p.name}`] as [string, string])];
   const source = h("select", { "aria-label": "Where the neural voice is downloaded from", onchange: (e: Event) => dsave({ source: (e.target as HTMLSelectElement).value }) },
     ...sources.map(([v, l]) => h("option", { value: v, selected: dev.source === v }, l)));
+  const gpu = h("input", { type: "checkbox", class: "switch", checked: dev.gpu, "aria-label": "Use the graphics chip for the neural voice", onchange: (e: Event) => dsave({ gpu: (e.target as HTMLInputElement).checked }) });
   const test = h("button", { class: "btn small", type: "button" }, "Try this voice");
   test.onclick = () => void busy(test, async () => { if (!reader.state.running) await reader.start(); reader.offer({ author_name: "SavahBot", text: "This is how chat will sound.", level: "everyone", verdict: "allow", ts: Date.now() / 1000, author_id: "test" }); });
 
@@ -85,6 +86,7 @@ async function render(body: HTMLElement): Promise<void> {
       row("Voice", builtinSupported() ? "Voices come from your device and browser." : "This browser has no built-in voices.", voiceSel),
       row("Speed", "", num("rate", 0.6, 1.6, 0.1)), row("Volume", "", num("volume", 0.1, 1, 0.1)),
       row("Neural voice comes from", "Used only by the neural engine. Pick one of your uploads or links below if the public host is blocked for you.", source),
+      row("Faster mode (graphics chip)", "Neural voice only. Uses the phone's graphics chip when the browser allows it, which can be several times faster, but downloads a larger file (about 300 MB, one time) and ignores uploaded packs. If it cannot start, the normal processor is used. Takes effect the next time you tap Read chat.", gpu),
       h("div", { style: "padding-top:8px" }, test)),
     h("div", { class: "sp-card" }, h("h3", null, "Who to read"),
       row("Read", "Messages held, flagged or blocked by moderation are never read. Moderators and the owner are who the platform says they are.", who),
