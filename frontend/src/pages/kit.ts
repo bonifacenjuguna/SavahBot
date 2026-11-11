@@ -1,6 +1,7 @@
 /** 1.1.4 building blocks used by several pages: date-range filter, area switcher, tiles and the zoom-to-fill effect. */
 import { h, mount, sheet, type Child } from "../dom.js";
 import { icon } from "../icons.js";
+import { tabRail } from "../nav.js";
 
 // ------------------------------------------------------------------ date range
 export interface RangeValue {
@@ -98,33 +99,12 @@ export const AREAS: Record<string, { title: string; items: AreaItem[] }> = {
 export const areaOf = (pageId: string): string | null => Object.keys(AREAS).find((k) => AREAS[k].items.some((i) => i.id === pageId)) ?? null;
 
 /** Switcher shown at the top of Manage and System pages so they feel like one place, with the same way around on every screen. */
-const navScroll: Record<string, number> = {};     // where each strip was scrolled to, so a redraw never throws you back to the first tab
-
 export function areaNav(pageId: string): HTMLElement | null {
   const key = areaOf(pageId);
   if (!key) return null;
   const area = AREAS[key];
   const items = h("div", { class: "an-items scroll-x" }, area.items.map((i) => h("a", { href: `#/${i.id}`, "aria-current": i.id === pageId ? "page" : undefined }, icon(i.icon, 16), i.title)));
-  const fadeL = h("span", { class: "an-fade l", "aria-hidden": "true" });
-  const fadeR = h("span", { class: "an-fade r", "aria-hidden": "true" });
-  const sync = () => {
-    const max = items.scrollWidth - items.clientWidth;
-    fadeL.classList.toggle("on", items.scrollLeft > 4);
-    fadeR.classList.toggle("on", items.scrollLeft < max - 4);
-  };
-  items.addEventListener("scroll", () => { navScroll[key] = items.scrollLeft; sync(); }, { passive: true });
-  // once it is on screen: put the strip back where it was, then make sure the page you are on is in view and centred
-  const settle = () => {
-    const cur = items.querySelector<HTMLElement>('[aria-current="page"]');
-    if (navScroll[key] !== undefined) items.scrollLeft = navScroll[key];
-    if (cur) {
-      const left = cur.offsetLeft - (items.clientWidth - cur.offsetWidth) / 2;
-      items.scrollLeft = Math.max(0, left);
-    }
-    navScroll[key] = items.scrollLeft;
-    sync();
-  };
-  requestAnimationFrame(() => { settle(); requestAnimationFrame(settle); });
+  tabRail(items, `area:${key}`);     // the strip opens with this page's tab in the middle, every time
   const all = h("button", { class: "an-all", type: "button", "aria-label": "All pages in this section", title: "All pages", onclick: () => {
     const box = sheet(area.title, h("div", { class: "tile-grid" }, area.items.map((i) => tile({ icon: i.icon, title: i.title, href: `#/${i.id}`, current: i.id === pageId }))));
     // a followed tile changes the address, which redraws the page: close the sheet with it
@@ -132,7 +112,7 @@ export function areaNav(pageId: string): HTMLElement | null {
   } }, icon("dots", 18));
   return h("nav", { class: "area-nav", "aria-label": area.title },
     h("a", { class: "an-back", href: "#/more", "aria-label": "All sections" }, icon("menu", 16), h("span", null, "More")),
-    h("div", { class: "an-wrap" }, fadeL, items, fadeR), all);
+    h("div", { class: "an-wrap" }, items), all);
 }
 
 // ------------------------------------------------------------------ small pieces

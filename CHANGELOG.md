@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.2
+
+Fixes from phone testing: tab rows, layers, cut-off cards, the stream-ended bug and a freezing chat reader.
+
+### Fixed
+- **Tab rows keep their place.** Settings views, Notification sections, the Manage/System switcher, Knowledge, Commands and the Moderation tabs now open with the current tab in the middle and remember where they were, instead of jumping back to the first tab after every tap. Only the row scrolls, never the page.
+- **The dark spot beside the selected tab is gone.** The edge fades were drawn on top of the row; they are now a mask on the row itself and only appear on an edge that still hides tabs.
+- **Sheets open above the expanded chat.** Person cards, message actions and "Why it was flagged" used to open behind the expanded chat the second time. Layers now have one order (sheets 90, menus 95, toasts 100, expanded chat 70).
+- **Cards cut off at the side.** Blocked phrases, History and other cards were wider than the screen because a single-column grid (`1fr`) would not shrink below its content. Grids now use `minmax(0, 1fr)`, long phrases wrap, and the form controls stay inside the card.
+- **Cards no longer touch the tab row** in Notifications and the other Manage/System pages.
+- **Figures are cards.** "43 unread / 2 push devices / active" and the other figure rows are small cards with a status edge instead of plain text.
+- **Read chat has its own place.** The button moved into the chat header (icon only on a phone); loading and error messages show on a thin line under the toolbar and take no room when empty. It no longer sits on top of chat lines.
+- **Stream ended, bot still "On air".** The bot now notices the end of a stream from YouTube's own offline marker, from a send or delete that YouTube refuses with "chat ended", and from a quiet chat check (one cheap `videos.list` call, at most every 90 seconds, only while the chat is quiet). The Desk then returns to Standby, and a send attempt says plainly that the stream has ended.
+
+### Performance
+- **The neural voice runs in a Web Worker.** Downloading and running Kokoro no longer blocks the page, so scrolling, taps and the live chat stay smooth while it loads and speaks. The worker reports download progress, and the reader keeps only the newest 4 lines waiting for the neural voice so it never falls behind.
+- The reader control redraws at most once per frame, releases its listener when you leave the Desk, and stops cleanly if Read chat is switched off while a line is being made.
+
+### Not changed
+- Existing backend tests could not be run in the build environment (no Python packages available). `py_compile` passes for the changed files, and the dashboard typechecks with `tsc --noEmit`. Run `pytest` and `npm run build` once before deploying.
+
 ## 1.3.1
 
 Finishes the items 1.3.0 left partial.

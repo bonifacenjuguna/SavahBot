@@ -11,6 +11,55 @@ import { icon } from "./icons.js";
 const REDUCED = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const topOffset = () => (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--topbar-h")) || 56) + 12;
 
+// ------------------------------------------------------------------ tab rails
+/**
+ * 1.3.2: one behaviour for every scrolling row of tabs (area switcher, Settings views, Notification sections, pane tabs, Knowledge).
+ * Pages redraw from scratch when you tap a tab, which used to throw the row back to its first tab. Now the row:
+ *  - starts with the current tab centred (or as near as the row allows), on its very first frame, with no animation;
+ *  - re-centres smoothly when the current tab changes in place;
+ *  - fades only the edge that still hides tabs, with a mask on the row itself, so nothing is ever painted over the selected tab.
+ * It scrolls the row only, never the page (scrollIntoView could also move the page up and down).
+ */
+const ACTIVE = '[aria-current="page"], [aria-pressed="true"], [aria-selected="true"]';
+const railMemory: Record<string, number> = {};
+
+export function tabRail(rail: HTMLElement, key: string): void {
+  rail.setAttribute("data-rail", "");
+  const maxLeft = () => Math.max(0, rail.scrollWidth - rail.clientWidth);
+  const edges = () => {
+    const max = maxLeft(), x = rail.scrollLeft;
+    const l = max > 2 && x > 3, r = max > 2 && x < max - 3;
+    const v = l && r ? "lr" : l ? "l" : r ? "r" : "";
+    if (rail.getAttribute("data-edge") !== v) { if (v) rail.setAttribute("data-edge", v); else rail.removeAttribute("data-edge"); }
+  };
+  const target = (): number => {
+    const cur = rail.querySelector<HTMLElement>(ACTIVE);
+    if (!cur) return railMemory[key] ?? 0;
+    const box = rail.getBoundingClientRect(), me = cur.getBoundingClientRect();
+    const want = rail.scrollLeft + (me.left - box.left) - (box.width - me.width) / 2;
+    return Math.min(maxLeft(), Math.max(0, want));
+  };
+  const place = (smooth: boolean) => {
+    if (!rail.clientWidth) return;
+    const to = target();
+    if (Math.abs(to - rail.scrollLeft) > 1) rail.scrollTo({ left: to, behavior: smooth && !REDUCED() ? "smooth" : "auto" });
+    railMemory[key] = to;
+    edges();
+  };
+  // before the first paint when the row is already in the page, otherwise the moment it gets a width
+  place(false);
+  let first = true;
+  const ro = new ResizeObserver(() => { if (first && rail.clientWidth) { first = false; place(false); window.setTimeout(() => place(false), 140); } else edges(); });
+  ro.observe(rail);
+  let raf = 0;
+  rail.addEventListener("scroll", () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; railMemory[key] = rail.scrollLeft; edges(); }); }, { passive: true });
+  // the current tab changed without a redraw (a segmented control): bring it to the middle
+  let last = rail.querySelector(ACTIVE);
+  new MutationObserver(() => { const now = rail.querySelector(ACTIVE); if (now && now !== last) { last = now; place(true); } })
+    .observe(rail, { attributes: true, subtree: true, attributeFilter: ["aria-current", "aria-pressed", "aria-selected"] });
+  requestAnimationFrame(() => place(false));
+}
+
 // ------------------------------------------------------------------ recent pages
 const RECENT_KEY = "savahbot.recent";
 export function recentPages(): string[] {

@@ -14,3 +14,10 @@ Settings > Variables. `$(Name)` works in commands, timers, auto replies, message
 
 ## Stream alerts and live stats
 Settings > Stream alerts. Member, Super Chat, Super Sticker and gift events come from chat. New subscribers use YouTube's recent-subscribers list (public subscribers only, may need re-consent) plus the channel subscriber count for milestones. Likes (may be hidden by the creator) and viewers refresh every N seconds; each refresh and each subscriber check costs about 1 quota unit.
+
+
+## 1.3.2 notes
+
+- **Where the controls are.** Read chat is in the chat header. Its status line (loading, "3 waiting", errors) is under the toolbar and hidden when there is nothing to say.
+- **Neural voice and the page.** Kokoro runs in a Web Worker (`frontend/src/reader-worker.ts`), so a slow phone stays responsive while it downloads (once, about 90 MB) and speaks. If the worker cannot start, reading falls back to the built-in voice and says why.
+- **Stream end.** The bot leaves "On air" when YouTube marks the chat offline, when a send or delete is refused because the chat ended, or when a quiet chat is checked and the video no longer has an active chat. The quiet check costs 1 quota unit at most every 90 seconds and never runs while chat is busy.

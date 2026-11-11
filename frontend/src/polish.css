@@ -1,0 +1,73 @@
+/* 1.3.2 polish: layers, tab rails, spacing, figures, and cards that must never be wider than the screen. Loaded last on purpose. */
+
+/* ---- layers: one order for everything that can sit over the page ----------------------------------------------------
+   page 0 · top bar 30 · tab bar 40 · progress 60 · expanded chat 65-70 · sheets and menus 90+ · toasts 100
+   Sheets (person card, message actions, "Why was this flagged") used to be 60, under the expanded chat (70): they opened behind it. */
+.overlay { z-index: 90; }
+.popover { z-index: 95; }
+.palette, .palette-overlay { z-index: 96; }
+.toasts { z-index: 100; }
+
+/* ---- tab rails ------------------------------------------------------------------------------------------------------
+   The edge fade is a mask on the row itself: nothing is painted on top of the selected tab, so the dark smudge beside it is gone. */
+[data-rail] { scroll-snap-type: none; overscroll-behavior-x: contain; }
+[data-rail][data-edge="l"]  { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px); mask-image: linear-gradient(90deg, transparent 0, #000 28px); }
+[data-rail][data-edge="r"]  { -webkit-mask-image: linear-gradient(270deg, transparent 0, #000 28px); mask-image: linear-gradient(270deg, transparent 0, #000 28px); }
+[data-rail][data-edge="lr"] { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
+.an-items > a { scroll-snap-align: none; }
+.an-fade { display: none; }
+.an-wrap { overflow: hidden; }
+
+/* ---- breathing room under a row of tabs: the first card never touches it -------------------------------------------- */
+.tab-row { margin: 0 0 16px; min-width: 0; }
+.tab-row > .seg-control { max-width: 100%; }
+.area-nav { margin-bottom: 16px; }
+.area-nav + .page-head, .page-head + .area-nav { margin-top: 0; }
+.seg-control + .k-stack, .pane-tabs + * { margin-top: 0; }
+.k-top { margin-bottom: 16px; }
+.pane-tabs { margin-bottom: 16px; }
+
+/* ---- figures are small cards, not loose text ------------------------------------------------------------------------ */
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px; margin: 0 0 16px; }
+.fig { margin: 0; padding: 12px 14px; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-1); min-width: 0; position: relative; overflow: hidden; }
+.fig::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--line); }
+.fig.ok::before { background: var(--ok); }
+.fig.warn::before { background: var(--demo, #f59e0b); }
+.fig.bad::before { background: var(--bad); }
+.fig b { overflow-wrap: anywhere; }
+.kn-figs .fig { padding: 0; margin: 0; background: none; border: 0; box-shadow: none; border-radius: 0; overflow: visible; }
+.kn-figs .fig::before { display: none; }
+
+/* ---- nothing is wider than the screen -------------------------------------------------------------------------------
+   A grid column written as "1fr" will not shrink below its content, so one long row pushed whole cards off the right edge.
+   minmax(0, 1fr) lets it shrink; the cards then wrap or scroll inside themselves. */
+@media (max-width: 999px) {
+  .cols, .cols.even, .cols.three { grid-template-columns: minmax(0, 1fr); }
+  .app { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 719px) {
+  .cards-grid, .when-grid, .mode-cards, .scn-grid, .pack-grid, .det-grid, .sh-dets { grid-template-columns: minmax(0, 1fr); }
+  .setting { grid-template-columns: minmax(0, 1fr); }
+}
+.cols > *, .stack > *, .k-stack > *, .page > * { min-width: 0; }
+.block, .sp-card, .k-card { max-width: 100%; }
+.mt-card .mt-body, .mt-add, .mt-opts, .mt-panel { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.mt-add > *, .mt-opts > *, .mt-panel > * { min-width: 0; }
+.mt-add input, .mt-add select, .mt-add textarea, .mt-panel input, .mt-panel textarea { min-width: 0; max-width: 100%; }
+.mt-add-row > input { flex: 1 1 0; min-width: 0; }
+.mt-add .seg-control, .mt-opts .seg-control { max-width: 100%; }
+.mt-card, .ph-row, .ph-main { min-width: 0; }
+.ph-text { overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
+.table-wrap { max-width: 100%; }
+.table-wrap > table { max-width: 100%; }
+.daterange, .dr-chips { min-width: 0; max-width: 100%; }
+.block > .body, .block > header { min-width: 0; }
+.block > header h2 { min-width: 0; overflow-wrap: anywhere; }
+
+/* ---- the Read chat control ----------------------------------------------------------------------------------------- */
+.reader-btn { flex: none; gap: 6px; }
+.reader-btn.on { border-color: var(--accent); color: var(--accent); }
+.reader-note { padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--raised); }
+.reader-note[hidden] { display: none; }
+@media (max-width: 719px) { .reader-btn .hide-narrow { display: none; } .reader-btn { padding-left: 10px; padding-right: 10px; } }
+.chat-card:not(.zoomed) .chat-tools { flex-wrap: nowrap; }

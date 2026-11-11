@@ -272,7 +272,7 @@ async def timers_send(request: Request, c: Any) -> dict:
     need(t, "timer")
     text = await c.hub.commands.renderer.render(t["message"], Ctx(channel=c.hub.commands.channel_fn(), now=time.time()))
     if not text or not await c.hub.send_chat(text):
-        raise ApiError("Could not send. The chat source is not connected to a live chat.", 409)
+        raise ApiError("Could not send. The stream has ended or the bot is not attached to a live chat. Standby will return once your next stream starts.", 409)
     return {"ok": True, "text": text}
 
 
@@ -511,7 +511,7 @@ async def chat_search(request: Request, c: Any) -> dict:
 async def chat_send(request: Request, c: Any) -> dict:
     b = await parse(request, S.ChatSend)
     if not await c.hub.send_chat(b.text, render=True):
-        raise ApiError("Could not send. The chat source is not connected to a live chat.", 409)
+        raise ApiError("Could not send. The stream has ended or the bot is not attached to a live chat. Standby will return once your next stream starts.", 409)
     return {"ok": True}
 
 

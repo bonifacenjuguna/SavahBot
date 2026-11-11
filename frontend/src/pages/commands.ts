@@ -1,4 +1,4 @@
-import { foldChildren } from "../nav.js";
+import { foldChildren, tabRail } from "../nav.js";
 import { del, get, patch, post } from "../api.js";
 import { ago, busy, debounce, duration, h, mount, sheet, toast } from "../dom.js";
 import { icon } from "../icons.js";
@@ -285,8 +285,10 @@ export const commands: Page = {
     };
     const drawTabs = () => {
       const label: Record<Tab, string> = { commands: `Commands (${items.length})`, replies: `Auto-replies (${triggers.length})`, timers: `Timers (${timers.length})` };
-      mount(tabsBox, h("div", { class: "seg-control", role: "tablist" }, (Object.keys(label) as Tab[]).map((k) =>
-        h("button", { type: "button", role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; history.replaceState(null, "", `#/commands?tab=${k}`); drawTabs(); } }, label[k]))));
+      const rail = h("div", { class: "seg-control", role: "tablist" }, (Object.keys(label) as Tab[]).map((k) =>
+        h("button", { type: "button", role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; history.replaceState(null, "", `#/commands?tab=${k}`); drawTabs(); } }, label[k])));
+      mount(tabsBox, rail);
+      tabRail(rail, "commands-tabs");
       for (const [k, el] of Object.entries(panes)) el.hidden = k !== tab;
       const add: Record<Tab, [string, () => void]> = { commands: ["New command", () => editor()], replies: ["New auto-reply", () => replyEditor()], timers: ["New timer", () => timerEditor()] };
       mount(actions, h("button", { class: "btn primary", type: "button", onclick: add[tab][1] }, icon("plus", 16), add[tab][0]));

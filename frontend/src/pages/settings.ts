@@ -28,7 +28,7 @@ export const settings: Page = {
     const tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? "overview") as Tab;
     const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { location.hash = v === "overview" ? "#/settings" : `#/settings?tab=${v}`; });
     const host = h("div", { class: "k-stack" });
-    const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), h("div", { class: "scroll-x", style: "margin-bottom:14px" }, views.el), host);
+    const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), h("div", { class: "tab-row" }, views.el), host);
     const fail = (e: unknown) => mount(host, empty("alert", e instanceof Error ? e.message : "This section could not load."));
     if (tab === "knowledge") {
       shell("Knowledge", "What the bot knows and how it uses it: packs of patterns, the detectors that read them, what it learns from you, and live threat lists.");
@@ -80,7 +80,7 @@ export const settings: Page = {
     changedOnly.onchange = draw;
     search.value = query.get("q") ?? "";
     mount(root, pageHead("sliders", "All settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."), areaNav("settings"),
-      h("div", { class: "scroll-x", style: "margin-bottom:14px" }, views.el),
+      h("div", { class: "tab-row" }, views.el),
       h("div", { class: "row between", style: "margin-bottom:14px" },
         h("div", { class: "input-icon", style: "flex:1 1 280px;max-width:420px" }, icon("search", 16), search),
         h("label", { class: "check small" }, changedOnly, "Changed from default only"), summary),

@@ -24,3 +24,10 @@ Each accent pair meets WCAG contrast: text on the accent at least 4.5:1, the acc
 - Never rely on colour alone: pair status colour with text or an icon.
 - Respect `prefers-reduced-motion`.
 - Controls must do something real. No placeholder switches.
+
+
+## Tab rails (1.3.2)
+
+Every scrolling row of tabs calls `tabRail(el, key)` from `nav.ts`. It centres the current tab on the first frame, remembers the scroll position per key, re-centres when the current tab changes, and fades only the hidden edge with a CSS mask (`[data-rail][data-edge]` in `polish.css`). Do not draw gradients over a tab row, and do not use `scrollIntoView` on tabs: it can move the page.
+
+Layers: top bar 30, tab bar 40, progress line 60, expanded chat 65 to 70, sheets 90, menus 95, toasts 100. Grid columns that must shrink are written `minmax(0, 1fr)`, never `1fr`. A row of tabs is wrapped in `.tab-row` so the first card under it keeps a 16 px gap.

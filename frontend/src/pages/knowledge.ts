@@ -1,4 +1,5 @@
 /** Settings > Knowledge: the shell, the Overview and the Test lab. Other views live in knowledge-packs.ts and knowledge-ops.ts. */
+import { tabRail } from "../nav.js";
 import { get, patch, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
@@ -26,8 +27,7 @@ export function renderKnowledge(root: HTMLElement, query: URLSearchParams): () =
   const tabs = h("nav", { class: "k-tabs", "aria-label": "Knowledge sections" }, TABS.map((t) =>
     h("button", { type: "button", "aria-current": t.id === view ? "page" : undefined, onclick: () => goKnowledge(t.id) }, icon(t.icon, 16), t.label)));
   mount(root, h("div", { class: "k-top" }, tabs), host);
-  // keep the active tab in view on a narrow screen
-  queueMicrotask(() => (tabs.querySelector("[aria-current=page]") as HTMLElement | null)?.scrollIntoView({ inline: "center", block: "nearest" }));
+  tabRail(tabs, "knowledge-tabs");       // the active tab opens in the middle and the row remembers where it was
   switch (view) {
     case "packs": renderPacks(host, query); break;
     case "detectors": renderDetectors(host); break;

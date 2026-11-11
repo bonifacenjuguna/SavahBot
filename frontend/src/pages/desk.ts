@@ -9,7 +9,7 @@ import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./sh
 import { variableChips } from "./variables.js";
 import { liveCard } from "./live-card.js";
 import { pins, wireLine, type ActionCtx } from "../chat-actions.js";
-import { readerButton, readerItems } from "../reader-ui.js";
+import { readerControl, readerItems } from "../reader-ui.js";
 import { reader } from "../reader.js";
 import type { Page } from "./types.js";
 
@@ -287,7 +287,8 @@ export const desk: Page = {
       tabs);
 
     // ----- the chat card, which can grow to fill the workspace
-    const main = h("div", { class: "chat-main" }, toolbar, readerButton(), dateWrap, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
+    const readerUi = readerControl();
+    const main = h("div", { class: "chat-main" }, toolbar, readerUi.note, dateWrap, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
     const side = h("aside", { class: "zoom-side", "aria-label": "Waiting for you" },
       h("div", { class: "zs-head" }, h("h3", null, icon("inbox", 16), "Waiting for you", sideCount), h("button", { class: "icon-btn zs-close", type: "button", "aria-label": "Close the waiting list", onclick: () => chatPane.classList.remove("side-open") }, icon("x", 18))),
       h("div", { class: "zs-body" }));
@@ -303,7 +304,7 @@ export const desk: Page = {
     };
     paintExpand(false);
     const chatPane = card("message", "Chat", h("div", { class: "chat-body" }, main, side), { flush: true, cls: "chat-card",
-      actions: h("div", { class: "row nowrap chat-actions" }, h("div", { class: "row nowrap chat-tools" }, ratePill, sizeDown, sizeUp, sideToggle), expandBtn) });
+      actions: h("div", { class: "row nowrap chat-actions" }, h("div", { class: "row nowrap chat-tools" }, ratePill, sizeDown, sizeUp, sideToggle, readerUi.button), expandBtn) });
     const setSize = (i: number) => {
       sizeIdx = Math.max(0, Math.min(SIZES.length - 1, i));
       chatPane.style.setProperty("--chat-scale", String(SIZES[sizeIdx]));
@@ -364,6 +365,6 @@ export const desk: Page = {
     ];
     offs.push(onStatus(() => renderFacts()));
     const t = window.setInterval(renderFacts, 5000);
-    return () => { offs.forEach((f) => f()); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
+    return () => { offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },
 };

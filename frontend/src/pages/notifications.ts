@@ -201,7 +201,7 @@ export const notifications: Page = {
       const inner = h("div", { class: "k-stack" });
       Promise.resolve(run[tab](inner)).then(() => mount(body, inner)).catch((e) => { fail(e); mount(body, empty("alert", "This section could not load.")); });
     };
-    mount(root, h("div", { class: "page" }, areaNav("notifications"), pageHead("bell", "Notifications", "Choose what reaches you, where, and when."), h("div", { class: "row wrap" }, tabs.el), body));
+    mount(root, h("div", { class: "page" }, areaNav("notifications"), pageHead("bell", "Notifications", "Choose what reaches you, where, and when."), h("div", { class: "tab-row" }, tabs.el), body));
     show();
     const wanted = Number(query.get("open"));
     if (Number.isInteger(wanted) && wanted > 0) void openNotification(wanted);     // a tap on a notification lands here and shows that notification

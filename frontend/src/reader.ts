@@ -1,4 +1,4 @@
-import { DEFAULT_RULES, KOKORO_MODEL, KOKORO_VOICES, prepare, rewriteModelUrl, shouldRead, voiceFor, type Msg, type Rules } from "./reader-core.js";
+import { DEFAULT_RULES, KOKORO_VOICES, prepare, shouldRead, voiceFor, type Msg, type Rules } from "./reader-core.js";
 
 /** Chat reader. Two voices: the ones built into the browser (always there, free) and a neural voice (Kokoro, free and open source) that the browser downloads once.
  *  If the neural voice cannot load or fails mid-stream, reading carries on with the built-in voice and says why. Reading only ever starts from a tap. */
@@ -8,20 +8,59 @@ export const DEFAULT_DEVICE: DevicePrefs = { engine: "builtin", voice: "", rate:
 export const devicePrefs = (): DevicePrefs => { try { return { ...DEFAULT_DEVICE, ...(JSON.parse(localStorage.getItem(KEY) || "{}") as Partial<DevicePrefs>) }; } catch { return { ...DEFAULT_DEVICE }; } };
 export const saveDevicePrefs = (p: DevicePrefs): void => { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* private mode */ } };
 
-const KOKORO_URL = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.0/+esm";   // pinned: a new release never changes behaviour under you
 export const builtinSupported = (): boolean => typeof speechSynthesis !== "undefined";
 export const builtinVoices = (): SpeechSynthesisVoice[] => (builtinSupported() ? speechSynthesis.getVoices() : []);
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 
-type Tts = { generate(text: string, o: { voice: string }): Promise<{ toBlob?: () => Blob; audio?: Float32Array; sampling_rate?: number }> };
+/** The neural voice lives in a Web Worker (reader-worker.ts) so loading and speaking never block the page. */
+class Neural {
+  private worker: Worker | null = null;
+  private ready: Promise<void> | null = null;
+  private seq = 0;
+  private waiting = new Map<number, { ok: (b: ArrayBuffer) => void; fail: (e: Error) => void }>();
+  private onReady: (() => void) | null = null;
+  private onFail: ((e: Error) => void) | null = null;
+  constructor(private progress: (text: string) => void) {}
+  get loaded(): boolean { return this.ready !== null; }
+  load(base: string): Promise<void> {
+    if (this.ready) return this.ready;
+    if (typeof Worker === "undefined") return Promise.reject(new Error("this browser cannot run background workers"));
+    this.ready = new Promise<void>((ok, fail) => {
+      this.onReady = ok; this.onFail = fail;
+      let w: Worker;
+      try { w = new Worker(new URL("./reader-worker.ts", import.meta.url), { type: "module" }); } catch (e) { fail(e instanceof Error ? e : new Error("the voice worker could not start")); return; }
+      this.worker = w;
+      w.onmessage = (e: MessageEvent) => {
+        const m = e.data as { type: string; text?: string; id?: number; wav?: ArrayBuffer; message?: string };
+        if (m.type === "progress") this.progress(m.text ?? "");
+        else if (m.type === "ready") this.onReady?.();
+        else if (m.type === "audio" && m.id !== undefined) { this.waiting.get(m.id)?.ok(m.wav as ArrayBuffer); this.waiting.delete(m.id); }
+        else if (m.type === "fail") {
+          const err = new Error(m.message || "the voice failed");
+          if (m.id !== undefined) { this.waiting.get(m.id)?.fail(err); this.waiting.delete(m.id); } else this.onFail?.(err);
+        }
+      };
+      w.onerror = (e) => { const err = new Error(e.message || "the voice worker crashed"); this.onFail?.(err); this.waiting.forEach((p) => p.fail(err)); this.waiting.clear(); };
+      w.postMessage({ type: "load", base });
+    });
+    this.ready.catch(() => this.dispose());          // a failed load leaves nothing half-started; the next try begins clean
+    return this.ready;
+  }
+  speak(text: string, voice: string): Promise<ArrayBuffer> {
+    const w = this.worker;
+    if (!w) return Promise.reject(new Error("the voice is not loaded"));
+    const id = ++this.seq;
+    return new Promise((ok, fail) => { this.waiting.set(id, { ok, fail }); w.postMessage({ type: "speak", id, text, voice }); });
+  }
+  dispose(): void { this.worker?.terminate(); this.worker = null; this.ready = null; this.waiting.forEach((p) => p.fail(new Error("the voice was stopped"))); this.waiting.clear(); }
+}
 export interface ReaderState { running: boolean; loading: string; engine: "builtin" | "kokoro"; note: string; queued: number; spoken: number }
 
 class Reader {
   rules: Rules = DEFAULT_RULES;
   private q: { text: string; voice: string }[] = [];
   private busy = false;
-  private tts: Tts | null = null;
-  private loadingNeural: Promise<void> | null = null;
+  private neural = new Neural((text) => this.set({ loading: text }));
   private fell = false;
   private current: HTMLAudioElement | null = null;
   private listeners = new Set<() => void>();
@@ -48,7 +87,8 @@ class Reader {
     const text = prepare(m, this.rules);
     if (!text) return;
     this.q.push({ text, voice: voiceFor(m, this.rules) });
-    while (this.q.length > 25) this.q.shift();                 // a flood is trimmed, newest kept
+    const cap = devicePrefs().engine === "kokoro" && !this.fell ? 4 : 25;   // a neural voice is slower than chat: keep only the newest few so it never falls minutes behind
+    while (this.q.length > cap) this.q.shift();                 // a flood is trimmed, newest kept
     this.set({});
     void this.pump();
   }
@@ -62,7 +102,7 @@ class Reader {
         this.set({});
         const dev = devicePrefs();
         if (dev.engine === "kokoro" && !this.fell) {
-          try { await this.loadNeural(dev); await this.speakNeural(item.text, item.voice || dev.voice || "af_heart", dev); this.set({ spoken: this.state.spoken + 1 }); continue; }
+          try { await this.loadNeural(dev); if (!this.state.running) break; await this.speakNeural(item.text, item.voice || dev.voice || "af_heart", dev); this.set({ spoken: this.state.spoken + 1 }); continue; }
           catch (e) { this.fell = true; this.set({ note: `The neural voice did not work (${e instanceof Error ? e.message : "unknown error"}), so the built-in voice is reading instead.`, engine: "builtin" }); }
         }
         await this.speakBuiltin(item.text, item.voice, dev);
@@ -83,46 +123,25 @@ class Reader {
     });
   }
 
-  private loadNeural(dev: DevicePrefs): Promise<void> {
-    if (this.tts) return Promise.resolve();
-    if (this.loadingNeural) return this.loadingNeural;
-    this.set({ loading: "Downloading the voice (one time, about 90 MB)…" });
-    const realFetch = window.fetch;
-    const base = dev.source;
-    if (base) window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => realFetch(typeof input === "string" ? rewriteModelUrl(input, base) : input instanceof URL ? rewriteModelUrl(input.href, base) : input, init)) as typeof fetch;
-    this.loadingNeural = (async () => {
-      try {
-        const mod = (await import(/* @vite-ignore */ KOKORO_URL)) as { KokoroTTS: { from_pretrained(id: string, o: { dtype: string; device: string }): Promise<Tts> } };
-        this.tts = await mod.KokoroTTS.from_pretrained(KOKORO_MODEL, { dtype: "q8", device: "wasm" });
-        this.set({ loading: "" });
-      } catch (e) { this.set({ loading: "" }); throw e; }
-      finally { window.fetch = realFetch; this.loadingNeural = null; }
-    })();
-    return this.loadingNeural;
+  private async loadNeural(dev: DevicePrefs): Promise<void> {
+    if (!this.neural.loaded) this.set({ loading: "Starting the voice…" });
+    try { await this.neural.load(dev.source); } finally { this.set({ loading: "" }); }
   }
 
   private async speakNeural(text: string, voice: string, dev: DevicePrefs): Promise<void> {
-    const out = await (this.tts as Tts).generate(text, { voice });
-    const blob = out.toBlob ? out.toBlob() : wav(out.audio as Float32Array, out.sampling_rate ?? 24000);
-    const url = URL.createObjectURL(blob);
+    const wav = await this.neural.speak(text, voice);                  // made off the page's thread
+    if (!this.state.running) return;                                   // Read chat was switched off while this was being made
+    const url = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
     await new Promise<void>((done, fail) => {
       const a = new Audio(url);
       this.current = a;
       a.volume = dev.volume; a.playbackRate = dev.rate;
       a.onended = () => done();
+      a.onpause = () => { if (!this.state.running) done(); };           // stop() pauses the clip: finish the wait instead of hanging
       a.onerror = () => fail(new Error("the audio could not be played"));
       a.play().catch((e) => fail(e instanceof Error ? e : new Error("the browser blocked sound")));
     }).finally(() => URL.revokeObjectURL(url));
   }
-}
-
-function wav(samples: Float32Array, rate: number): Blob {
-  const buf = new ArrayBuffer(44 + samples.length * 2), v = new DataView(buf);
-  const str = (o: number, s: string) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
-  str(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); str(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, samples.length * 2, true);
-  samples.forEach((s, i) => v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s)) * 0x7fff, true));
-  return new Blob([buf], { type: "audio/wav" });
 }
 
 export const reader = new Reader();

@@ -1,3 +1,4 @@
+import { tabRail } from "../nav.js";
 import { get, patch, post } from "../api.js";
 import { busy, dateTime, debounce, downloadCsv, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
@@ -115,6 +116,7 @@ export const moderation: Page = {
       Array.from(tabs.children).forEach((b) => b.setAttribute("aria-selected", String(b.getAttribute("data-id") === current)));
     };
     applyTabs();
+    tabRail(tabs, "mod-tabs");
 
     mount(root,
       pageHead("shield", "Moderation", "Decide what the bot does, review what it did, and tune what it looks for."),

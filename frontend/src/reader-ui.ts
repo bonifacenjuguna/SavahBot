@@ -11,20 +11,37 @@ export async function loadRules(): Promise<Rules> {
 }
 export async function saveRules(r: Rules): Promise<void> { reader.rules = await post<Rules>("/api/reader/rules", r); }
 
-/** The speaker button on the chat: reading starts only when it is tapped, because browsers block sound until then. */
-export function readerButton(): HTMLElement {
-  const b = h("button", { class: "btn small", type: "button", "aria-pressed": "false" });
-  const note = h("div", { class: "muted small wrap", style: "padding:2px 12px" });
-  const paint = () => {
+/**
+ * The speaker control for the chat. 1.3.2: it is split in two so neither sits on top of chat lines any more:
+ *  - `button` goes in the chat header, beside the rate and the expand button (icon only on a phone, with a label when there is room);
+ *  - `note` is a thin status line (loading, errors, "3 waiting") that takes its own row under the toolbar and is hidden when empty.
+ * Reading starts only when the button is tapped, because browsers block sound until then.
+ */
+export function readerControl(): { button: HTMLElement; note: HTMLElement; dispose: () => void } {
+  const label = h("span", { class: "hide-narrow" }, "Read chat");
+  const b = h("button", { class: "btn small reader-btn", type: "button", "aria-pressed": "false", title: "Read the chat aloud" }, icon("volumeOff", 15), label);
+  const note = h("div", { class: "reader-note muted small wrap", role: "status", hidden: true });
+  let lastIcon = "";
+  let queued = false;
+  const paintNow = () => {
+    queued = false;
     const s = reader.state;
-    b.replaceChildren(icon(s.running ? "volume" : "volumeOff", 15), h("span", null, s.running ? "Reading" : "Read chat"));
+    const ic = s.running ? "volume" : "volumeOff";
+    if (ic !== lastIcon) { lastIcon = ic; b.replaceChild(icon(ic, 15), b.firstChild as Node); }
+    label.textContent = s.running ? "Reading" : "Read chat";
     b.setAttribute("aria-pressed", String(s.running));
-    note.textContent = s.loading || s.note || (s.running ? `${s.queued} waiting · ${s.spoken} read` : "");
-    note.hidden = !note.textContent;
+    b.setAttribute("aria-label", s.running ? "Stop reading the chat" : "Read the chat aloud");
+    b.classList.toggle("on", s.running);
+    const t = s.loading || s.note || (s.running && (s.queued || s.spoken) ? `${s.queued} waiting · ${s.spoken} read` : "");
+    if (note.textContent !== t) note.textContent = t;
+    note.hidden = !t;
   };
+  // the reader reports every line it takes in; draw at most once per frame so a busy chat never makes the page work harder
+  const paint = () => { if (!queued) { queued = true; requestAnimationFrame(paintNow); } };
   b.onclick = () => { if (reader.state.running) reader.stop(); else void loadRules().then(() => reader.start()); };
-  reader.onChange(paint); paint();
-  return h("div", null, b, note);
+  const off = reader.onChange(paint);          // released when the Desk is left, so redrawing the page never piles up listeners
+  paintNow();
+  return { button: b, note, dispose: off };
 }
 
 const item = (ic: string, label: string, run: () => void, close: () => void) => {

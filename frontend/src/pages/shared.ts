@@ -1,3 +1,4 @@
+import { tabRail } from "../nav.js";
 import { post } from "../api.js";
 import { busy, dateTime, duration, h, type Child } from "../dom.js";
 import { icon } from "../icons.js";
@@ -47,6 +48,7 @@ export function paneTabs(labels: { id: string; label: string; badge?: () => numb
     wrap.appendChild(b);
   }
   apply();
+  tabRail(wrap, "pane-tabs");
   (wrap as any).refreshBadges = () => {
     labels.forEach((l, i) => {
       const n = (wrap.children[i] as any).__n as HTMLElement;

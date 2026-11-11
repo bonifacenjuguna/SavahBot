@@ -1,6 +1,7 @@
 /** 1.1.5 widget kit shared by Notebook, Community, Insights, Demo and the Moderation tools. Plain DOM, no dependencies. */
 import { h, type Child } from "../dom.js";
 import { icon } from "../icons.js";
+import { tabRail } from "../nav.js";
 
 export const plural = (n: number, one: string, many = `${one}s`): string => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 export const sentence = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
@@ -14,11 +15,11 @@ export function seg<T extends string>(label: string, options: { id: T; label: st
   const buttons = options.map((o) => h("button", { type: "button", "data-id": o.id, "aria-pressed": String(o.id === current) }, o.icon ? icon(o.icon, 15) : null, o.label));
   const paint = () => buttons.forEach((b) => {
     const on = b.getAttribute("data-id") === current;
-    b.setAttribute("aria-pressed", String(on));
-    if (on) queueMicrotask(() => { try { b.scrollIntoView({ block: "nearest", inline: "center" }); } catch { /* old browsers: the bar simply stays where it is */ } });
+    b.setAttribute("aria-pressed", String(on));      // the rail (tabRail) brings the pressed button to the middle by itself
   });
   buttons.forEach((b) => b.addEventListener("click", () => { const v = b.getAttribute("data-id") as T; if (v === current) return; current = v; paint(); onChange(v); }));
   const el = h("div", { class: "seg-control", role: "group", "aria-label": label }, buttons);
+  tabRail(el, `seg:${label}`);
   return { el, set: (v) => { current = v; paint(); }, get: () => current };
 }
 

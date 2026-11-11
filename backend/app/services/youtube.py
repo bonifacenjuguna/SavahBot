@@ -306,6 +306,8 @@ class YouTubeSource:
         self.perms: dict[str, bool | None] = {"read": None, "delete": None, "ban": None, "send": None}
         self._denied: dict[str, tuple[float, str]] = {}   # action -> (retry not before, the refusal message)
         self._errors = 0                                   # consecutive failures, for exponential backoff
+        self._quiet_since = 0.0                            # when the chat last had a message (0 = just attached), to notice a stream that ended silently
+        self._last_alive_check = 0.0
 
     def forget_identity(self) -> None:
         """Called when the Google login changes, so the account is looked up again."""
@@ -317,8 +319,8 @@ class YouTubeSource:
         self._denied.clear()
 
     def _detach(self) -> None:
-        if self.chat_id:
-            self.hub.stream_state(False)
+        self.hub.stream_state(False)      # always: it does nothing when already off, and it can never be left "On air" with no chat attached
+        self._quiet_since, self._last_alive_check = 0.0, 0.0
         self.chat_id, self._page_token, self.title, self.video_id, self.video_channel_id = "", "", "", "", ""
         self._reset_permissions()  # a refusal belongs to one account in one chat: the next attach starts clean
 
@@ -671,6 +673,28 @@ class YouTubeSource:
         self.state, self.last_error = "offline", ""
         return wait
 
+    SILENT_CHECK_AFTER = 90.0     # a quiet chat is checked this often, so a stream that ended without an error is noticed within about 1.5 minutes
+    async def _silent_end(self) -> bool:
+        """True when YouTube says the attached video no longer has an active live chat. One videos.list call (1 unit) at most every 90 s,
+        and only while the chat is quiet, because a chat full of messages is obviously still live."""
+        now = time.time()
+        if not self.video_id or now - self._quiet_since < self.SILENT_CHECK_AFTER or now - self._last_alive_check < self.SILENT_CHECK_AFTER:
+            return False
+        self._last_alive_check = now
+        if not self.quota.can_afford("video_list"):
+            return False
+        try:
+            status, data = await self._videos([self.video_id])
+        except RuntimeError:
+            return False
+        if status != 200 or not isinstance(data, dict):
+            return False       # not sure: keep the chat attached rather than drop a live stream on a hiccup
+        items = data.get("items") or []
+        if not items:
+            return True
+        live = items[0].get("liveStreamingDetails") or {}
+        return bool(live.get("actualEndTime")) or not live.get("activeLiveChatId")
+
     async def _poll(self) -> float:
         interval = self.quota.read_interval(time.time() - self._stream_started)
         if interval is None:
@@ -691,7 +715,11 @@ class YouTubeSource:
             self.state, self.last_error = "live", ""
             self._errors = 0
             self.perms["read"] = True
-            ended = False
+            ended = bool(data.get("offlineAt"))   # YouTube stamps the chat with offlineAt once the stream is over
+            if data.get("items"):
+                self._quiet_since = time.time()
+            elif not self._quiet_since:
+                self._quiet_since = time.time()
             for item in data.get("items", []):
                 if (item.get("snippet") or {}).get("type") == "chatEndedEvent":
                     ended = True  # YouTube says this chat is over: stop here instead of waiting for an error on the next poll
@@ -710,6 +738,8 @@ class YouTubeSource:
                         continue
                     msg.backfill = True
                 await self.hub.ingest(msg)
+            if not ended and await self._silent_end():
+                ended = True
             if ended:
                 self._detach()
                 self.state = "offline"
@@ -800,7 +830,11 @@ class YouTubeSource:
         elif reason in PROTECTED_USER_REASONS:
             msg = f"YouTube will not allow this on that person ({reason}). They may be a moderator or the channel owner."
         elif reason in ENDED_REASONS:
-            msg = "That live chat is no longer available (the stream may have ended)."
+            msg = "The stream has ended, so there is no live chat to act on."
+            self._detach()                    # the dashboard stops saying "On air" the moment YouTube says so
+            self.state = "offline"
+            self.last_action_error = msg
+            return False, msg
         elif status == 403 or reason in PERMISSION_REASONS:
             retry = float(self.cfg.get("youtube_permission_retry_seconds"))
             msg = (f"YouTube says this account is {DENIED_PHRASE} {label} in that chat ({reason or 403}). "
