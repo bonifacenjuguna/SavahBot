@@ -53,7 +53,7 @@ export const streamSettings: Page = {
   id: "stream-settings", title: "Stream alerts", icon: "radio", blurb: "Live stats, subscribers, members and Super Chats",
   render(root) {
     const body = h("div", { class: "stack" }, h("p", { class: "muted" }, "Loading…"));
-    mount(root, h("div", { class: "page" }, pageHead("radio", "Stream alerts", "What the bot watches for while you are live.", h("a", { class: "btn small", href: "#/settings" }, "Back to Settings")), body));
+    mount(root, h("div", { class: "page" }, pageHead("radio", "Stream alerts", "What the bot watches for while you are live.", h("a", { class: "btn small", href: "/settings" }, "Back to Settings")), body));
     void render(body).catch(() => mount(body, empty("alert", "Settings could not load.")));
   },
 };

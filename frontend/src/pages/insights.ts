@@ -79,8 +79,8 @@ export const insights: Page = {
       const top = s.top_chatters[0];
       const real = (t.messages ?? 0) - (s.levels.bot ?? 0);
       if (top && s.top_chatters.length >= 3 && real > 0) rows.push({ icon: "user", text: `${top.name} sent ${Math.round((top.messages / real) * 100)}% of the messages from people.` });
-      if (t.pending) rows.push({ icon: "inbox", text: `${plural(t.pending, "request")} ${t.pending === 1 ? "is" : "are"} waiting for your decision.`, tone: "warn", href: "#/moderation" });
-      else if (t.messages && ctx.flagRate >= 10) rows.push({ icon: "alert", text: "More than 1 in 10 messages was flagged. Look at Moderation for a pattern.", tone: "warn", href: "#/moderation" });
+      if (t.pending) rows.push({ icon: "inbox", text: `${plural(t.pending, "request")} ${t.pending === 1 ? "is" : "are"} waiting for your decision.`, tone: "warn", href: "/moderation" });
+      else if (t.messages && ctx.flagRate >= 10) rows.push({ icon: "alert", text: "More than 1 in 10 messages was flagged. Look at Moderation for a pattern.", tone: "warn", href: "/moderation" });
       else if (t.messages && ctx.flagRate < 2) rows.push({ icon: "checkCircle", text: "Chat is calm. Fewer than 2% of messages needed attention.", tone: "ok" });
       if (!rows.length) return empty("chart", "Nothing stands out yet. Insights appear once chat has some activity.");
       return h("ul", { class: "notes-list" }, rows.slice(0, 4).map((r) => {

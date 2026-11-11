@@ -79,7 +79,7 @@ function renderOverview(host: HTMLElement): void {
           st.wave_active ? "A raid wave is active right now." : st.waves_seen ? `${plural(st.waves_seen, "raid wave")} seen since the bot started.` : "")), ),
       ov.next ? h("section", { class: "next-up" }, h("div", { class: "nu-when" }, h("span", { class: "muted small" }, "Next up")), h("div", { class: "nu-what" }, ov.next.text),
         h("div", { class: "row" }, h("button", { class: "btn primary small", type: "button", onclick: () => goKnowledge(ov.next!.kind === "suggestions" ? "learning" : "detectors") }, "Take a look"))) : null,
-      kcard("package", "What it knows", h("div", { class: "k-grid" }, ov.categories.map((c) => h("a", { class: "tile", href: `#/settings?tab=knowledge&view=packs&cat=${c.id}` },
+      kcard("package", "What it knows", h("div", { class: "k-grid" }, ov.categories.map((c) => h("a", { class: "tile", href: `/settings?tab=knowledge&view=packs&cat=${c.id}` },
         h("span", { class: "tile-ico" }, icon("database", 22)), h("span", { class: "tile-text" }, h("strong", null, c.title), h("span", null, `${plural(c.entries, "entry", "entries")} · ${c.active}/${c.packs} on`)), icon("chevronRight", 16, "tile-go"))))),
       kcard("eyeOff", "Caught in shadow mode", h("div", { class: "k-stack" }, h("p", { class: "k-note" }, "These messages were noticed by a detector in shadow mode. Nothing was done about them. If they look right, switch that detector to live."),
         shadowList(ov.recent_shadow), h("div", { class: "row" }, h("button", { class: "btn small", type: "button", onclick: () => goKnowledge("detectors") }, icon("target", 15), "Open detectors")))),

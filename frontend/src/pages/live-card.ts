@@ -15,7 +15,7 @@ const num = (v: number | null | undefined) => (typeof v === "number" ? v.toLocal
 /** Likes, viewers, likes per minute and a trend, with how old the numbers are. Refreshes itself; YouTube is only asked on the server's own schedule. */
 export function liveCard(): { el: HTMLElement; stop: () => void } {
   const body = h("div", { class: "stack", style: "padding:14px" }, h("p", { class: "muted" }, "Loading…"));
-  const el = card("activity", "Live stats", body, { flush: true, actions: h("a", { class: "btn small ghost", href: "#/stream-settings" }, icon("sliders", 14), "Set up") });
+  const el = card("activity", "Live stats", body, { flush: true, actions: h("a", { class: "btn small ghost", href: "/stream-settings" }, icon("sliders", 14), "Set up") });
   let last: Live | null = null;
   const stat = (ic: string, label: string, value: string, sub = "") =>
     h("div", { style: "min-width:96px;flex:1" }, h("div", { class: "muted small" }, icon(ic, 14), " ", label), h("div", { style: "font-size:1.5rem;font-weight:600" }, value), sub ? h("div", { class: "muted small" }, sub) : null);

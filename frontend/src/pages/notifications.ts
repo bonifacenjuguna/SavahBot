@@ -9,6 +9,7 @@ import { areaNav, dateRange, type RangeValue } from "./kit.js";
 import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 import { figures, lede, seg } from "./widgets.js";
+import { href as routeHref } from "../router.js";
 
 type Chan = "push" | "inapp" | "telegram";
 interface Eff { enabled: boolean; push: boolean; inapp: boolean; telegram: boolean; priority: string }
@@ -72,7 +73,7 @@ async function overview(el: HTMLElement): Promise<void> {
     row("Push to devices", null, sw(prefs.push, "Push", (v) => void savePrefs({ push: v }).catch(fail))),
     row("In-app bell and history", null, sw(prefs.inapp, "In-app", (v) => void savePrefs({ inapp: v }).catch(fail))),
     row("Telegram", "Only for events Telegram does not already report itself.", sw(prefs.telegram, "Telegram", (v) => void savePrefs({ telegram: v }).catch(fail))),
-    row("Pop-up messages on screen", "The small \"Saved\" and error messages. Turn off, move to the top or change how long they stay.", h("a", { class: "btn small", href: "#/settings?tab=appearance" }, "Appearance")),
+    row("Pop-up messages on screen", "The small \"Saved\" and error messages. Turn off, move to the top or change how long they stay.", h("a", { class: "btn small", href: "/settings?tab=appearance" }, "Appearance")),
     row("Pause push", prefs.paused ? `Paused until ${clock(prefs.pause_until)}. Critical alerts still come through.` : prefs.quiet_now ? `Quiet hours until ${prefs.quiet_ends ? clock(prefs.quiet_ends) : "later"}.` : "Silence push for a while. The bell keeps filling.",
       h("div", { class: "row wrap" }, prefs.paused ? pause(null, "Resume") : [pause(15, "15 min"), pause(60, "1 hour"), pause(480, "8 hours"), pause(minsToMorning(), "Until morning")]))), { flush: true });
   mount(el, figures([{ value: String(inbox.unread), label: "unread", tone: inbox.unread ? "warn" : "" }, { value: String(devs.devices.filter((d) => d.enabled).length), label: "push devices", tone: devs.devices.length ? "ok" : "" }, { value: prefs.paused ? "paused" : prefs.quiet_now ? "quiet" : "active", label: "right now", tone: prefs.paused || prefs.quiet_now ? "warn" : "ok" }]), deviceCard, controls, setup);
@@ -156,7 +157,7 @@ function history(el: HTMLElement): void {
   const more = h("button", { class: "btn small", type: "button", hidden: true }, "Load older") as HTMLButtonElement;
   let last = 0;
   const q = (before?: number) => `/api/notify/inbox?limit=40${before ? `&before=${before}` : ""}${category ? `&category=${category}` : ""}${onlyUnread ? "&unread=1" : ""}${range.since !== undefined ? `&since=${Math.floor(range.since)}` : ""}${range.until !== undefined ? `&until=${Math.floor(range.until)}` : ""}`;
-  const line = (n: Row) => h("a", { class: `n-hist ${n.kind}${n.read ? "" : " unread"}`, href: n.route }, icon(n.icon, 18),
+  const line = (n: Row) => h("a", { class: `n-hist ${n.kind}${n.read ? "" : " unread"}`, href: routeHref(n.route) }, icon(n.icon, 18),
     h("div", { class: "n-row-main" }, h("strong", null, n.title, n.count > 1 ? ` (${n.count})` : ""), n.body ? h("span", { class: "muted small" }, n.body) : null, h("span", { class: "muted small" }, `${n.label} · ${dateTime(n.ts)}`)),
     h("button", { class: "btn small ghost", type: "button", "aria-label": "Delete", onclick: (e: Event) => { e.preventDefault(); void post("/api/notify/delete", { ids: [n.id] }).then(() => { (e.currentTarget as HTMLElement).closest(".n-hist")?.remove(); void refreshBell(); }).catch(fail); } }, icon("trash", 14)));
   async function load(append = false): Promise<void> {

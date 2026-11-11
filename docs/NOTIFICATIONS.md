@@ -51,7 +51,7 @@ Quiet hours use your time zone (`OWNER_TIMEZONE`, editable in Settings). Overnig
 
 ## Privacy
 - Device tokens are stored **encrypted** (AES-GCM) and are never shown in the UI, logs, API responses or backups. Only a short label ("Chrome on Android") is shown.
-- Tapping a notification can only open a dashboard page (`#/…`). Any other address is replaced by the Notifications page.
+- Tapping a notification can only open a dashboard page (a clean path such as `/moderation`; the stored token is still written `#/moderation`). Any other address is replaced by the Notifications page.
 - Security alerts never put their text on a lock screen. You can hide the text of all pushes ("Hide message text").
 - No permission prompt appears on page load, only after you press the button.
 

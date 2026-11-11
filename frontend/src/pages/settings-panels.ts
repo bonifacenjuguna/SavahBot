@@ -7,6 +7,7 @@ import { applyTheme, themePref, type ThemePref } from "../ui.js";
 import { getPWAState, installApp, openInstallGuide } from "../pwa.js";
 import { card } from "./shared.js";
 import { figures, lede, seg } from "./widgets.js";
+import { href as routeHref } from "../router.js";
 
 const fail = (e: unknown) => toast(e instanceof Error ? e.message : String(e), "error");
 const row = (title: string, text: string | null, control: HTMLElement | null) => h("div", { class: "n-row" }, h("div", { class: "n-row-main" }, h("strong", null, title), text ? h("span", { class: "muted small" }, text) : null), control);
@@ -65,7 +66,7 @@ export async function renderPrivacy(el: HTMLElement): Promise<void> {
     card("shield", "Where it lives", body(h("p", null, `Database: ${d.stored_where.database}. Cache: ${d.stored_where.cache}. The database is the source of truth; the cache can be thrown away.`),
       h("p", { class: "muted" }, "Services that receive some data when you use them:"), h("ul", null, d.stored_where.processors.map((p) => h("li", null, p))),
       h("p", { class: "muted" }, "Never collected or kept: "), h("ul", null, d.never_collected.map((p) => h("li", null, p)))), { flush: true }),
-    card("download", "Your data", body(h("p", null, d.export_note), h("a", { class: "btn", href: "#/backup" }, icon("database", 16), "Open Backup")), { flush: true }));
+    card("download", "Your data", body(h("p", null, d.export_note), h("a", { class: "btn", href: "/backup" }, icon("database", 16), "Open Backup")), { flush: true }));
 }
 
 // ------------------------------------------------------------------ Device & app
@@ -88,7 +89,7 @@ export async function renderDevice(el: HTMLElement): Promise<void> {
     card("smartphone", "This device", body(
       row("Installed app", pwa.installed ? "SavahBot is running as an installed app." : "Install for its own window and (on iPhone) for push notifications.", pwa.installed ? state(true, "installed", "") : h("div", { class: "row" }, pwa.canPrompt ? h("button", { class: "btn small primary", type: "button", onclick: () => void installApp() }, icon("download", 14), "Install") : null, h("button", { class: "btn small", type: "button", onclick: () => openInstallGuide() }, "How"))),
       row("Service worker", reg ? `Active${reg.waiting ? ", update waiting" : ""}. It shows push notifications and a friendly offline page. Nothing private is cached.` : "Not registered on this device yet.", h("div", { class: "row" }, state(Boolean(reg?.active), "active", "none"), check)),
-      row("Push permission", perm === "granted" ? "Allowed. Turn push on per device under Notifications." : perm === "denied" ? "Blocked. Allow it in your browser's site settings." : "Not asked yet. The browser asks only when you press the button on Notifications.", h("a", { class: "btn small", href: "#/notifications" }, icon("bell", 14), "Notifications")),
+      row("Push permission", perm === "granted" ? "Allowed. Turn push on per device under Notifications." : perm === "denied" ? "Blocked. Allow it in your browser's site settings." : "Not asked yet. The browser asks only when you press the button on Notifications.", h("a", { class: "btn small", href: "/notifications" }, icon("bell", 14), "Notifications")),
       row("Offline", "Offline you see a simple page that says so. The dashboard needs a connection because it controls a live bot.", null),
       row("Storage on this device", est?.usage !== undefined ? `${(est.usage / 1048576).toFixed(1)} MB used by this site, ${keys.length} small preference${keys.length === 1 ? "" : "s"} saved.` : `${keys.length} small preferences saved.`, wipe)), ));
 }
@@ -109,7 +110,7 @@ export async function renderDeveloper(el: HTMLElement): Promise<void> {
   const ok = (v: boolean, a = "ok", b = "problem") => h("span", { class: `chip ${v ? "ok" : "bad"}` }, v ? a : b);
   const refresh = h("button", { class: "btn small", type: "button" }, icon("refresh", 14), "Re-check") as HTMLButtonElement;
   refresh.onclick = () => busy(refresh, () => renderDeveloper(el));
-  mount(el, h("div", { class: "row" }, refresh), card("checklist", "Configuration check", x.config_problems.length ? h("div", { class: "n-log" }, x.config_problems.map((p) => h("a", { class: `n-hist ${p.level}`, href: p.route }, icon(p.level === "info" ? "info" : "alert", 18), h("span", { class: "set-main" }, p.text)))) : h("p", { style: "padding:12px 14px" }, "No configuration problems found."), { flush: true }),
+  mount(el, h("div", { class: "row" }, refresh), card("checklist", "Configuration check", x.config_problems.length ? h("div", { class: "n-log" }, x.config_problems.map((p) => h("a", { class: `n-hist ${p.level}`, href: routeHref(p.route) }, icon(p.level === "info" ? "info" : "alert", 18), h("span", { class: "set-main" }, p.text)))) : h("p", { style: "padding:12px 14px" }, "No configuration problems found."), { flush: true }),
     card("gauge", "Service health", body(
       row("Database", `${x.database.backend}, schema v${x.database.schema_version}, answered in ${x.database.latency_ms} ms`, ok(x.database.ok)),
       row("Redis", x.redis.configured ? `${x.redis.mode}${x.redis.error ? `: ${x.redis.error}` : ""}. This instance ${x.redis.leader ? "is" : "is not"} the leader.` : "Not configured: SavahBot runs in memory.", ok(!x.redis.configured || x.redis.mode === "redis", x.redis.configured ? "connected" : "not used", "unreachable")),
@@ -119,5 +120,5 @@ export async function renderDeveloper(el: HTMLElement): Promise<void> {
     card("plug", "Features", body(...Object.entries(x.features).map(([k, v]) => row(k.replace(/_/g, " "), null, h("span", { class: `chip ${v ? "ok" : ""}` }, v ? "available" : "not set up")))), { flush: true }),
     card("lock", "Secrets (only whether they are set)", body(h("p", { class: "muted small" }, "Values are never shown anywhere in SavahBot."), ...Object.entries(x.secrets).map(([k, v]) => row(k.replace(/_/g, " "), null, h("span", { class: `chip ${v ? "ok" : ""}` }, v ? "set" : "not set")))), { flush: true }),
     card("cloud", "This deployment", body(row("Version", `${x.app.name} ${x.app.version} · ${x.app.env} · Python ${x.app.python}`, null), row("Running for", dur(x.app.uptime), null), row("Backend address", x.deployment.backend_host || "not set", null), row("Dashboard address", x.deployment.frontend_host || "not set", null),
-      h("p", null, h("a", { class: "btn small", href: "#/settings?tab=all" }, icon("sliders", 14), "All environment settings"))), { flush: true }));
+      h("p", null, h("a", { class: "btn small", href: "/settings?tab=all" }, icon("sliders", 14), "All environment settings"))), { flush: true }));
 }

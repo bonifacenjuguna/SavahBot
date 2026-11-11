@@ -45,10 +45,21 @@ import { more } from "./pages/more.js";
 import { setup } from "./pages/setup.js";
 import { settings } from "./pages/settings.js";
 import type { Page } from "./pages/types.js";
+import { current, navigate, onRoute, startRouter } from "./router.js";
 
 export { APP_VERSION };
 
 const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, variables, activity, streamSettings, readerSettings, backup, insights, demo, setup, settings, more];
+/** The deliberate 404: an address that is not a page. It is drawn inside the signed-in shell, so nothing is revealed to a signed-out visitor. */
+const NOT_FOUND: Page = {
+  id: "not-found", title: "Page not found", icon: "alert",
+  render(root) {
+    mount(root, h("div", { class: "page" }, h("div", { class: "empty" }, icon("alert", 28),
+      h("h2", null, "Page not found"),
+      h("p", { class: "muted" }, `There is no page at ${location.pathname}.`),
+      h("a", { class: "btn primary", href: "/desk" }, "Go to the Desk"))));
+  },
+};
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Operate", ids: ["desk", "moderation", "commands"] },
   { title: "Manage", ids: ["notebook", "community", "bans", "security", "notifications", "weather", "backup", "insights", "demo"] },
@@ -63,11 +74,8 @@ initTheme();
 initAppearance();
 initPWA();
 
-function route(): { id: string; query: URLSearchParams } {
-  const raw = location.hash.replace(/^#\/?/, "");
-  const [path, qs] = raw.split("?");
-  return { id: path || "desk", query: new URLSearchParams(qs ?? "") };
-}
+/** One address, one page: the router resolves the path; an address that is not a page shows the "not found" page (see render). */
+startRouter(PAGES.map((p) => p.id));
 
 function tallyState(s: Status | null): { state: "live" | "demo" | "standby"; title: string; detail: string } {
   if (!s) return { state: "standby", title: "Connecting", detail: "Waiting for the backend" };
@@ -125,9 +133,9 @@ function showLogin(): void {
   const finish = (r: LoginReply): void => {
     if (r.token) {
       setToken(r.token);
-      location.hash = r.lockdown ? "#/security" : "#/desk";   // a fresh sign-in always starts on the Desk, never on the page you left
+      navigate(r.lockdown ? "/security" : "/desk");   // a fresh sign-in always starts on the Desk, never on the page you left
       boot();
-      if (r.lockdown) location.hash = "#/security";
+      if (r.lockdown) navigate("/security");
       else if (r.setup_needed) window.setTimeout(() => toast("Only your password protects this dashboard. Add a passkey or an authenticator app on the Security page."), 1200);
     } else if (r.step === "more") pane.replaceChildren(secondStep(r, finish, showLogin));
   };
@@ -203,7 +211,7 @@ function showShell(): void {
   // ----- shared actions
   const ctx: AppContext = {
     pages: PAGES,
-    go: (id) => { location.hash = `#/${id}`; },
+    go: (id) => { navigate(`/${id}`); },
     setMode: async (mode) => { await post("/api/mode", { mode }); await refreshStatus(); toast(`Switched to ${mode === "demo" ? "Demo" : "Live"} mode`); },
     signOut,
     cycleTheme: () => ctx.setTheme(nextTheme(themePref())),
@@ -236,7 +244,7 @@ function showShell(): void {
         const p = PAGES.find((x) => x.id === id)!;
         const badge = h("span", { class: "count", hidden: true }, "");
         counts.set(p.id, badge);
-        const a = h("a", { href: `#/${p.id}`, "data-id": p.id, title: p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), badge);
+        const a = h("a", { href: `/${p.id}`, "data-id": p.id, title: p.title }, icon(p.icon, 20), h("span", { class: "label" }, p.title), badge);
         navLinks.push(a);
         return a;
       }),
@@ -278,11 +286,11 @@ function showShell(): void {
   const tabbar = h("nav", { class: "tabbar", "aria-label": "Main" },
     TAB_IDS.map((id) => {
       const p = PAGES.find((x) => x.id === id)!;
-      const a = h("a", { class: "tab", href: `#/${p.id}`, "data-id": p.id }, icon(p.icon, 22), p.title, id === "moderation" ? tabBadge : null);
+      const a = h("a", { class: "tab", href: `/${p.id}`, "data-id": p.id }, icon(p.icon, 22), p.title, id === "moderation" ? tabBadge : null);
       tabLinks.push(a);
       return a;
     }),
-    h("a", { class: "tab", href: "#/more", id: "tab-more", "data-id": "more" }, icon("menu", 22), "More"));
+    h("a", { class: "tab", href: "/more", id: "tab-more", "data-id": "more" }, icon("menu", 22), "More"));
   const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
@@ -315,12 +323,13 @@ function showShell(): void {
     const key = areaOf(pageId);
     crumbs.hidden = !key;
     if (!key) return;
-    mount(crumbs, h("a", { href: "#/more" }, "More"), icon("chevronRight", 12), h("span", null, AREAS[key].title), icon("chevronRight", 12), h("span", { "aria-current": "page" }, title));
+    mount(crumbs, h("a", { href: "/more" }, "More"), icon("chevronRight", 12), h("span", null, AREAS[key].title), icon("chevronRight", 12), h("span", { "aria-current": "page" }, title));
   };
   const render = () => {
     cleanup?.();
-    const { id, query } = route();
-    const page = PAGES.find((p) => p.id === id) ?? PAGES[0];
+    const where = current();
+    const query = where.query;
+    const page = PAGES.find((p) => p.id === where.id) ?? (where.notFound ? NOT_FOUND : PAGES[0]);
     for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     // More stays lit for every page that lives behind it (Notebook, Community, Setup and so on)
@@ -329,13 +338,13 @@ function showShell(): void {
     clear(content);
     cleanupNav?.();
     drawCrumbs(page.id, page.title);
-    trackRecent(page.id);
+    if (page !== NOT_FOUND) trackRecent(page.id);
     cleanup = page.render(content, query);
     cleanupNav = installPageNav(content);
     if (lastId && lastId !== page.id) window.scrollTo(0, 0);
     lastId = page.id;
   };
-  window.onhashchange = render;
+  offs.push(onRoute(render));
 
   // ----- theme icon sync
   function syncTheme(): void {
@@ -406,7 +415,7 @@ function showShell(): void {
     void refreshStatus();
     void refreshBell();
     const busyNow = document.querySelector(".sheet, .popover, .palette") || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && content.contains(document.activeElement));
-    if (downMs >= 4000 && route().id !== "desk" && !busyNow) render();
+    if (downMs >= 4000 && current().id !== "desk" && !busyNow) render();
     void checkForNewVersion();
   }));
   for (const t of ["mode", "stream", "mod_pending", "mod_resolved"]) offs.push(feed.on(t, () => void refreshStatus()));
@@ -421,7 +430,7 @@ function showShell(): void {
   offs.push(onNotices(syncBell));
   syncBell();
   offs.push(startNotifications(() => lastStatus));
-  offs.push(listenForTaps((route) => { location.hash = route; }, () => void refreshBell(), () => void resumePush()));
+  offs.push(listenForTaps((route) => { navigate(route); }, () => void refreshBell(), () => void resumePush()));
   void resumePush();
   offs.push(installShortcuts(ctx));
 
@@ -434,7 +443,6 @@ function showShell(): void {
     cleanup?.();
     cleanup = undefined;
     offs.forEach((f) => f());
-    window.onhashchange = null;
   };
   shellCleanup = stopShell;
 }
@@ -445,7 +453,7 @@ function boot(): void {
 }
 
 loggedOut.addEventListener("out", () => {
-  location.hash = "#/desk";
+  navigate("/desk");
   toast("Your session ended. Sign in again.", "error");
   showLogin();
 });

@@ -4,6 +4,7 @@ import { ago, busy, debounce, duration, h, mount, sheet, toast } from "../dom.js
 import { icon } from "../icons.js";
 import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
+import { replaceQuery } from "../router.js";
 
 interface Cmd { id: number; name: string; response: string; userlevel: string; cooldown: number; user_cooldown: number; enabled: boolean; aliases: string[] | string }
 interface Timer { id: number; name: string; message: string; interval_seconds: number; min_lines: number; enabled: boolean; match_mode: "all" | "any"; max_runs: number; runs: number; fired: number; last_fired: number }
@@ -286,7 +287,7 @@ export const commands: Page = {
     const drawTabs = () => {
       const label: Record<Tab, string> = { commands: `Commands (${items.length})`, replies: `Auto-replies (${triggers.length})`, timers: `Timers (${timers.length})` };
       const rail = h("div", { class: "seg-control", role: "tablist" }, (Object.keys(label) as Tab[]).map((k) =>
-        h("button", { type: "button", role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; history.replaceState(null, "", `#/commands?tab=${k}`); drawTabs(); } }, label[k])));
+        h("button", { type: "button", role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; replaceQuery(`tab=${k}`); drawTabs(); } }, label[k])));
       mount(tabsBox, rail);
       tabRail(rail, "commands-tabs");
       for (const [k, el] of Object.entries(panes)) el.hidden = k !== tab;

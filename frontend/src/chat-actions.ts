@@ -94,7 +94,7 @@ function whySheet(m: ChatLine): void {
   sheet("Why it was flagged", h("div", { class: "stack" }, h("p", { class: "wrap" }, `The message from ${m.author_name} was ${verdict}.`),
     m.reasons?.length ? h("div", null, h("strong", null, "Reasons"), ...m.reasons.map((r) => h("div", { class: "muted small wrap" }, r))) : h("p", { class: "muted small" }, "No reasons were recorded for this line."),
     h("p", { class: "muted small" }, "If this was wrong, close this and choose \"Teach the bot: this is fine\". Full details and the rules are on the Moderation page."),
-    h("a", { class: "btn small", href: "#/moderation" }, "Open Moderation")));
+    h("a", { class: "btn small", href: "/moderation" }, "Open Moderation")));
 }
 
 async function allowDomain(host: string): Promise<void> {

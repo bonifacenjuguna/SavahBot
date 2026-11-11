@@ -103,15 +103,15 @@ export function areaNav(pageId: string): HTMLElement | null {
   const key = areaOf(pageId);
   if (!key) return null;
   const area = AREAS[key];
-  const items = h("div", { class: "an-items scroll-x" }, area.items.map((i) => h("a", { href: `#/${i.id}`, "aria-current": i.id === pageId ? "page" : undefined }, icon(i.icon, 16), i.title)));
+  const items = h("div", { class: "an-items scroll-x" }, area.items.map((i) => h("a", { href: `/${i.id}`, "aria-current": i.id === pageId ? "page" : undefined }, icon(i.icon, 16), i.title)));
   tabRail(items, `area:${key}`);     // the strip opens with this page's tab in the middle, every time
   const all = h("button", { class: "an-all", type: "button", "aria-label": "All pages in this section", title: "All pages", onclick: () => {
-    const box = sheet(area.title, h("div", { class: "tile-grid" }, area.items.map((i) => tile({ icon: i.icon, title: i.title, href: `#/${i.id}`, current: i.id === pageId }))));
+    const box = sheet(area.title, h("div", { class: "tile-grid" }, area.items.map((i) => tile({ icon: i.icon, title: i.title, href: `/${i.id}`, current: i.id === pageId }))));
     // a followed tile changes the address, which redraws the page: close the sheet with it
     document.querySelector(".sheet")?.addEventListener("click", (e) => { if ((e.target as HTMLElement).closest("a.tile")) box.close(); });
   } }, icon("dots", 18));
   return h("nav", { class: "area-nav", "aria-label": area.title },
-    h("a", { class: "an-back", href: "#/more", "aria-label": "All sections" }, icon("menu", 16), h("span", null, "More")),
+    h("a", { class: "an-back", href: "/more", "aria-label": "All sections" }, icon("menu", 16), h("span", null, "More")),
     h("div", { class: "an-wrap" }, items), all);
 }
 

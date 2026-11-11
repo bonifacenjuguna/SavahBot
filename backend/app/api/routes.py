@@ -131,7 +131,7 @@ async def youtube_callback(request: Request, c: Any) -> Any:
     def done(ok: bool, message: str) -> Response:
         if front:
             from urllib.parse import quote
-            return RedirectResponse(f"{front}/#/setup?youtube={'connected' if ok else 'error'}&message={quote(message)}", status_code=303)
+            return RedirectResponse(f"{front}/setup?youtube={'connected' if ok else 'error'}&message={quote(message)}", status_code=303)
         return HTMLResponse(f"<h3>{'Connected' if ok else 'Could not connect'}</h3><p>{message}</p><p>You can close this tab.</p>")
 
     if q.get("error"):

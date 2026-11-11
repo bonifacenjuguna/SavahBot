@@ -2,6 +2,7 @@
 import { h } from "../dom.js";
 import { card } from "./shared.js";
 import { SIGNAL, niceName, seg } from "./widgets.js";
+import { navigate } from "../router.js";
 
 export type Mode = "off" | "shadow" | "live";
 export type View = "overview" | "packs" | "detectors" | "learning" | "live" | "test";
@@ -60,7 +61,7 @@ export function modeSeg(label: string, value: Mode, onChange: (m: Mode) => void)
 /** Goes to a place inside Settings > Knowledge. The page redraws from the address, so the back button works. */
 export function goKnowledge(view: View, extra: Record<string, string> = {}): void {
   const q = new URLSearchParams({ tab: "knowledge", view, ...extra });
-  location.hash = `#/settings?${q.toString()}`;
+  navigate(`/settings?${q.toString()}`);
 }
 
 export const pct = (v: number | null | undefined): string => (v === null || v === undefined ? "none yet" : `${Math.round(v * 100)}%`);

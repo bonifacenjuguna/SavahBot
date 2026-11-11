@@ -6,6 +6,7 @@ import { areaNav } from "./kit.js";
 import { pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 import { confirmAct } from "./widgets.js";
+import { navigate } from "../router.js";
 
 interface Scenario { name: string; label?: string; description?: string; summary?: string; running: boolean }
 
@@ -44,7 +45,7 @@ export const demo: Page = {
       const run = (s: Scenario) => (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => {
         await post("/api/demo/scenario", { name: s.name });
         await load();
-        toastAction(`${s.label ?? s.name.replace(/_/g, " ")} started`, "Open Desk", () => { location.hash = "#/desk"; }, 6000);
+        toastAction(`${s.label ?? s.name.replace(/_/g, " ")} started`, "Open Desk", () => { navigate("/desk"); }, 6000);
       });
       const cardFor = (s: Scenario) => {
         const meta = INFO[s.name];
@@ -53,7 +54,7 @@ export const demo: Page = {
           h("div", { class: "scn-top" }, h("span", { class: "scn-ico" }, icon(meta?.icon ?? "flask", 22)), h("div", { class: "scn-title" }, h("strong", null, label), h("span", { class: "muted small" }, meta?.time ? `Takes ${meta.time}` : "Over in a moment"))),
           h("p", { class: "scn-what" }, s.description ?? s.summary ?? ""),
           meta ? h("p", { class: "scn-expect" }, icon("target", 15), h("span", null, h("b", null, "You should see "), meta.expect)) : null,
-          s.running ? h("div", { class: "scn-live", role: "status" }, h("span", { class: "scn-bar" }, h("i", null)), h("a", { href: "#/desk" }, "Running. Watch the Desk")) : null,
+          s.running ? h("div", { class: "scn-live", role: "status" }, h("span", { class: "scn-bar" }, h("i", null)), h("a", { href: "/desk" }, "Running. Watch the Desk")) : null,
           h("button", { class: `btn ${meta?.group === "full" ? "primary" : "ghost"} block-btn`, disabled: live || s.running, onclick: run(s) }, icon(s.running ? "activity" : "play", 16), s.running ? "Running" : "Run this scenario"));
       };
       const known = new Set(Object.keys(INFO));
@@ -67,7 +68,7 @@ export const demo: Page = {
         h("section", { class: "wb demo-bench", "aria-label": "Playground" },
           h("div", { class: "demo-bench-top" },
             h("div", null, h("h2", null, "Playground"), h("p", { class: "lede" }, running.length ? `${running.length} running now. Open the Desk to watch the bot react.` : "Pick a scenario below, then open the Desk to watch the bot react.")),
-            h("a", { class: "btn ghost", href: "#/desk" }, icon("desk", 16), "Open Desk")),
+            h("a", { class: "btn ghost", href: "/desk" }, icon("desk", 16), "Open Desk")),
           h("label", { class: "ambient" }, h("span", { class: "ambient-text" }, h("strong", null, "Friendly background chat"), h("span", { class: "muted small" }, "Keeps a few viewers chatting while you test, so the Desk feels alive.")),
             h("input", { type: "checkbox", class: "switch", checked: d.status.ambient, disabled: live, "aria-label": "Friendly background chat", onchange: (e: Event) => void post("/api/demo/ambient", { on: (e.target as HTMLInputElement).checked }).catch((x) => toast(x.message, "error")) }))),
         sections.map(({ g, items }) => h("section", { class: "coll", "aria-label": g.title }, h("div", { class: "coll-head" }, h("h3", { class: "coll-title" }, g.title), g.text ? h("p", { class: "muted small" }, g.text) : null), h("div", { class: "scn-grid" }, items.map(cardFor)))),

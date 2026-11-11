@@ -345,7 +345,7 @@ export const desk: Page = {
     };
 
     mount(root,
-      pageHead("desk", "Desk", "Live chat, moderation requests that need your decision, and the state of the bot.", status?.hub.mode === "demo" ? h("a", { class: "btn ghost", href: "#/demo" }, icon("flask", 16), "Run a scenario") : null),
+      pageHead("desk", "Desk", "Live chat, moderation requests that need your decision, and the state of the bot.", status?.hub.mode === "demo" ? h("a", { class: "btn ghost", href: "/demo" }, icon("flask", 16), "Run a scenario") : null),
       status?.hub.mode === "demo" ? h("div", { class: "banner demo" }, icon("flask", 18), h("span", null, "Demo mode: this chat is simulated. Open Demo to run a scenario.")) : null,
       kpis,
       tabs);

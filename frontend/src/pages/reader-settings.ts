@@ -118,7 +118,7 @@ export const readerSettings: Page = {
   id: "reader", title: "Chat reader", icon: "volume", blurb: "Read chat aloud with built-in or neural voices",
   render(root) {
     const body = h("div", { class: "stack" }, h("p", { class: "muted" }, "Loading…"));
-    mount(root, h("div", { class: "page" }, pageHead("volume", "Chat reader", "Reads your chat out loud while you are on the Desk.", h("a", { class: "btn small", href: "#/settings" }, "Back to Settings")), body));
+    mount(root, h("div", { class: "page" }, pageHead("volume", "Chat reader", "Reads your chat out loud while you are on the Desk.", h("a", { class: "btn small", href: "/settings" }, "Back to Settings")), body));
     void render(body).catch(() => mount(body, empty("alert", "The reader settings could not load.")));
   },
 };

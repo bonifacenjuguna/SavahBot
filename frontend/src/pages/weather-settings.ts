@@ -96,7 +96,7 @@ async function alertsCard(el: HTMLElement, p: Prefs): Promise<HTMLElement> {
   const describe = (r: Rule) => (r.kind === "summary" ? `Every day at ${r.summary_time}` : `${r.variable_label} ${r.op} ${r.threshold}${r.unit ? " " + r.unit : ""} within ${r.window_hours} h`);
   return card("bell", "Weather alerts", h("div", null, h("div", { style: "padding:6px 14px" },
     row("Send weather alerts", "They arrive through Notifications, so quiet hours, pause and push devices all apply.", sw(p.alerts.enabled, "Weather alerts", (v) => void savePrefs({ alerts: { enabled: v } }).catch(fail))),
-    h("p", { class: "small" }, h("a", { href: "#/notifications?tab=categories" }, "Choose which weather alerts push, ring the bell or message Telegram"))),
+    h("p", { class: "small" }, h("a", { href: "/notifications?tab=categories" }, "Choose which weather alerts push, ring the bell or message Telegram"))),
   h("div", { class: "n-log" }, rl.rules.map((r) => h("div", { class: "n-log-row n-dev" }, h("div", { class: "n-row-main" }, h("strong", null, r.name), h("span", { class: "muted small" }, describe(r))),
     sw(r.enabled, `Enable ${r.name}`, (v) => void patch(`/api/weather/rules/${r.id}`, { enabled: v }).catch(fail)),
     h("button", { class: "btn small ghost", type: "button", "aria-label": `Edit ${r.name}`, onclick: () => edit(r) }, icon("edit", 14)),
@@ -115,7 +115,7 @@ export const weatherSettings: Page = {
   id: "weather-settings", title: "Weather settings", icon: "sliders", blurb: "Places, units, refresh and alerts",
   render(root) {
     const body = h("div", { class: "k-stack" }, h("p", { class: "muted" }, "Loading…"));
-    mount(root, h("div", { class: "page" }, areaNav("weather"), pageHead("cloudSun", "Weather settings", "Places, units, refresh and alerts.", h("a", { class: "btn small", href: "#/weather" }, icon("cloudSun", 15), "Back to Weather")), lede("Weather comes from Open-Meteo through your SavahBot server. No key is needed."), body));
+    mount(root, h("div", { class: "page" }, areaNav("weather"), pageHead("cloudSun", "Weather settings", "Places, units, refresh and alerts.", h("a", { class: "btn small", href: "/weather" }, icon("cloudSun", 15), "Back to Weather")), lede("Weather comes from Open-Meteo through your SavahBot server. No key is needed."), body));
     void render(body).catch((e) => { fail(e); mount(body, empty("alert", "Settings could not load.")); });
   },
 };

@@ -61,7 +61,7 @@ export const variables: Page = {
   id: "variables", title: "Variables", icon: "sparkle", blurb: "Your own $(names) for commands and messages",
   render(root) {
     const body = h("div", { class: "stack" }, h("p", { class: "muted" }, "Loading…"));
-    mount(root, h("div", { class: "page" }, pageHead("sparkle", "Variables", "Short names for things you repeat, like links.", h("a", { class: "btn small", href: "#/settings" }, "Back to Settings")), body));
+    mount(root, h("div", { class: "page" }, pageHead("sparkle", "Variables", "Short names for things you repeat, like links.", h("a", { class: "btn small", href: "/settings" }, "Back to Settings")), body));
     void render(body).catch(() => mount(body, empty("alert", "Variables could not load.")));
   },
 };

@@ -71,7 +71,7 @@ export function openStreamLink(): { close: () => void } {
         h("span", null, h("strong", null, "Search for the live stream automatically"), h("span", { class: "muted small", style: "display:block" }, "Costs YouTube quota. Turn it off if you always paste a link.")),
         h("input", { type: "checkbox", class: "switch", checked: src.auto_detect, "aria-label": "Search automatically",
           onchange: (e: Event) => { const on = (e.target as HTMLInputElement).checked; void save({ auto_detect: on }, on ? "Auto-search is on" : "Auto-search is off"); } })),
-      h("p", { class: "muted small" }, "It must be a live video of the channel you moderate. A link from another channel is refused. The full setup is in ", h("a", { href: "#/setup", onclick: () => box.close() }, "Setup"), "."));
+      h("p", { class: "muted small" }, "It must be a live video of the channel you moderate. A link from another channel is refused. The full setup is in ", h("a", { href: "/setup", onclick: () => box.close() }, "Setup"), "."));
     paint();
   };
   draw();

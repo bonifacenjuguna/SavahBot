@@ -7,6 +7,7 @@ import { areaNav } from "./kit.js";
 import { telegramControl } from "./telegram-control.js";
 import { pageHead } from "./shared.js";
 import type { Page } from "./types.js";
+import { replaceQuery } from "../router.js";
 
 export interface Setup {
   requirements: Record<string, { env: string; set: boolean }[]>;
@@ -64,7 +65,7 @@ export const setup: Page = {
 
     const go = (id: string) => {
       step = id;
-      history.replaceState(null, "", `#/setup?step=${id}`);   // no page redraw, and the address can be shared or bookmarked
+      replaceQuery(`step=${id}`);   // no page redraw, and the address can be shared or bookmarked
       draw();
       panel.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     };
@@ -86,7 +87,7 @@ export const setup: Page = {
 
     const drawNav = () => mount(nav, STEPS.map((x, i) => {
       const t = stepTone(x.id);
-      return h("a", { href: `#/setup?step=${x.id}`, class: "sn-item", "aria-current": x.id === step ? "step" : undefined, "data-tone": t.tone,
+      return h("a", { href: `/setup?step=${x.id}`, class: "sn-item", "aria-current": x.id === step ? "step" : undefined, "data-tone": t.tone,
         onclick: (e: Event) => { e.preventDefault(); go(x.id); } },
         h("span", { class: "sn-dot" }, t.tone === "ok" ? statusIcon("ok", 28) : t.tone === "bad" ? statusIcon("bad", 28) : t.tone === "warn" ? statusIcon("warn", 28) : String(i + 1)),
         h("span", { class: "sn-text" }, h("strong", null, x.title), h("span", null, t.text || x.blurb)));

@@ -6,6 +6,7 @@ import { icon } from "./icons.js";
 import type { Page } from "./pages/types.js";
 import { installApp, getPWAState } from "./pwa.js";
 import { refreshStatus, status } from "./state.js";
+import { navigate } from "./router.js";
 
 // ------------------------------------------------------------------ theme
 export type ThemePref = "system" | "light" | "dark";
@@ -108,17 +109,17 @@ export function openPalette(ctx: AppContext): void {
     { group: "Actions", label: "Pause Telegram for 30 minutes", icon: "bellOff", run: async () => { await post("/api/telegram/control", { pause_minutes: 30 }); toast("Telegram is paused for 30 minutes"); }, keywords: "telegram pause quiet silence mute" },
     { group: "Actions", label: "Resume Telegram", icon: "send", run: async () => { await post("/api/telegram/control", { pause_minutes: 0 }); toast("Telegram is back"); }, keywords: "telegram resume unpause" },
     { group: "Actions", label: "Pause push notifications for 1 hour", icon: "bellOff", run: async () => { await post("/api/notify/pause", { minutes: 60 }); toast("Notifications are paused for an hour"); }, keywords: "notifications pause quiet mute spam" },
-    { group: "Go to", label: "Stream source: paste a live link", icon: "link", run: () => { location.hash = "#/setup?step=youtube"; }, keywords: "youtube stream video link id auto search" },
+    { group: "Go to", label: "Stream source: paste a live link", icon: "link", run: () => { navigate("/setup?step=youtube"); }, keywords: "youtube stream video link id auto search" },
     ...ctx.pages.map((p): Item => ({ group: "Go to", label: p.title, hint: p.blurb, icon: p.icon, run: () => ctx.go(p.id), keywords: p.id })),
     { group: "Actions", label: live ? "Switch to Demo mode" : "Switch to Live mode", icon: live ? "flask" : "zap", run: () => ctx.setMode(live ? "demo" : "live"), keywords: "mode demo live" },
-    { group: "Quick add", label: "New note", icon: "notebook", run: () => { location.hash = "#/notebook?compose=1"; }, keywords: "note write checklist" },
-    { group: "Quick add", label: "Set a reminder", icon: "bell", run: () => { location.hash = "#/notebook?pane=reminders"; }, keywords: "remind timer" },
-    { group: "Quick add", label: "Add a quote", icon: "quote", run: () => { location.hash = "#/community?add=quote"; }, keywords: "quote community" },
-    { group: "Quick add", label: "Test a message against the rules", icon: "gauge", run: () => { location.hash = "#/moderation?tab=rules"; }, keywords: "score moderation test try" },
-    { group: "Quick add", label: "Check a message against the knowledge", icon: "flask", run: () => { location.hash = "#/settings?tab=knowledge&view=test"; }, keywords: "knowledge test lab scam spam detect try" },
-    { group: "Go to", label: "Knowledge: packs, detectors and learning", icon: "sparkle", hint: "What the bot knows", run: () => { location.hash = "#/settings?tab=knowledge"; }, keywords: "knowledge intelligence packs detectors learning feeds scam" },
-    { group: "Actions", label: "Review what the bot has learned", icon: "trending", run: () => { location.hash = "#/settings?tab=knowledge&view=learning"; }, keywords: "learning suggestions approve reject teach lesson" },
-    { group: "Go to", label: "Knowledge: live threat lists", icon: "radio", run: () => { location.hash = "#/settings?tab=knowledge&view=live"; }, keywords: "feeds phishing malware domains live data" },
+    { group: "Quick add", label: "New note", icon: "notebook", run: () => { navigate("/notebook?compose=1"); }, keywords: "note write checklist" },
+    { group: "Quick add", label: "Set a reminder", icon: "bell", run: () => { navigate("/notebook?pane=reminders"); }, keywords: "remind timer" },
+    { group: "Quick add", label: "Add a quote", icon: "quote", run: () => { navigate("/community?add=quote"); }, keywords: "quote community" },
+    { group: "Quick add", label: "Test a message against the rules", icon: "gauge", run: () => { navigate("/moderation?tab=rules"); }, keywords: "score moderation test try" },
+    { group: "Quick add", label: "Check a message against the knowledge", icon: "flask", run: () => { navigate("/settings?tab=knowledge&view=test"); }, keywords: "knowledge test lab scam spam detect try" },
+    { group: "Go to", label: "Knowledge: packs, detectors and learning", icon: "sparkle", hint: "What the bot knows", run: () => { navigate("/settings?tab=knowledge"); }, keywords: "knowledge intelligence packs detectors learning feeds scam" },
+    { group: "Actions", label: "Review what the bot has learned", icon: "trending", run: () => { navigate("/settings?tab=knowledge&view=learning"); }, keywords: "learning suggestions approve reject teach lesson" },
+    { group: "Go to", label: "Knowledge: live threat lists", icon: "radio", run: () => { navigate("/settings?tab=knowledge&view=live"); }, keywords: "feeds phishing malware domains live data" },
     { group: "Actions", label: "Refresh status", icon: "refresh", run: async () => { await refreshStatus(); toast("Status refreshed"); }, keywords: "reload" },
     { group: "Appearance", label: "Theme: follow system", icon: "monitor", run: () => ctx.setTheme("system"), keywords: "theme appearance" },
     { group: "Appearance", label: "Theme: light", icon: "sun", run: () => ctx.setTheme("light"), keywords: "theme appearance" },

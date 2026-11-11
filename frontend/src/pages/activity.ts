@@ -70,7 +70,7 @@ export const activity: Page = {
     const savePolicy = (values: Record<string, unknown>) => void patch("/api/settings", { values }).then(() => toast("Saved")).catch((e) => toast(e instanceof Error ? e.message : "Could not save", "error"));
     keep.onchange = () => { const n = Number(keep.value); if (!Number.isFinite(n) || n < 0 || n > 3650) { toast("Use 0 to 3650", "error"); return; } savePolicy({ activity_retention_days: n }); };
     notifySw.onchange = () => savePolicy({ activity_notify_sensitive: notifySw.checked });
-    mount(root, h("div", { class: "page" }, pageHead("checklist", "Activity log", "What changed, newest first. Secrets, tokens, passwords and message text are never recorded. Sensitive entries cannot be deleted here; they leave when the retention period ends.", h("div", { class: "row", style: "gap:8px" }, h("a", { class: "btn small", href: "#/settings" }, "Back to Settings"), exp)),
+    mount(root, h("div", { class: "page" }, pageHead("checklist", "Activity log", "What changed, newest first. Secrets, tokens, passwords and message text are never recorded. Sensitive entries cannot be deleted here; they leave when the retention period ends.", h("div", { class: "row", style: "gap:8px" }, h("a", { class: "btn small", href: "/settings" }, "Back to Settings"), exp)),
       h("div", { class: "sp-card" }, h("div", { class: "row wrap", style: "gap:8px" }, search, area, imp, rng), list), policy));
     void load();
   },

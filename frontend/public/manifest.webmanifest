@@ -36,7 +36,7 @@
       "name": "Desk",
       "short_name": "Desk",
       "description": "Live chat and status",
-      "url": "/#/desk",
+      "url": "/desk",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -49,7 +49,7 @@
       "name": "Moderation queue",
       "short_name": "Moderation",
       "description": "Messages waiting for a decision",
-      "url": "/#/moderation",
+      "url": "/moderation",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -62,7 +62,7 @@
       "name": "Commands",
       "short_name": "Commands",
       "description": "Chat commands and timers",
-      "url": "/#/commands",
+      "url": "/commands",
       "icons": [
         {
           "src": "/icon-192.png",

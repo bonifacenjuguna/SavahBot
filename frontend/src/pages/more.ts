@@ -58,9 +58,9 @@ export const more: Page = {
           h("div", { class: "grow" }, h("div", { class: "mh-title" }, h("strong", null, t.title), h("span", { class: "mh-dot", "aria-hidden": "true" })), h("div", { class: "mh-detail" }, t.detail))),
         h("div", { class: "mc-switch wide", role: "group", "aria-label": "Bot mode" }, mk("demo", "flask", "Demo"), mk("live", "radio", "Live")),
         s ? h("div", { class: "mh-stats" },
-          h("a", { href: "#/moderation" }, h("b", null, String(s.pending)), h("span", null, "waiting")),
-          h("a", { href: "#/desk" }, h("b", null, String(s.hub.lines)), h("span", null, "chat lines")),
-          h("a", { href: "#/settings" }, h("b", null, s.hub.mod_mode), h("span", null, "moderation"))) : null);
+          h("a", { href: "/moderation" }, h("b", null, String(s.pending)), h("span", null, "waiting")),
+          h("a", { href: "/desk" }, h("b", null, String(s.hub.lines)), h("span", null, "chat lines")),
+          h("a", { href: "/settings" }, h("b", null, s.hub.mod_mode), h("span", null, "moderation"))) : null);
     };
 
     // ------------------------------------------------------------ searchable sections
@@ -73,7 +73,7 @@ export const more: Page = {
         const items = area.items.filter((i) => hit(i.title, BLURB[i.id] ?? ""));
         if (!items.length) return null;
         return h("section", { class: "more-group" }, h("h2", { class: "mg-title" }, area.title),
-          h("div", { class: "tiles" }, items.map((i) => tile({ icon: i.icon, title: i.title, text: BLURB[i.id], href: `#/${i.id}`, meta: metaFor(i.id) }))));
+          h("div", { class: "tiles" }, items.map((i) => tile({ icon: i.icon, title: i.title, text: BLURB[i.id], href: `/${i.id}`, meta: metaFor(i.id) }))));
       }).filter(Boolean);
       mount(sections, blocks.length ? blocks : empty("search", "Nothing matches. Try the command palette for actions."));
     };

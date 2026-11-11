@@ -9,6 +9,7 @@ import { seg } from "./widgets.js";
 import { renderOverview } from "./settings-overview.js";
 import { renderAppearance, renderDeveloper, renderDevice, renderPrivacy } from "./settings-panels.js";
 import type { Page } from "./types.js";
+import { navigate } from "../router.js";
 
 interface Setting {
   name: string; env: string; group: string; description: string; type: string; default: unknown; value: unknown;
@@ -26,7 +27,7 @@ export const settings: Page = {
       { id: "device", label: "Device & app", icon: "smartphone" }, { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Knowledge", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
     type Tab = (typeof TABS)[number]["id"];
     const tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? "overview") as Tab;
-    const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { location.hash = v === "overview" ? "#/settings" : `#/settings?tab=${v}`; });
+    const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "overview" ? "/settings" : `/settings?tab=${v}`); });
     const host = h("div", { class: "k-stack" });
     const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), h("div", { class: "tab-row" }, views.el), host);
     const fail = (e: unknown) => mount(host, empty("alert", e instanceof Error ? e.message : "This section could not load."));

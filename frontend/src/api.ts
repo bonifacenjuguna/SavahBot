@@ -1,3 +1,4 @@
+import { navigate } from "./router.js";
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code: string = "") {
     super(message);
@@ -91,7 +92,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
     setToken("");
     loggedOut.dispatchEvent(new Event("out"));
   }
-  if (res.status === 403 && data?.code === "lockdown" && !location.hash.startsWith("#/security")) location.hash = "#/security";
+  if (res.status === 403 && data?.code === "lockdown" && location.pathname !== "/security") navigate("/security");
   if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status}).`, res.status, data?.code ?? "");
   return data as T;
 }

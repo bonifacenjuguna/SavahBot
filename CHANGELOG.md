@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.6
+
+Clean URLs. The dashboard no longer uses `/#/desk`; every page has a real address.
+
+### Changed
+- **Real paths instead of hash routes.** `/desk`, `/moderation`, `/security`, `/settings?tab=appearance` and so on, on the browser History API (a small router in `src/router.ts`, no library). Back, forward, refresh, bookmarks and shared links all work on the real path. The same page opened twice in a row does not add history entries.
+- **Old links still work.** `/#/security`, `/#/moderation?tab=rules`, `/#/dashboard` and similar are rewritten to the clean address on load (and if one appears while the app is open), without adding a history entry. Query strings are kept; `token`, `password`, `key` and similar parameters are dropped. A plain `#fragment` is left alone.
+- **A real "Page not found" page** for an address that is not a page, instead of silently showing the Desk.
+- **Only pages of this app can be navigated to.** Addresses are checked against the list of registered pages, so `//host`, `https://…` and `javascript:` can never be a destination.
+- **Vercel:** `vercel.json` rewrites page paths to `index.html`, and leaves `api/`, `assets/` and anything with a file extension alone.
+- **YouTube sign-in return** now goes to `/setup?youtube=…` (old `/#/setup?…` links still convert).
+- Installed-app shortcuts and push-notification taps open clean paths. The backend still stores notification routes as `#/route` tokens; the dashboard converts them.
+
+### Added
+- `npm test` runs the routing rules (`frontend/tests/routes.test.ts`, Node's built-in test runner, no new dependencies).
+
 ## 1.3.5
 
 One chat per livestream, a stream history, and a dashboard that reconnects by itself.

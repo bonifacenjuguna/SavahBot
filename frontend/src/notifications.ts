@@ -5,6 +5,7 @@ import { dateTime, h, mount, sheet, toast } from "./dom.js";
 import { icon , statusIcon } from "./icons.js";
 import type { Status } from "./state.js";
 import { dateRange, type RangeValue } from "./pages/kit.js";
+import { navigate } from "./router.js";
 
 export type Kind = "info" | "ok" | "warn" | "bad";
 export interface Notice { id: number; ts: number; kind: Kind; icon: string; title: string; text: string; href?: string; read: boolean; count: number; category: string }
@@ -30,13 +31,13 @@ export async function openNotification(id: number): Promise<void> {
   markRead(item.id);
   let label = item.category;
   try { label = (await get<{ items: { id: string; name: string }[] }>("/api/notify/categories")).items.find((c) => c.id === item.category)?.name ?? item.category; } catch { /* the id is readable enough */ }
-  const own = !item.route || item.route.startsWith("#/notifications");
+  const own = !item.route || /^#?\/notifications/.test(item.route);
   const box = sheet("Notification", h("div", { class: "stack", style: "gap:14px" },
     h("div", { class: `notice ${item.kind}`, style: "pointer-events:none" }, h("span", { class: "notice-ico" }, icon(item.icon, 18)), h("span", { class: "notice-main" }, h("strong", null, item.title), item.body ? h("span", null, item.body) : null)),
     h("p", { class: "muted small" }, `${label} · ${dateTime(item.ts)}${item.count > 1 ? ` · happened ${item.count} times` : ""}`),
     h("div", { class: "row wrap", style: "gap:8px" },
-      own ? null : h("button", { class: "btn primary", type: "button", onclick: () => { box.close(); location.hash = item.route; } }, icon("arrowRight", 16), "Open what it is about"),
-      h("button", { class: "btn ghost", type: "button", onclick: () => { box.close(); location.hash = "#/notifications?tab=categories"; } }, icon("sliders", 16), "Choose what reaches me"),
+      own ? null : h("button", { class: "btn primary", type: "button", onclick: () => { box.close(); navigate(item.route); } }, icon("arrowRight", 16), "Open what it is about"),
+      h("button", { class: "btn ghost", type: "button", onclick: () => { box.close(); navigate("/notifications?tab=categories"); } }, icon("sliders", 16), "Choose what reaches me"),
       item.category === "test.test" ? null : h("button", { class: "btn ghost", type: "button", onclick: async () => {
         try { await api("PATCH", "/api/notify/prefs", { categories: { [item.category]: { push: false, inapp: false } } }); toast(`${label} is switched off. You can turn it back on under Categories.`); box.close(); void refresh(); } catch (e) { toast(e instanceof Error ? e.message : "Could not change that", "error"); }
       } }, icon("bellOff", 16), "Stop these"))));
@@ -108,7 +109,7 @@ function panelContent(close: () => void): { el: HTMLElement; stop: () => void } 
     readAll.disabled = unreadCount() === 0;
     clear.disabled = items.length === 0;
     mount(list, shown.length ? shown.map((n) => {
-      const open = () => { markRead(n.id); if (n.href) { close(); location.hash = n.href; } };   // the href of a notification without a page of its own opens the notification itself
+      const open = () => { markRead(n.id); if (n.href) { close(); navigate(n.href); } };   // the href of a notification without a page of its own opens the notification itself
       return h("button", { class: `notice ${n.kind}${n.read ? "" : " unread"}`, type: "button", onclick: open },
         h("span", { class: "notice-ico" }, icon(n.icon, 18)),
         h("span", { class: "notice-body" }, h("strong", null, n.title), n.text ? h("span", { class: "small muted" }, n.text) : null, h("span", { class: "small muted" }, ago(n.ts))),
@@ -117,7 +118,7 @@ function panelContent(close: () => void): { el: HTMLElement; stop: () => void } 
   }
   draw();
   const off = onNotices(draw);
-  const foot = h("a", { class: "btn small ghost", href: "#/notifications", onclick: () => close() }, icon("sliders", 15), "Notification settings");
+  const foot = h("a", { class: "btn small ghost", href: "/notifications", onclick: () => close() }, icon("sliders", 15), "Notification settings");
   const el = h("div", { class: "notice-panel" }, h("div", { class: "notice-tools" }, filter, h("span", { class: "tb-spacer" }), readAll, clear), dates.el, list, h("div", { class: "notice-foot" }, foot));
   return { el, stop: off };
 }

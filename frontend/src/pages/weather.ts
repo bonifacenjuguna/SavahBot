@@ -114,7 +114,7 @@ function render(root: HTMLElement, o: Overview, pick: (id: number) => void, relo
     h("span", { class: "wx-range", "aria-hidden": "true" }, h("i", { style: `left:${(((d.tmin ?? lo) - lo) / span) * 100}%;right:${100 - (((d.tmax ?? hi) - lo) / span) * 100}%` })),
     h("span", { class: "wx-hi" }, `${n(d.tmax)}°`), h("span", { class: "wx-dc muted small" }, d.cond.label)))), { flush: true }) : null;
   mount(root, h("div", { class: "page" }, areaNav("weather"),
-    pageHead("cloudSun", "Weather", "Conditions and forecast for your saved places.", h("a", { class: "btn small", href: "#/weather-settings" }, icon("sliders", 15), "Weather settings")),
+    pageHead("cloudSun", "Weather", "Conditions and forecast for your saved places.", h("a", { class: "btn small", href: "/weather-settings" }, icon("sliders", 15), "Weather settings")),
     status, now, hourly, daily, attribution(o)));
 }
 
