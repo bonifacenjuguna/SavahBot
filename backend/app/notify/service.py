@@ -244,6 +244,9 @@ class Notifier:
             if nid is None:
                 nid = await self.db.insert("INSERT INTO notifications (ts, category, title, body, route, priority, kind, icon, dedupe_key, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                            (now, cid, title, body, route, prio, c.kind, c.icon, f"{cid}:{key}" if key else "", json.dumps(data or {})[:2000]))
+            if nid and route == "#/notifications":
+                route = f"#/notifications?open={nid}"      # a tap on a notification with no page of its own shows that notification
+                await self.db.execute("UPDATE notifications SET route = ? WHERE id = ?", (route, nid))
             self.bus.publish("notify", {"id": nid, "category": cid, "title": title, "body": body, "route": route, "kind": c.kind, "icon": c.icon, "priority": prio, "folded": folded})
         if folded:
             return nid                           # one push per burst: later copies only raise the count in the inbox
@@ -496,8 +499,10 @@ class Notifier:
                 await self.emit("system.quota", f"YouTube quota at {lvl}%", f"{q.get('used')} of {q.get('daily')} units used today.", key=str(lvl), priority="high" if lvl >= 90 else None, now=now)
 
     # ------------------------------------------------------------------ inbox
-    async def inbox(self, *, limit: int = 50, before: float | None = None, unread: bool = False, category: str = "", since: float | None = None, until: float | None = None) -> dict[str, Any]:
+    async def inbox(self, *, limit: int = 50, before: float | None = None, unread: bool = False, category: str = "", since: float | None = None, until: float | None = None, nid: int | None = None) -> dict[str, Any]:
         where, args = ["1=1"], []
+        if nid:
+            where.append("id = ?"); args.append(nid)
         if before:
             where.append("ts < ?"); args.append(before)
         if unread:
@@ -617,7 +622,8 @@ class Notifier:
             return {"ok": False, "results": [], "problems": ["No device is registered yet. Turn on push on this device first."]}
         title, body = "SavahBot test", "If you can read this, push notifications work on this device."
         nid = await self.db.insert("INSERT INTO notifications (ts, category, title, body, route, priority, kind, icon, dedupe_key) VALUES (?, 'test.test', ?, ?, '#/notifications', 'normal', 'info', 'bell', '')", (now, title, body))
-        self.bus.publish("notify", {"id": nid, "category": "test.test", "title": title, "body": body, "route": "#/notifications", "kind": "info", "icon": "bell", "priority": "normal", "folded": False})
+        await self.db.execute("UPDATE notifications SET route = ? WHERE id = ?", (f"#/notifications?open={nid}", nid))
+        self.bus.publish("notify", {"id": nid, "category": "test.test", "title": title, "body": body, "route": f"#/notifications?open={nid}", "kind": "info", "icon": "bell", "priority": "normal", "folded": False})
         results = []
         for d in devs:
             idem = f"test:{nid}:{d['id']}"

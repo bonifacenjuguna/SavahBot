@@ -1,4 +1,5 @@
 /** Cross-page UI: theme, command palette, keyboard shortcuts. */
+import { recentPages } from "./nav.js";
 import { get, post } from "./api.js";
 import { h, mount, sheet, toast } from "./dom.js";
 import { icon } from "./icons.js";
@@ -101,7 +102,13 @@ export function openPalette(ctx: AppContext): void {
   if (paletteOpen) return;
   paletteOpen = true;
   const live = status?.hub.mode === "live";
+  const recent = recentPages().map((id) => ctx.pages.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p).slice(1, 5);
   const items: Item[] = [
+    ...recent.map((p): Item => ({ group: "Recent", label: p.title, hint: p.blurb, icon: p.icon, run: () => ctx.go(p.id), keywords: `recent ${p.id}` })),
+    { group: "Actions", label: "Pause Telegram for 30 minutes", icon: "bellOff", run: async () => { await post("/api/telegram/control", { pause_minutes: 30 }); toast("Telegram is paused for 30 minutes"); }, keywords: "telegram pause quiet silence mute" },
+    { group: "Actions", label: "Resume Telegram", icon: "send", run: async () => { await post("/api/telegram/control", { pause_minutes: 0 }); toast("Telegram is back"); }, keywords: "telegram resume unpause" },
+    { group: "Actions", label: "Pause push notifications for 1 hour", icon: "bellOff", run: async () => { await post("/api/notify/pause", { minutes: 60 }); toast("Notifications are paused for an hour"); }, keywords: "notifications pause quiet mute spam" },
+    { group: "Go to", label: "Stream source: paste a live link", icon: "link", run: () => { location.hash = "#/setup?step=youtube"; }, keywords: "youtube stream video link id auto search" },
     ...ctx.pages.map((p): Item => ({ group: "Go to", label: p.title, hint: p.blurb, icon: p.icon, run: () => ctx.go(p.id), keywords: p.id })),
     { group: "Actions", label: live ? "Switch to Demo mode" : "Switch to Live mode", icon: live ? "flask" : "zap", run: () => ctx.setMode(live ? "demo" : "live"), keywords: "mode demo live" },
     { group: "Quick add", label: "New note", icon: "notebook", run: () => { location.hash = "#/notebook?compose=1"; }, keywords: "note write checklist" },

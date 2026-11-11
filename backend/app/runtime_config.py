@@ -38,6 +38,7 @@ class RuntimeConfig:
         self.db = db
         self._overrides: dict[str, Any] = {}
         self._listeners: list[Callable[[str, Any], None]] = []
+        self.activity: Any = None      # the activity log, set by the container
 
     def get(self, name: str) -> Any:
         if name in self._overrides:
@@ -75,6 +76,7 @@ class RuntimeConfig:
         if not is_editable(name):
             raise PermissionError(f"{name} can only be changed with an environment variable.")
         coerced = validate_value(name, value)
+        old = self.get(name)
         self._overrides[name] = coerced
         if self.db:
             await self.db.execute(
@@ -83,6 +85,8 @@ class RuntimeConfig:
                 (name, str(coerced).lower() if isinstance(coerced, bool) else str(coerced), time.time()),
             )
         self._notify(name, coerced)
+        if self.activity is not None:
+            await self.activity.setting(name, old, coerced)
         return coerced
 
     async def reset(self, name: str) -> Any:

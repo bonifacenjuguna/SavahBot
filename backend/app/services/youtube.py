@@ -33,6 +33,9 @@ ACTION_LABEL = {"chat_delete": "delete messages", "ban": "ban or time out people
 DENIED_PHRASE = "not allowed to"  # every permission refusal message contains this, so callers (the hub) can stop a batch on it
 
 
+VIDEO_ID_RE = re.compile(r"^[0-9A-Za-z_-]{11}$")
+
+
 def parse_video_id(value: str) -> str:
     """Accepts a bare video ID or a watch / youtu.be / live / shorts URL."""
     v = (value or "").strip()
@@ -242,6 +245,9 @@ def _reason(data: Any) -> str:
         return ""
 
 
+from .live_extras import parse_event  # noqa: E402
+
+
 def parse_item(item: dict[str, Any]) -> ChatMessage | None:
     sn, ad = item.get("snippet") or {}, item.get("authorDetails") or {}
     typ = sn.get("type")
@@ -289,6 +295,8 @@ class YouTubeSource:
         self.target: dict[str, str] | None = None    # the channel being moderated (whose live chat is read)
         self.video_channel_id = ""
         self.last_action_error = ""
+        self.notice = ""                 # a calm status line (not an error), e.g. search paused to protect quota
+        self._wake = asyncio.Event()
         self._identity_tried = 0.0
         self._target_raw = ""
         self._detect_day = ""
@@ -341,7 +349,7 @@ class YouTubeSource:
                 "polls": self.polls, "quota": self.quota.status(), "redirect_uri": self.auth.redirect_uri(),
                 "account": self.account, "target": self.target or self._configured_target(), "target_source": self._target_source(),
                 "video_channel_id": self.video_channel_id,
-                "last_action_error": self.last_action_error, "permissions": dict(self.perms),
+                "last_action_error": self.last_action_error, "permissions": dict(self.perms), "notice": self.notice, "source": self.source(),
                 "denied_for": {k: max(0, round(until - time.time())) for k, (until, _m) in self._denied.items() if until > time.time()},
                 "expected_account": (self.cfg.get("youtube_moderator_account") or "").strip()}
 
@@ -363,7 +371,7 @@ class YouTubeSource:
         wait = 0.0
         while True:
             try:
-                await asyncio.sleep(wait)
+                await self._sleep(wait)
                 wait = await self._step()
             except asyncio.CancelledError:
                 raise
@@ -376,6 +384,28 @@ class YouTubeSource:
                 self.last_error = "Unexpected error, see server logs"
                 self.state = "error"
                 wait = self._backoff()
+
+    async def _sleep(self, wait: float) -> None:
+        """Sleeps, but wakes at once when the owner changes where the stream comes from (nudge)."""
+        self._wake.clear()
+        nap, wake = asyncio.ensure_future(asyncio.sleep(wait)), asyncio.ensure_future(self._wake.wait())
+        try:
+            await asyncio.wait({nap, wake}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            wake.cancel()
+            if not nap.done():
+                nap.cancel()
+        if nap.done():
+            nap.result()    # surface anything the sleep itself raised (and keep cancellation visible to the caller)
+
+    def nudge(self) -> None:
+        self._wake.set()
+
+    def source(self) -> dict[str, Any]:
+        video = parse_video_id(self.cfg.get("youtube_video_id"))
+        auto = bool(self.cfg.get("youtube_auto_detect_live"))
+        return {"auto_detect": auto, "video": video if VIDEO_ID_RE.match(video or "") else "", "video_raw": (self.cfg.get("youtube_video_id") or "").strip()[:200],
+                "mode": "link" if VIDEO_ID_RE.match(video or "") else "auto" if auto else "none"}
 
     async def _step(self) -> float:
         await self.quota.sync()
@@ -541,6 +571,7 @@ class YouTubeSource:
         return 0.0
 
     async def _detect(self) -> float:
+        self.notice = ""
         interval = float(self.cfg.get("youtube_detect_interval_seconds"))
         if not self.quota.can_afford("video_list"):
             self.state = "quota_low"
@@ -569,11 +600,16 @@ class YouTubeSource:
                 self.last_error = f"Video {video} belongs to channel {actual or 'unknown'}, not the target channel {target}. SavahBot did not attach to it."
                 return 60.0
             if not (item.get("liveStreamingDetails") or {}).get("activeLiveChatId"):
-                self.state, self.last_error = "offline", ""
-                return interval
-            return self._attach(item)
+                if not self.cfg.get("youtube_auto_detect_live"):
+                    self.state, self.last_error = "offline", ""
+                    self.notice = "Waiting for the linked video to go live. Auto-search is off."
+                    return interval
+                # the linked video is not live (it ended or has not started): go back to looking for the channel's live stream
+            else:
+                return self._attach(item)
 
         if not self.cfg.get("youtube_auto_detect_live"):
+            self.notice = "Auto-search is off and no stream link is set. Paste a link to attach, or turn auto-search on."
             self.state, self.last_error = "offline", ""
             return interval
 
@@ -609,8 +645,9 @@ class YouTubeSource:
         wait = float(self.cfg.get("youtube_target_detect_interval_seconds"))
         if self._detect_spent + cost > self.cfg.get("yt_daily_quota") * self.cfg.get("yt_detect_budget_fraction") or not self.quota.can_afford("search"):
             self.state = "search_paused"
-            self.last_error = ("Searching for the stream is paused for today to protect the YouTube quota. "
-                               "Set YOUTUBE_VIDEO_ID to the live video's ID or link to attach directly.")
+            self.last_error = ""
+            self.notice = ("Searching for the stream is paused for today to protect the YouTube quota. "
+                           "Paste the live video's link or ID on this page to attach directly, or search again tomorrow.")
             return 900.0
         self._detect_spent += cost
         await self.quota.store.quota_add(f"detect:{day}", cost)
@@ -659,6 +696,12 @@ class YouTubeSource:
                 if (item.get("snippet") or {}).get("type") == "chatEndedEvent":
                     ended = True  # YouTube says this chat is over: stop here instead of waiting for an error on the next poll
                     continue
+                ev = parse_event(item)
+                if ev is not None and not backfill:
+                    try:
+                        await self.c.extras.handle(ev, self.video_id)
+                    except Exception:
+                        logger.exception("Could not handle a stream event")
                 msg = parse_item(item)
                 if msg is None:
                     continue

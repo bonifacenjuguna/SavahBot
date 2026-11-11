@@ -1,7 +1,8 @@
 import { del, get, post } from "../api.js";
 import { busy, h, mount, toast, ago } from "../dom.js";
-import { icon } from "../icons.js";
+import { statusIcon } from "../icons.js";
 import { confirmAct } from "./widgets.js";
+import { folded } from "../nav.js";
 
 interface Control {
   enabled: boolean; listen: boolean; send: boolean; actions: boolean; claim_open: boolean; pause_until: number;
@@ -50,7 +51,7 @@ export function telegramControl(onChange: () => void): HTMLElement {
     const off = !k.enabled;
     const pause = (m: number, label: string) => h("button", { class: "btn ghost", type: "button", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, () => save({ pause_minutes: m }, m ? `Paused for ${label}` : "Resumed")) }, label);
     mount(root,
-      h("div", { class: `banner ${tone === "ok" ? "" : tone}` }, icon(tone === "ok" ? "check" : "alert", 18), h("span", null, text, k.pause_until ? ` (until ${new Date(k.pause_until * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "")),
+      h("div", { class: `banner ${tone === "ok" ? "" : tone}` }, statusIcon(tone === "ok" ? "ok" : tone === "error" ? "bad" : "warn", 20), h("span", null, text, k.pause_until ? ` (until ${new Date(k.pause_until * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "")),
       h("div", { class: "sp-card" }, h("h3", null, "Switches"),
         row("Telegram", "The master switch. Off: the webhook is removed, polling stops, nothing is heard and nothing is sent.", sw(k.enabled, "Telegram on", (v) => void save({ enabled: v }, v ? "Telegram is on" : "Telegram is off"))),
         row("Listen to commands", "Off: the bot ignores everything you type or tap, but can still send you alerts.", sw(k.listen, "Listen to commands", (v) => void save({ listen: v }), off)),
@@ -75,9 +76,10 @@ export function telegramControl(onChange: () => void): HTMLElement {
         log.length ? h("button", { class: "btn ghost", type: "button", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await del("/api/telegram/log"); await load(); }, "Cleared") }, "Clear") : null),
         h("p", { class: "muted small" }, "What happened, not what was said: command names, strangers who were ignored, wrong claim passwords and setting changes. Messages, tokens and passwords are never recorded."),
         log.length
-          ? h("ul", { class: "plain", style: "margin:0;padding:0;list-style:none" }, log.slice(0, 40).map((e) =>
+          ? h("ul", { class: "plain", style: "margin:0;padding:0;list-style:none" }, folded(log, (e) =>
             h("li", { style: "display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line)" },
-              h("span", { class: "muted small", style: "min-width:64px" }, ago(e.ts)), h("strong", { class: "small" }, e.label), h("span", { class: "muted small wrap" }, e.detail))))
+              h("span", { class: "muted small", style: "min-width:64px" }, ago(e.ts)), h("strong", { class: "small" }, e.label), h("span", { class: "muted small wrap" }, e.detail)),
+            { noun: "events", title: "Telegram activity", initial: 6, text: (e) => `${e.label} ${e.detail}` }))
           : h("p", { class: "muted" }, "Nothing yet.")));
   }
   void load();

@@ -240,6 +240,23 @@ def test_search_spend_is_capped_so_it_cannot_drain_the_daily_quota():
         fake.search_ids = []
         c = await boot(fake, YT_DETECT_BUDGET_FRACTION="0.03", YOUTUBE_TARGET_DETECT_INTERVAL_SECONDS="0.05")   # 300 units = 3 searches
         assert await wait_for(lambda: c.youtube.state == "search_paused", timeout=15)
-        assert len(fake.calls("/search")) == 3 and "YOUTUBE_VIDEO_ID" in c.youtube.last_error
+        assert len(fake.calls("/search")) == 3 and c.youtube.last_error == "" and "paused for today" in c.youtube.notice and "link" in c.youtube.notice
         await c.stop()
     run(go())
+
+
+from tests.test_api import e2e  # noqa: E402
+
+
+@e2e
+async def test_stream_source_endpoint_validates_and_saves(api):
+    st, b = await api.call("GET", "/api/youtube/status")
+    assert st == 200 and b["source"]["mode"] == "auto" and b["source"]["auto_detect"] is True and b["notice"] == ""
+    assert (await api.call("POST", "/api/youtube/source", {"video": "not a link"}))[0] == 422
+    assert (await api.call("POST", "/api/youtube/source", {"bogus": 1}))[0] == 422
+    st, b = await api.call("POST", "/api/youtube/source", {"auto_detect": False})
+    assert st == 200 and b["source"]["mode"] == "none"
+    st, b = await api.call("POST", "/api/youtube/source", {"video": "https://youtu.be/dQw4w9WgXcQ"})
+    assert st == 200 and b["source"]["video"] == "dQw4w9WgXcQ" and b["source"]["mode"] == "link"
+    st, b = await api.call("POST", "/api/youtube/source", {"video": "", "auto_detect": True})
+    assert b["source"]["mode"] == "auto" and b["source"]["video"] == ""

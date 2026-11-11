@@ -1,9 +1,10 @@
 /** Notification Centre: what reaches you, where, and when. Push (Firebase), the in-app bell and Telegram share these settings. */
+import { folded } from "../nav.js";
 import { del, get, patch, post } from "../api.js";
 import { busy, dateTime, h, mount, toast } from "../dom.js";
-import { icon } from "../icons.js";
+import { icon, statusIcon } from "../icons.js";
 import { disablePush, enablePush, pushState, type PushConfig, type PushState } from "../push.js";
-import { refresh as refreshBell } from "../notifications.js";
+import { openNotification, refresh as refreshBell } from "../notifications.js";
 import { areaNav, dateRange, type RangeValue } from "./kit.js";
 import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
@@ -59,7 +60,7 @@ async function overview(el: HTMLElement): Promise<void> {
   })();
   const setup = card("checklist", "Firebase setup", h("div", { class: "k-stack", style: "padding:12px 14px" },
     lede(cfg.push_ready && cfg.web_ready ? "Everything needed is set. Use the check to confirm Google accepts the service account." : "Set these variables on your host (Railway), then redeploy. docs/NOTIFICATIONS.md walks through where each one comes from."),
-    h("div", { class: "n-checks" }, cfg.checklist.map((c) => h("span", { class: `chip ${c.set ? "ok" : "warn"}` }, icon(c.set ? "check" : "alert", 13), c.name))),
+    h("div", { class: "n-checks" }, cfg.checklist.map((c) => h("span", { class: `chip ${c.set ? "ok" : "warn"}` }, statusIcon(c.set ? "ok" : "warn", 15), c.name))),
     h("div", { class: "row" }, ((): HTMLButtonElement => {
       const b = h("button", { class: "btn small", type: "button", disabled: !cfg.push_ready }, icon("shield", 15), "Check the service account") as HTMLButtonElement;
       b.onclick = () => busy(b, async () => { const r = await post<{ ok: boolean; problems: string[] }>("/api/notify/check"); toast(r.ok ? "Google accepted the service account." : r.problems[0], r.ok ? "ok" : "error"); });
@@ -96,9 +97,9 @@ async function delivery(el: HTMLElement): Promise<void> {
   const [prefs, log] = await Promise.all([get<Prefs>("/api/notify/prefs"), get<{ items: Log[] }>("/api/notify/log")]);
   mount(el,
     card("lock", "On a locked screen", h("div", { style: "padding:6px 14px 12px" }, row("Hide message text", "Push shows only the title. Security alerts always hide their text.", sw(prefs.hide_body_locked, "Hide text", (v) => void savePrefs({ hide_body_locked: v }).catch(fail)))), { flush: true }),
-    card("send", "Recent deliveries", log.items.length ? h("div", { class: "n-log" }, log.items.map((d) => h("div", { class: "n-log-row" },
+    card("send", "Recent deliveries", log.items.length ? h("div", { class: "n-log" }, folded(log.items, (d) => h("div", { class: "n-log-row" },
       h("span", { class: `chip ${d.status === "sent" ? "ok" : d.status === "failed" || d.status === "dead" ? "bad" : "warn"}` }, d.status),
-      h("div", { class: "n-row-main" }, h("strong", null, d.title ?? d.category), h("span", { class: "muted small" }, `${d.device ?? "device removed"} · ${dateTime(d.created)}${d.attempts > 1 ? ` · ${d.attempts} tries` : ""}${d.error ? ` · ${d.error}` : ""}`))))) : empty("send", "Nothing has been pushed yet."), { flush: true }));
+      h("div", { class: "n-row-main" }, h("strong", null, d.title ?? d.category), h("span", { class: "muted small" }, `${d.device ?? "device removed"} · ${dateTime(d.created)}${d.attempts > 1 ? ` · ${d.attempts} tries` : ""}${d.error ? ` · ${d.error}` : ""}`))), { noun: "deliveries", title: "Recent deliveries", initial: 6, text: (d) => `${d.title ?? d.category} ${d.status} ${d.device ?? ""}` })) : empty("send", "Nothing has been pushed yet."), { flush: true }));
 }
 
 // ------------------------------------------------------------------ schedule
@@ -174,7 +175,7 @@ async function devices(el: HTMLElement): Promise<void> {
 export const notifications: Page = {
   id: "notifications", title: "Notifications", icon: "bell", blurb: "Push, bell, Telegram, quiet hours and history",
   render(root, query) {
-    let tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? "overview") as Tab;
+    let tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? (query.get("open") ? "history" : "overview")) as Tab;
     const body = h("div", { class: "k-stack" });
     const tabs = seg<Tab>("Notification sections", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { tab = v; show(); });
     const show = () => {
@@ -185,5 +186,7 @@ export const notifications: Page = {
     };
     mount(root, h("div", { class: "page" }, areaNav("notifications"), pageHead("bell", "Notifications", "Choose what reaches you, where, and when."), h("div", { class: "row wrap" }, tabs.el), body));
     show();
+    const wanted = Number(query.get("open"));
+    if (Number.isInteger(wanted) && wanted > 0) void openNotification(wanted);     // a tap on a notification lands here and shows that notification
   },
 };

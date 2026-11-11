@@ -1,7 +1,7 @@
 /** 1.1.5: the two Moderation tools, rebuilt. Blocked phrases (add, bulk add, starter packs, severity) and the message test lab. */
 import { del, get, patch, post } from "../api.js";
 import { busy, debounce, duration, h, mount, toast, toastAction } from "../dom.js";
-import { icon } from "../icons.js";
+import { icon , statusIcon } from "../icons.js";
 import { card, empty } from "./shared.js";
 import { SIGNAL, autoGrow, iconAct, invite, niceName, plural, seg } from "./widgets.js";
 
@@ -246,7 +246,7 @@ export function testLab(hooks: { block(text: string): void }): TestLab {
       const r = await post<TestReply>("/api/moderation/test", { text: value, level });
       if (mine === seq) show(r);
     } catch (e) {
-      if (mine === seq) { mount(result, h("div", { class: "banner error" }, icon("alert", 18), h("span", null, `Could not score that: ${(e as Error).message}`))); }
+      if (mine === seq) { mount(result, h("div", { class: "banner error" }, statusIcon("bad", 20), h("span", null, `Could not score that: ${(e as Error).message}`))); }
     } finally { if (mine === seq) result.classList.remove("busy"); }
   };
   const soon = debounce(() => void run(), 450);

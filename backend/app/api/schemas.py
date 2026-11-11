@@ -162,6 +162,61 @@ class QuotaSet(_In):
     used: int = Field(ge=0, le=1_000_000)
 
 
+class ReaderUser(_In):
+    mode: str = Field(pattern="^(always|never|voice)$")
+    voice: str = Field(default="", max_length=80)
+    name: str = Field(default="", max_length=100)
+
+
+class ReaderRules(_In):
+    """Who the chat reader reads and how it cleans the text. The voice, speed and volume are per device and never stored here."""
+    who: str = Field(default="everyone", pattern="^(everyone|mods|members|owner|chosen|prefix)$")
+    prefix: str = Field(default="!say", max_length=20)
+    say_name: bool = True
+    skip_links: bool = True
+    skip_emoji: bool = True
+    shorten: int = Field(default=160, ge=20, le=500)
+    collapse_repeats: bool = True
+    drop_backlog: int = Field(default=15, ge=0, le=300)
+    users: dict[str, ReaderUser] = Field(default_factory=dict, max_length=200)
+    dictionary: list[dict[str, str]] = Field(default_factory=list, max_length=100)
+
+
+class VoiceHost(_In):
+    url: str = Field(default="", max_length=300)
+
+
+class VoiceDelete(_In):
+    pack: str = Field(max_length=48)
+
+
+class ChatAct(_In):
+    id: int
+    action: str = Field(max_length=10)
+    seconds: int = Field(default=300, ge=1, le=86400)
+
+
+class ModLevel(_In):
+    level: str = Field(max_length=12)
+
+
+class VariableIn(_In):
+    name: str = Field(max_length=40)
+    value: str = Field(max_length=600)
+    kind: str = Field(default="text", max_length=10)
+    note: str = Field(default="", max_length=120)
+
+
+class VariableDelete(_In):
+    name: str = Field(max_length=40)
+    force: bool = False
+
+
+class YoutubeSource(_In):
+    auto_detect: bool | None = None
+    video: str | None = Field(default=None, max_length=300)   # a link or an ID; an empty string clears it
+
+
 # ---- 1.1.6 intelligence
 class PackPatch(_In):
     mode: str | None = Field(default=None, max_length=10)   # off | shadow | live | "" (back to default)

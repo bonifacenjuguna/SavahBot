@@ -145,7 +145,11 @@ class Hub:
         except Exception:
             logger.exception("Notification failed")
 
-    async def send_chat(self, text: str) -> bool:
+    async def send_chat(self, text: str, render: bool = False) -> bool:
+        """render=True expands $(variables) first. Only text typed by the owner is rendered, never text that was already rendered or came from chat."""
+        if render and "$(" in (text or "") and self.commands is not None:
+            from .commands.variables import Ctx
+            text = await self.commands.renderer.render(text, Ctx(channel=self.commands.channel_fn() if getattr(self.commands, "channel_fn", None) else ""))
         text = truncate((text or "").strip(), self.cfg.get("youtube_message_max_length") if self.mode == "live" else 400)
         if not text or self.source is None:
             return False
@@ -321,6 +325,43 @@ class Hub:
                 self.bus.publish("ban_made", {"author": a["author_name"], "kind": a["action"], "source": source})
         self.bus.publish("mod_resolved", {"id": id_, "status": status, "action": a["action"], "author": a["author_name"]})
         return {"ok": status != "failed", "status": status, "error": "; ".join(errors)}
+
+    async def manual(self, chat_id: int, action: str, seconds: int = 300) -> dict[str, Any]:
+        """Delete one message, or time out or ban its author, because the owner chose to from the chat. Uses the same permission and quota checks as an approval.
+        The row is looked up here, so the page cannot ask for an action on someone who never wrote in the chat."""
+        if action not in ("delete", "timeout", "ban"):
+            return {"ok": False, "error": "Unknown action.", "code": 422}
+        row = await self.store.db.fetchone("SELECT platform, msg_id, author_id, author_name, level, demo FROM chat_messages WHERE id = ?", (chat_id,))
+        if not row:
+            return {"ok": False, "error": "That message is no longer stored.", "code": 404}
+        if row["level"] in ("owner", "bot"):
+            return {"ok": False, "error": "The owner and the bot cannot be moderated.", "code": 400}
+        simulated = bool(row["demo"])
+        src = self.sources.get("demo" if simulated else row["platform"]) or self.source
+        err = ""
+        if not simulated:
+            if src is None:
+                return {"ok": False, "error": "The chat connection is not available right now."}
+            pre = getattr(src, "preflight", None)
+            if pre is not None:
+                ok, err = await pre(1 if action == "delete" else 0, action)
+                if not ok:
+                    return {"ok": False, "error": err}
+            if action == "delete":
+                ok, err = await src.delete(row["msg_id"])
+            elif action == "timeout":
+                ok, err = await src.timeout(row["author_id"], seconds)
+            else:
+                ok, err = await src.ban(row["author_id"])
+            if not ok:
+                return {"ok": False, "error": err}
+        ban_id = None
+        if action in ("timeout", "ban"):
+            ban_id = await self.bans.record(author_id=row["author_id"], author_name=row["author_name"], kind=action, duration=seconds if action == "timeout" else None,
+                                            ban_ref="" if simulated else str(getattr(src, "last_ban_id", "") or ""), action_id=None, source="dashboard", reason="Chosen from the chat",
+                                            platform=row["platform"], demo=simulated)
+            self.bus.publish("ban_made", {"author": row["author_name"], "kind": action, "source": "dashboard"})
+        return {"ok": True, "ban_id": ban_id, "simulated": simulated}
 
     async def unban(self, ban_id: int, by: str = "dashboard") -> dict[str, Any]:
         """Lift one ban or timeout from the ledger. YouTube must confirm it before it is marked as lifted."""

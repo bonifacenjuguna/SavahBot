@@ -1,4 +1,4 @@
-import { get, patch } from "../api.js";
+import { get, patch, post } from "../api.js";
 import { busy, dateTime, debounce, downloadCsv, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
 import { icon } from "../icons.js";
@@ -30,6 +30,23 @@ export const moderation: Page = {
       return b;
     }));
     drawMode();
+
+    // ----- auto levels: ready-made thresholds, shown under the mode cards
+    interface Lv { current: string; levels: { id: string; label: string; blurb: string }[] }
+    const levelBox = h("div", { class: "stack", style: "margin-top:12px" });
+    const drawLevels = async () => {
+      try {
+        const d = await get<Lv>("/api/moderation/level");
+        mount(levelBox, h("strong", null, "How strict should auto be?"),
+          h("div", { class: "mode-cards" }, d.levels.map((l) => {
+            const b = h("button", { class: "mode-card", type: "button", "aria-pressed": String(d.current === l.id) }, h("strong", null, l.label), h("span", null, l.blurb));
+            b.onclick = () => busy(b as HTMLButtonElement, async () => { await post("/api/moderation/level", { level: l.id }); await drawLevels(); }, `${l.label} level applied`);
+            return b;
+          })),
+          h("p", { class: "muted small" }, d.current === "custom" ? "Custom: you changed some thresholds yourself. Pick a level to reset them to a ready-made set. Word lists and exemptions are never touched." : "Levels change only the score thresholds, strikes and which actions may run by themselves. Your word lists and exemptions stay as they are."));
+      } catch { mount(levelBox, ""); }
+    };
+    void drawLevels();
 
     // ----- queue and history
     const pending = h("div"), history = h("div");
@@ -101,7 +118,7 @@ export const moderation: Page = {
 
     mount(root,
       pageHead("shield", "Moderation", "Decide what the bot does, review what it did, and tune what it looks for."),
-      card("sliders", "Mode", h("div", { class: "body" }, modeBox)),
+      card("sliders", "Mode", h("div", { class: "body" }, modeBox, levelBox)),
       h("div", { style: "height:20px" }),
       tabs,
       h("div", { class: "cols" },

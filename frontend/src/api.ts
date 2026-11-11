@@ -45,6 +45,19 @@ export function setToken(token: string): void {
 
 export const loggedOut = new EventTarget();
 
+/** Sends one file as the raw request body (no JSON, no form), for uploads that can be large. The backend address is used directly, never the Vercel proxy, whose request size limit is small. */
+export async function upload<T = any>(path: string, file: Blob): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(apiBase() + path, { method: "POST", headers: { "Content-Type": "application/octet-stream", ...(memoryToken ? { Authorization: `Bearer ${memoryToken}` } : {}) }, body: file });
+  } catch { throw new ApiError("Cannot reach the backend. Large uploads need the backend address to be set on the sign-in screen.", 0); }
+  const text = await res.text();
+  let data: any = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text.slice(0, 200) }; }
+  if (!res.ok) throw new ApiError(data.error || `Upload failed (${res.status})`, res.status);
+  return data as T;
+}
+
 export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
   const base = apiBase();
   let res: Response;

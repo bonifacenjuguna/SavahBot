@@ -31,6 +31,8 @@ export interface Status {
     target: { channel_id: string; title: string } | null;
     video_channel_id: string;
     last_action_error: string;
+    notice?: string;
+    source?: { auto_detect: boolean; video: string; video_raw: string; mode: "auto" | "link" | "none" };
   };
   demo: { state: string; ambient: boolean; scenarios_running: string[]; channel: string };
   pending: number;

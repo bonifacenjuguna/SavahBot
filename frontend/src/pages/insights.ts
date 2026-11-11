@@ -155,7 +155,18 @@ export const insights: Page = {
             card("flag", "What triggered moderation", hbars(s.signals.map((x) => ({ name: nice(SIGNAL, String(x.name)), count: x.count })), "s2"), { flush: true }),
             card("ban", "Actions by type", hbars(Object.entries(s.actions_by_type).map(([name, count]) => ({ name: nice(ACTION, name), count })), "s4"), { flush: true }))));
     };
-    mount(root, pageHead("chart", "Insights", "How busy chat is, who is talking, and what the bot reacted to.", h("div", { class: "row" }, range, refreshBtn, exportBtn)), areaNav("insights"), body);
+    const streams = h("div");
+    const loadStreams = async () => {
+      const r = await get<{ items: { video_id: string; started: number; ended: number; peak_viewers: number | null; likes: number | null; samples: number }[] }>("/api/live/streams");
+      const fmt = (t: number) => new Date(t * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      mount(streams, card("activity", "Past streams", r.items.length
+        ? h("div", { class: "table-wrap" }, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["Started", "Length", "Peak watching", "Likes"].map((c) => h("th", null, c)))),
+          h("tbody", null, r.items.map((x) => h("tr", null, h("td", { "data-label": "Started" }, fmt(x.started)), h("td", { "data-label": "Length" }, `${Math.max(1, Math.round((x.ended - x.started) / 60))} min`),
+            h("td", { "data-label": "Peak watching" }, x.peak_viewers === null ? "n/a" : x.peak_viewers.toLocaleString()), h("td", { "data-label": "Likes" }, x.likes === null ? "hidden" : x.likes.toLocaleString()))))))
+        : empty("activity", "Likes and viewers are recorded while you are live. Streams show up here afterwards."), { flush: true }));
+    };
+    mount(root, pageHead("chart", "Insights", "How busy chat is, who is talking, and what the bot reacted to.", h("div", { class: "row" }, range, refreshBtn, exportBtn)), areaNav("insights"), body, streams);
+    void loadStreams().catch(() => undefined);
     void load().catch((e) => toast(e.message, "error"));
     const t = window.setInterval(() => void load().catch(() => undefined), 30000);
     return () => window.clearInterval(t);

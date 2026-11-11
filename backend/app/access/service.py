@@ -153,6 +153,8 @@ class AccessService(OwnerAuth):
                               (time.time(), action, (session or {}).get("id", "")[:12], ip[:64] or (session or {}).get("ip", ""), detail[:300]))
         if self.bus is not None:
             self.bus.publish("security_audit", {"action": action, "detail": detail[:100]})
+        if getattr(self, "activity", None) is not None:
+            await self.activity.mirror_audit(action, detail)
 
     async def _alert(self, text: str) -> None:
         if self.alert is not None:

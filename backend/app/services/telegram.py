@@ -125,6 +125,7 @@ class TelegramBot:
         self._owner: int | None = None
         self._commands: dict[str, Callable[[str], Awaitable[Any]]] = {}
         self.control = TelegramControl(self)
+        self._switch_task: asyncio.Future[Any] | None = None
 
     # ------------------------------------------------------------------ lifecycle
     @property
@@ -356,7 +357,7 @@ class TelegramBot:
             return
         if not ctl["send"]:
             return
-        await self.control.log("button", action[:16], throttle=5)
+        await self.control.log("button", ("menu: " + raw.partition(":")[0][:16]) if action == "m" else {"set": "setting changed", "approve": "approved", "reject": "rejected"}.get(action, action[:16]), throttle=5)
         if action in ("approve", "reject") and raw.isdigit():
             await self._decide(q, action, int(raw))
             return
@@ -491,9 +492,23 @@ class TelegramBot:
     async def _tgmode(self, arg: str) -> str:
         if arg not in ("webhook", "polling"):
             return f"Telegram runs in {self.cfg.get('telegram_mode')} mode. Use /tgmode webhook or /tgmode polling."
+        if arg == self.cfg.get("telegram_mode"):
+            return f"Telegram already uses {arg}."
         await self.cfg.set("telegram_mode", arg)
+        # The switch runs as its own task: when it was run inside the polling loop that is being stopped, it cancelled itself half way
+        # and the webhook was never registered, so the bot went deaf.
+        self._switch_task = asyncio.ensure_future(self._switch_mode(arg))
+        return f"Switching Telegram to {arg}. I will confirm in a moment."
+
+    async def _switch_mode(self, arg: str) -> None:
         await self.apply_mode()
-        return f"Telegram now uses {arg}." + (f" ({self.last_error})" if self.last_error else "")
+        owner = await self.owner_id()
+        if owner and self.configured:
+            text = f"Telegram now uses {arg}." if not self.last_error else f"Telegram could not switch to {arg}: {self.last_error}"
+            try:
+                await self.client.send(owner, text)
+            except TelegramError:
+                logger.debug("Could not confirm the mode switch", exc_info=True)
 
     # ------------------------------------------------------------------ moderation
     async def _pending_cards(self) -> str:
@@ -572,7 +587,7 @@ class TelegramBot:
     async def _say(self, arg: str) -> str:
         if not arg:
             return "Use /say <text>."
-        return "Sent." if await self.c.hub.send_chat(arg) else "Could not send. Is the chat source running?"
+        return "Sent." if await self.c.hub.send_chat(arg, render=True) else "Could not send. Is the chat source running?"
 
     async def _demo(self, arg: str) -> Any:
         demo = self.c.demo

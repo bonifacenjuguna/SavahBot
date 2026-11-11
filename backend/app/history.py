@@ -55,6 +55,24 @@ def aggregate(chat: list[dict[str, Any]], actions: list[dict[str, Any]], step: i
     return out
 
 
+def sample_points(points: list[dict[str, Any]], step: int, now: float) -> list[dict[str, Any]]:
+    """Demo mode has no stored history, so zoomed charts would be flat. Fill them with a believable, repeatable pattern (busy evenings, quiet nights,
+    a few flagged messages) and tell the page it is sample data. Same inputs always give the same numbers, so charts do not jump on reload."""
+    import math
+    out = []
+    for p in points:
+        t = p["t"]
+        if t > now:
+            out.append(p); continue
+        h = (t % DAY) / 3600 if step == HOUR else 12
+        wave = 0.35 + 0.65 * max(0.0, math.sin((h - 6) / 24 * 2 * math.pi)) if step == HOUR else 0.8 + 0.2 * math.sin(t / DAY / 7 * 2 * math.pi)
+        jitter = 0.75 + ((t * 2654435761) % 1000) / 2000          # 0.75 .. 1.25, fixed per bucket
+        msgs = int((60 if step == HOUR else 900) * wave * jitter)
+        flagged = int(msgs * 0.06)
+        out.append({"t": t, "messages": msgs, "flagged": flagged, "chatters": max(1, int(msgs ** 0.6)), "deleted": int(flagged * 0.6), "timeouts": int(flagged * 0.2), "bans": 1 if flagged > 70 else 0})
+    return out
+
+
 class Rollups:
     def __init__(self, db: Any) -> None:
         self.db = db
@@ -126,7 +144,10 @@ class Rollups:
                 src = live.get((t, int(demo)))
             points.append({"t": t, **{f: int((src or {}).get(f, 0) or 0) for f in FIELDS}})
             t += step
-        return {"res": res, "step": step, "since": first, "until": until, "points": points, "rolled_until": self.rolled_until}
+        sample = False
+        if demo and not any(p[f] for p in points for f in FIELDS):
+            points, sample = sample_points(points, step, now), True
+        return {"res": res, "step": step, "since": first, "until": until, "points": points, "rolled_until": self.rolled_until, "sample": sample}
 
     async def storage(self, now: float | None = None) -> dict[str, Any]:
         now = now if now is not None else time.time()

@@ -1,6 +1,6 @@
 import { del, get, post } from "../api.js";
 import { busy, copyButton, h, mount, toast, ago } from "../dom.js";
-import { icon } from "../icons.js";
+import { icon, statusIcon } from "../icons.js";
 import { ring } from "../charts.js";
 import { refreshStatus, type Status } from "../state.js";
 import { areaNav } from "./kit.js";
@@ -88,7 +88,7 @@ export const setup: Page = {
       const t = stepTone(x.id);
       return h("a", { href: `#/setup?step=${x.id}`, class: "sn-item", "aria-current": x.id === step ? "step" : undefined, "data-tone": t.tone,
         onclick: (e: Event) => { e.preventDefault(); go(x.id); } },
-        h("span", { class: "sn-dot" }, t.tone === "ok" ? icon("check", 14) : t.tone === "bad" ? icon("alert", 14) : String(i + 1)),
+        h("span", { class: "sn-dot" }, t.tone === "ok" ? statusIcon("ok", 28) : t.tone === "bad" ? statusIcon("bad", 28) : t.tone === "warn" ? statusIcon("warn", 28) : String(i + 1)),
         h("span", { class: "sn-text" }, h("strong", null, x.title), h("span", null, t.text || x.blurb)));
     }));
 
@@ -106,7 +106,7 @@ export const setup: Page = {
         next ? h("button", { class: "btn primary", type: "button", onclick: () => go(next.id) }, next.title, icon("arrowRight", 16)) : h("span"));
     };
     const checkRow = (tone: Tone, label: string, textNodes: (Node | string)[]) =>
-      h("li", { class: "check-row" }, h("span", { class: `chip ${tone}` }, icon(tone === "ok" ? "check" : tone === "bad" ? "alert" : "info", 12), label), h("span", { class: "grow" }, ...textNodes));
+      h("li", { class: "check-row" }, h("span", { class: `chip ${tone}` }, statusIcon(tone === "ok" ? "ok" : tone === "bad" ? "bad" : "warn", 14), label), h("span", { class: "grow" }, ...textNodes));
     const run = (fn: () => Promise<unknown>, ok?: string) => (e: Event) => busy(e.currentTarget as HTMLButtonElement, fn, ok);
 
     // ------------------------------------------------------------ panels
@@ -126,7 +126,7 @@ export const setup: Page = {
               : h("div", null, h("span", { class: "eyebrow" }, "Next up"), h("h3", null, next!.title), h("p", { class: "muted wrap" }, next!.text),
                 h("button", { class: "btn primary", type: "button", style: "margin-top:10px", onclick: () => go(next!.go) }, "Go to this step", icon("arrowRight", 16)))))),
         section("Checklist", h("ul", { class: "ov-list" }, steps.map((x, i) => h("li", null, h("button", { type: "button", class: `ov-row ${x.done ? "done" : "todo"}`, onclick: () => go(x.go) },
-          h("span", { class: "mark" }, x.done ? icon("check", 14) : String(i + 1)), h("span", { class: "grow" }, h("strong", null, x.title), h("span", { class: "muted small wrap" }, x.text)),
+          h("span", { class: "mark" }, x.done ? statusIcon("ok", 26) : String(i + 1)), h("span", { class: "grow" }, h("strong", null, x.title), h("span", { class: "muted small wrap" }, x.text)),
           icon("chevronRight", 16)))))),
         missing ? h("button", { class: "ov-note", type: "button", onclick: () => go("variables") }, icon("info", 16), h("span", null, `${missing} variable${missing === 1 ? " is" : "s are"} still unset. See Variables.`), icon("chevronRight", 16)) : null);
     };
@@ -142,6 +142,25 @@ export const setup: Page = {
         pager());
     };
 
+    /** Where the stream comes from: the auto-search switch and a place to paste the live video's link or ID. */
+    const streamSource = (src: NonNullable<Status["youtube"]["source"]>, attached: string): HTMLElement => {
+      const field = h("input", { type: "text", class: "input", value: src.video_raw, placeholder: "https://www.youtube.com/watch?v=…  or the 11-character ID", autocomplete: "off", spellcheck: false, "aria-label": "Live video link or ID" }) as HTMLInputElement;
+      const save = (body: Record<string, unknown>, done: string) => async () => {
+        try { const r = await post<{ title?: string; live?: boolean; checked: boolean }>("/api/youtube/source", body); toast(r.title ? `${done}: ${r.title}${r.live === false ? " (not live yet)" : ""}` : done); await load(); }
+        catch (e) { toast(e instanceof Error ? e.message : "Could not save", "error"); }
+      };
+      const modeText = src.mode === "link" ? "Using your link. When that video is not live, it goes back to searching if auto-search is on." : src.mode === "auto" ? "Searching your channel for a live stream automatically." : "Nothing to attach to: auto-search is off and no link is set.";
+      return section("Where the stream comes from",
+        h("p", { class: "muted small" }, modeText, attached ? " Attached now: " : "", attached ? h("span", { class: "mono" }, attached) : ""),
+        h("label", { class: "row between", style: "align-items:center;gap:12px" }, h("span", null, h("strong", null, "Search for the live stream automatically"), h("span", { class: "muted small", style: "display:block" }, "Looks for your channel's live stream every few minutes. It costs YouTube quota, so turn it off if you always paste a link.")),
+          h("input", { type: "checkbox", class: "switch", checked: src.auto_detect, "aria-label": "Search automatically", onchange: (e: Event) => void save({ auto_detect: (e.target as HTMLInputElement).checked }, (e.target as HTMLInputElement).checked ? "Auto-search is on" : "Auto-search is off")() })),
+        h("div", { class: "stack", style: "gap:8px" }, h("strong", null, "Stream link or ID"), field,
+          h("div", { class: "row wrap", style: "gap:8px" },
+            h("button", { class: "btn primary", type: "button", onclick: run(save({ video: field.value }, "Linked")) }, icon("link", 16), "Use this video"),
+            src.video ? h("button", { class: "btn ghost", type: "button", onclick: run(save({ video: "" }, "Link cleared")) }, "Clear link") : null),
+          h("p", { class: "muted small" }, "It must be a live video of the channel you moderate. A link from another channel is refused.")));
+    };
+
     const youtube = (): HTMLElement => {
       const { s, st } = data!;
       const yt = st?.youtube as (Status["youtube"] & { target_source?: string }) | undefined;
@@ -149,7 +168,9 @@ export const setup: Page = {
       const connected = s.youtube_connected;
       return h("div", { class: "stack" },
         head("youtube", "YouTube", "Sign in with the moderator account, then choose the channel whose chat it moderates.", connected ? ["ok", "Connected"] : ["warn", "Not connected"]),
-        yt?.last_error ? h("div", { class: "banner error" }, icon("alert", 18), h("span", null, yt.last_error)) : null,
+        yt?.last_error ? h("div", { class: "banner error" }, statusIcon("bad", 20), h("span", null, yt.last_error)) : null,
+        yt?.notice ? h("div", { class: "banner" }, statusIcon("info", 20), h("span", null, yt.notice)) : null,
+        yt?.source ? streamSource(yt.source, yt.video_id ?? "") : null,
         yt?.last_action_error ? h("div", { class: "banner error" }, icon("ban", 18), h("span", null, `Last refused action: ${yt.last_action_error}`)) : null,
         section("Connection",
           connected && yt ? h("dl", { class: "facts" },
@@ -189,7 +210,7 @@ export const setup: Page = {
       sel.onchange = () => busy(sel as unknown as HTMLButtonElement, async () => { await post("/api/telegram/mode", { mode: sel.value }); await load(); }, "Telegram mode changed");
       return h("div", { class: "stack" },
         head("telegram", "Telegram", "Control the bot from your phone: approvals, status, search and more.", !tg?.configured ? ["warn", "No token"] : s.telegram_owner_bound ? ["ok", "Ready"] : ["warn", "Not claimed"]),
-        tg?.last_error ? h("div", { class: "banner error" }, icon("alert", 18), h("span", null, tg.last_error)) : null,
+        tg?.last_error ? h("div", { class: "banner error" }, statusIcon("bad", 20), h("span", null, tg.last_error)) : null,
         section("Bot",
           h("ol", { class: "how" },
             h("li", { class: tg?.configured ? "done" : "" }, h("strong", null, "Create the bot."), " Message @BotFather, send /newbot, then set the token as TELEGRAM_BOT_TOKEN in Railway."),
@@ -216,8 +237,8 @@ export const setup: Page = {
         section(null,
           h("div", { class: "row between" }, h("span", { class: "muted small" }, `${all.length - missing} of ${all.length} set`), h("label", { class: "check small" }, toggle, "Only what is missing")),
           groups.length ? h("div", { class: "stack" }, groups.map(([area, items]) => h("div", { class: "var-group" }, h("h3", null, AREA_NAMES[area] ?? area),
-            h("div", { class: "row", style: "margin-top:6px" }, items.map((i) => h("span", { class: `chip ${i.set ? "ok" : "warn"}`, title: i.set ? "Set" : "Not set" }, icon(i.set ? "check" : "alert", 12), i.env))))))
-            : h("div", { class: "empty" }, icon("checkCircle", 28), h("span", null, "Everything is set."))),
+            h("div", { class: "row", style: "margin-top:6px" }, items.map((i) => h("span", { class: `chip ${i.set ? "ok" : "warn"}`, title: i.set ? "Set" : "Not set" }, statusIcon(i.set ? "ok" : "warn", 14), i.env))))))
+            : h("div", { class: "empty" }, statusIcon("ok", 32), h("span", null, "Everything is set."))),
         pager());
     };
 
@@ -225,7 +246,7 @@ export const setup: Page = {
     function draw(): void {
       if (!data) { mount(panel, h("div", { class: "skeleton" }, "Loading setup")); return; }
       drawNav();
-      mount(panel, notice ? h("div", { class: `banner ${notice.bad ? "error" : ""}` }, icon(notice.bad ? "alert" : "info", 18), h("span", { class: "grow" }, notice.text), h("button", { class: "icon-btn", type: "button", "aria-label": "Dismiss", onclick: () => { notice = null; draw(); } }, icon("x", 16))) : null, PANELS[step]());
+      mount(panel, notice ? h("div", { class: `banner ${notice.bad ? "error" : ""}` }, statusIcon(notice.bad ? "bad" : "info", 20), h("span", { class: "grow" }, notice.text), h("button", { class: "icon-btn", type: "button", "aria-label": "Dismiss", onclick: () => { notice = null; draw(); } }, icon("x", 16))) : null, PANELS[step]());
     }
     async function load(): Promise<void> {
       const [s, st] = await Promise.all([get<Setup>("/api/setup"), refreshStatus()]);

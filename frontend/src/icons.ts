@@ -2,6 +2,9 @@
 type Shape = string | { c: [number, number, number] } | { r: [number, number, number, number, number] } | { pts: string };
 
 const ICONS: Record<string, Shape[]> = {
+  arrowUp: ["m5 12 7-7 7 7", "M12 19V5"],
+  chevronUp: ["m18 15-6-6-6 6"],
+  dots: [{ c: [5, 12, 1] }, { c: [12, 12, 1] }, { c: [19, 12, 1] }],
   desk: [{ r: [3, 3, 7, 9, 1] }, { r: [14, 3, 7, 5, 1] }, { r: [14, 12, 7, 9, 1] }, { r: [3, 16, 7, 5, 1] }],
   shield: ["M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"],
   terminal: ["m4 17 6-6-6-6", "M12 19h8"],
@@ -94,6 +97,11 @@ const ICONS: Record<string, Shape[]> = {
   arrowLeft: ["M19 12H5", "m12 19-7-7 7-7"],
   link: ["M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71", "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"],
   rocket: ["M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z", "m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z", "M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0", "M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"],
+  heart: ["M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"],
+  trophy: ["M8 21h8", "M12 17v4", "M7 4h10v5a5 5 0 0 1-10 0z", "M17 5h3v2a3 3 0 0 1-3 3", "M7 5H4v2a3 3 0 0 0 3 3"],
+  thumbsUp: ["M7 10v12", "M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"],
+  volume: ["M11 5 6 9H2v6h4l5 4z", "M15.5 8.5a5 5 0 0 1 0 7", "M18.5 5.5a9 9 0 0 1 0 13"],
+  volumeOff: ["M11 5 6 9H2v6h4l5 4z", "m22 9-6 6", "m16 9 6 6"],
   sparkle: ["M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z", "M19 17v4", "M17 19h4"],
   eye: ["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0", { c: [12, 12, 3] }],
   shuffle: ["M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22", "m18 2 4 4-4 4", "M2 6h1.9c1.5 0 2.9.9 3.6 2.2", "M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8", "m18 14 4 4-4 4"],
@@ -143,5 +151,23 @@ export function logo(size = 28, cls = ""): SVGElement {
   svg.appendChild(el("rect", { x: 467, y: 512, width: 93, height: 185, rx: 20, fill: "currentColor" }));
   svg.appendChild(el("rect", { x: 695, y: 512, width: 93, height: 185, rx: 20, fill: "currentColor" }));
   svg.appendChild(el("path", { d: "M503 757C570 785 690 785 748 752C735 790 690 832 627 832C565 832 525 795 503 757Z", fill: "currentColor", stroke: "currentColor", "stroke-width": 10, "stroke-linejoin": "round" }));
+  return svg;
+}
+
+export type StatusTone = "ok" | "warn" | "bad" | "info" | "wait" | "skip";
+
+/** One status mark for the whole dashboard. A soft tinted disc with a thin ring and a glyph that differs by state (tick, triangle,
+ * cross, i, clock, dash), so colour is never the only signal. Colours come from the theme tokens, so it works in light and dark. */
+export function statusIcon(tone: StatusTone, size = 22): SVGElement {
+  const svg = el("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", focusable: "false" });
+  svg.setAttribute("class", `sti ${tone}`);
+  const shape = tone === "warn" ? el("path", { d: "M10.7 3.9 2.9 17.4A1.5 1.5 0 0 0 4.2 19.6h15.6a1.5 1.5 0 0 0 1.3-2.2L13.3 3.9a1.5 1.5 0 0 0-2.6 0Z" }) : el("circle", { cx: 12, cy: 12, r: 10 });
+  shape.setAttribute("class", "sti-bg");
+  svg.appendChild(shape);
+  const glyph: Record<StatusTone, string[]> = {
+    ok: ["m7.8 12.4 3 3 5.6-6.2"], warn: ["M12 9.2v4", "M12 16.4h.01"], bad: ["m8.8 8.8 6.4 6.4", "m15.2 8.8-6.4 6.4"],
+    info: ["M12 11v5", "M12 7.8h.01"], wait: ["M12 7.5V12l3 1.8"], skip: ["M8 12h8"],
+  };
+  for (const d of glyph[tone]) { const g = el("path", { d }); g.setAttribute("class", "sti-g"); svg.appendChild(g); }
   return svg;
 }

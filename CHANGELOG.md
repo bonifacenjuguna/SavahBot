@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.3.0
+
+A bug-fix and polish release with several new features. Guides are in `docs/`.
+
+### Fixes
+- Appearance and other setting rows no longer cut off on phones; cards no longer touch; the notification panel filter bar no longer overlaps.
+- One refined SVG status icon set replaces emoji-looking marks everywhere.
+- Notifications: the status-bar white square is fixed (proper monochrome badge); tapping a notification opens what it was for (a test notification opens inside Notifications showing it); foreground push is no longer suppressed (`if (watching && p.category !== "test.test") return;`, with a regression test); a payload-less push now shows our own notification instead of the browser's generic one; new count-badge design; "Stop these" in the notification detail sheet.
+- Sheets can be closed by dragging the grip, not only the X.
+- `/tgmode` switch from inside polling no longer leaves the webhook unregistered or the bot silent.
+- Signing in always lands on the Desk. Tab strips keep their position and centre the active tab.
+- Database start-up on PostgreSQL: tables, then missing columns, then indexes (fixes `column "dedupe_key" does not exist` on older databases).
+
+### New
+- **Navigation:** "On this page" jump chip, "Show all" sheets for long lists, back-to-top, progress line, breadcrumbs, quick switcher with recents and actions, tab strips with fades and an all-pages grid.
+- **YouTube source:** auto-search switch, paste a stream link or ID, calm quota notice, falls back to the configured source after a stream ends.
+- **Telegram control centre:** on/off, link/unlink, rotate secret, shutdown, activity log.
+- **Custom variables:** `$(TikTok)` in commands, timers, auto replies and messages you send as the bot; types text/link/number; Settings > Variables; insert chips; included in backups.
+- **Activity log** (Settings): sorted by importance and area, before/after for ordinary settings, never secrets or message text, search, dates, export, retention, optional notification for sensitive entries.
+- **Chat actions:** hold (or tap / double tap, per device) a chat line for copy, reply as the bot, dashboard-only pins, person card, notes, teach spam/fine, block phrase, delete / timeout presets / ban with quota cost and 10-second Undo, multi-select.
+- **Chat reader:** built-in browser voices and a neural voice (Kokoro, free, downloads once) with automatic fallback; who-to-read rules, per-person always/never/own voice, name first, skip links and emoji, shorten, collapse repeats, drop backlog, pronunciation dictionary; voice-pack upload card and self-hosted link.
+- **Stream alerts:** members, Super Chat, Super Sticker and membership gifts recognised in chat; best-effort new-subscriber detection and subscriber-count milestones; settings for intervals and thank-you messages.
+- **Live stats:** likes, viewers, likes per minute, peak and milestone alerts on the Desk; `$(likes)`, `$(viewers)`, `$(subs)`; per-stream history in Insights.
+- **Moderation levels:** Basic, Balanced, Strict presets for the auto thresholds.
+- **Demo mode:** zoomed charts show labelled sample history instead of zeros; live card shows sample stats.
+- Long lists (Telegram log, Security activity, Recent deliveries) end in a "Show all" sheet.
+
+### Known limits
+Not testable in the build environment: real FCM/browser push, Telegram, PostgreSQL, YouTube (subscriber list, likes, member events), voices (sound), and the neural model download. Subscriber detection is best effort (public subscribers only). Voice packs need a Railway Volume to survive redeploys. Service worker version 1.3.0.
+
 ## 1.2.0
 
 One coordinated release. Guides for everything are in `docs/` (start at `docs/README.md`).

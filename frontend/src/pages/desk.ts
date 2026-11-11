@@ -6,9 +6,14 @@ import { ring, sparkline } from "../charts.js";
 import { onStatus, status, type Status } from "../state.js";
 import { dateRange, rangeQuery, resetClock, zoomToFill, type RangeValue } from "./kit.js";
 import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./shared.js";
+import { variableChips } from "./variables.js";
+import { liveCard } from "./live-card.js";
+import { pins, wireLine, type ActionCtx } from "../chat-actions.js";
+import { readerButton, readerItems } from "../reader-ui.js";
+import { reader } from "../reader.js";
 import type { Page } from "./types.js";
 
-interface Line { author_name: string; text: string; level: string; ts: number; verdict: string | null; score: number | null; reasons?: string[]; demo?: boolean }
+interface Line { id?: number; author_id?: string; platform?: string; author_name: string; text: string; level: string; ts: number; verdict: string | null; score: number | null; reasons?: string[]; demo?: boolean }
 type Filter = "all" | "flagged" | "blocked";
 
 const kindOf = (m: Line): Filter | "ok" => (m.verdict === "allow" || !m.verdict ? "ok" : m.verdict === "flag" ? "flagged" : "blocked");
@@ -55,15 +60,51 @@ export const desk: Page = {
       jump.hidden = stick || savedMode();
     });
 
+    // ----- tapping a line: the action sheet, pins and multi-select
+    const picked = new Set<Line>();
+    let selecting = false;
+    const selBar = h("div", { class: "sel-bar", hidden: true });
+    const paintSel = () => {
+      selBar.hidden = !selecting;
+      const n = picked.size;
+      mount(selBar, h("strong", null, `${n} selected`),
+        h("button", { class: "btn small", type: "button", disabled: !n, onclick: () => { void navigator.clipboard.writeText([...picked].map((m) => `${m.author_name}: ${m.text}`).join("\n")).then(() => toast("Copied")); } }, icon("copy", 14), "Copy"),
+        h("button", { class: "btn small danger", type: "button", disabled: !n, onclick: () => void bulkDelete() }, icon("trash", 14), "Delete"),
+        h("button", { class: "btn small ghost", type: "button", onclick: () => { selecting = false; picked.clear(); paintSel(); list.querySelectorAll(".line.picked").forEach((e) => e.classList.remove("picked")); } }, "Done"));
+    };
+    const bulkDelete = async () => {
+      const items = [...picked].filter((m) => m.id !== undefined && m.level !== "owner" && m.level !== "bot");
+      if (!items.length || !window.confirm(`Delete ${items.length} message${items.length === 1 ? "" : "s"}? Each costs YouTube quota in live mode.`)) return;
+      let done = 0;
+      for (const m of items) { try { await post("/api/chat/act", { id: m.id, action: "delete" }); done++; } catch (e) { toast(e instanceof Error ? e.message : "Stopped", "error"); break; } }
+      toast(`Deleted ${done} of ${items.length}`); picked.clear(); selecting = false; paintSel();
+    };
+    const pinBar = h("div", { class: "pin-bar", hidden: true });
+    const paintPins = () => {
+      const all = pins();
+      pinBar.hidden = !all.length;
+      mount(pinBar, icon("pin", 13), ...all.slice(0, 3).map((p) => h("span", { class: "pin-item wrap" }, h("strong", null, p.author_name), " ", p.text)), all.length > 3 ? h("span", { class: "muted small" }, `+${all.length - 3} more`) : null);
+    };
+    paintPins();
+    const actx: ActionCtx = {
+      reply: (name) => { input.value = `@${name} `; input.focus(); },
+      select: (m) => { selecting = true; picked.add(m as Line); paintSel(); redraw(); },
+      pinsChanged: paintPins,
+      extra: readerItems,
+    };
+
     // ----- chat lines
     const lineEl = (m: Line, withDate = false): HTMLElement => {
       const k = kindOf(m);
       const cls = k === "ok" ? "" : k === "flagged" ? " flagged" : " blocked";
-      return h("div", { class: `line${cls}` }, h("time", { title: dateTime(m.ts) }, withDate ? dateTime(m.ts) : clock(m.ts)),
+      const el = h("div", { class: `line${cls}${picked.has(m) ? " picked" : ""}` }, h("time", { title: dateTime(m.ts) }, withDate ? dateTime(m.ts) : clock(m.ts)),
         h("div", null,
           h("span", { class: `who ${m.level}` }, m.author_name),
           h("span", { class: "text" }, m.text),
           k !== "ok" ? h("div", { class: `why ${k}` }, icon(k === "blocked" ? "shield" : "flag", 13), h("span", null, whyText(m, k))) : null));
+      wireLine(el, m, actx);
+      el.addEventListener("click", () => { if (!selecting) return; if (picked.has(m)) picked.delete(m); else picked.add(m); el.classList.toggle("picked", picked.has(m)); paintSel(); });
+      return el;
     };
     const visible = (m: Line): boolean => {
       if (filter === "flagged" && kindOf(m) === "ok") return false;   // flagged = everything moderation reacted to
@@ -102,6 +143,7 @@ export const desk: Page = {
     const add = (m: Line) => {
       arrivals.push(m.ts);
       if (arrivals.length > 4000) arrivals.splice(0, arrivals.length - 4000);
+      reader.offer(m);                    // the reader decides by its own rules; it does nothing unless Read chat was tapped
       if (paused) { queue.push(m); updatePause(); return; }
       push(m);
     };
@@ -165,6 +207,7 @@ export const desk: Page = {
       if (!text) return;
       busy(send, async () => { await post("/api/chat/send", { text }); input.value = ""; });
     } }, input, send);
+    const chips = variableChips(input);
 
     // ----- approvals
     const tabs = paneTabs([
@@ -244,7 +287,7 @@ export const desk: Page = {
       tabs);
 
     // ----- the chat card, which can grow to fill the workspace
-    const main = h("div", { class: "chat-main" }, toolbar, dateWrap, banner, h("div", { class: "feed-wrap" }, list, jump), form);
+    const main = h("div", { class: "chat-main" }, toolbar, readerButton(), dateWrap, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
     const side = h("aside", { class: "zoom-side", "aria-label": "Waiting for you" },
       h("div", { class: "zs-head" }, h("h3", null, icon("inbox", 16), "Waiting for you", sideCount), h("button", { class: "icon-btn zs-close", type: "button", "aria-label": "Close the waiting list", onclick: () => chatPane.classList.remove("side-open") }, icon("x", 18))),
       h("div", { class: "zs-body" }));
@@ -271,7 +314,8 @@ export const desk: Page = {
 
     const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true });
     const statusPane = card("activity", "Bot status", health, { flush: true });
-    const sideStack = h("div", { class: "stack" }, queuePane, statusPane);
+    const live = liveCard();
+    const sideStack = h("div", { class: "stack" }, queuePane, live.el, statusPane);
 
     const zoom = zoomToFill(chatPane, {
       onOpen: () => {
@@ -293,8 +337,8 @@ export const desk: Page = {
     // panes are switched by the tab control on narrow screens; on wide screens both columns show
     const cols = h("div", { class: "cols" }, chatPane, sideStack);
     root.appendChild(cols);
-    const panes: Record<string, HTMLElement> = { chat: chatPane, queue: queuePane, status: statusPane };
-    const apply = (id: string) => { for (const [k, el] of Object.entries(panes)) el.setAttribute("data-hidden", String(k !== id)); for (const b of Array.from(tabs.children)) b.setAttribute("aria-selected", String(b.getAttribute("data-id") === id)); };
+    const panes: Record<string, HTMLElement> = { chat: chatPane, queue: queuePane, status: statusPane, live: live.el };
+    const apply = (id: string) => { for (const [k, el] of Object.entries(panes)) el.setAttribute("data-hidden", String(k !== id && !(k === "live" && id === "status"))); for (const b of Array.from(tabs.children)) b.setAttribute("aria-selected", String(b.getAttribute("data-id") === id)); };
     for (const b of Array.from(tabs.children)) b.addEventListener("click", () => apply(b.getAttribute("data-id") ?? "chat"));
     for (const el of Object.values(panes)) el.classList.add("pane");
     apply("chat");
@@ -320,6 +364,6 @@ export const desk: Page = {
     ];
     offs.push(onStatus(() => renderFacts()));
     const t = window.setInterval(renderFacts, 5000);
-    return () => { offs.forEach((f) => f()); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
+    return () => { offs.forEach((f) => f()); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },
 };

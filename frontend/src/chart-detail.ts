@@ -3,6 +3,7 @@
 import { get } from "./api.js";
 import { h, mount, sheet, toast } from "./dom.js";
 import { icon } from "./icons.js";
+import { status as appStatus } from "./state.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const s = (tag: string, attrs: Record<string, string | number> = {}, text?: string): SVGElement => {
@@ -22,7 +23,7 @@ export const HISTORY_SERIES: SeriesDef[] = [
   { key: "bans", label: "Bans", color: "var(--live)", dash: "10 4" },
 ];
 interface Pt { t: number; [k: string]: number }
-interface Hist { res: "hour" | "day"; step: number; points: Pt[] }
+interface Hist { res: "hour" | "day"; step: number; points: Pt[]; sample?: boolean }
 const RANGES: { id: string; label: string; days: number }[] = [
   { id: "1d", label: "24 h", days: 1 }, { id: "7d", label: "7 days", days: 7 }, { id: "30d", label: "30 days", days: 30 },
   { id: "90d", label: "90 days", days: 90 }, { id: "1y", label: "1 year", days: 365 }, { id: "all", label: "All", days: 1826 },
@@ -82,7 +83,7 @@ export function openChartDetail(title: string, initial: string[] = ["messages", 
   paintChips(); paintToggles();
 
   async function fetchRange(days: number, until: number): Promise<Hist> {
-    return get<Hist>(`/api/history?since=${Math.floor(until - days * 86400)}&until=${Math.floor(until)}`);
+    return get<Hist>(`/api/history?since=${Math.floor(until - days * 86400)}&until=${Math.floor(until)}${appStatus?.hub.mode === "demo" ? "&demo=1" : ""}`);
   }
   async function load(): Promise<void> {
     status.textContent = "Loading...";
@@ -95,7 +96,7 @@ export function openChartDetail(title: string, initial: string[] = ["messages", 
         if (first > 0) hist.points = hist.points.slice(first);
       }
       prev = compare ? await fetchRange(days, now - days * 86400) : null;
-      status.textContent = "";
+      status.textContent = hist?.sample ? "Sample data: Demo mode has no real history, so these numbers are made up to show how the chart works." : "";
     } catch (e) { status.textContent = e instanceof Error ? e.message : "Could not load history."; toast(status.textContent, "error"); }
     draw();
   }

@@ -115,6 +115,9 @@ class TelegramControl:
             self._last_logged[kind] = now
         try:
             await self.db.execute("INSERT INTO telegram_log (ts, kind, detail) VALUES (?, ?, ?)", (now, kind, detail[:160]))
+            act = getattr(getattr(self.bot.c, "activity", None), "record", None) if hasattr(self, "bot") else None
+            if act and kind in ("control", "unlink", "rotate", "shutdown"):
+                await act("telegram", kind, "Telegram: " + detail[:160], "sensitive" if kind != "control" else "notable")
             await self.db.execute("DELETE FROM telegram_log WHERE id <= (SELECT MAX(id) FROM telegram_log) - ?", (LOG_KEEP,))
         except Exception:
             logger.debug("Telegram log write failed", exc_info=True)

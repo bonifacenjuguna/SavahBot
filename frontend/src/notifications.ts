@@ -1,8 +1,8 @@
 /** The bell. Since 1.2.0 the server owns notifications: this file only shows them, so the bell, the Notifications page and push all agree. */
 import * as feed from "./events.js";
-import { get, post } from "./api.js";
-import { h, mount, sheet, toast } from "./dom.js";
-import { icon } from "./icons.js";
+import { api, get, post } from "./api.js";
+import { dateTime, h, mount, sheet, toast } from "./dom.js";
+import { icon , statusIcon } from "./icons.js";
 import type { Status } from "./state.js";
 import { dateRange, type RangeValue } from "./pages/kit.js";
 
@@ -20,6 +20,27 @@ const changed = (): void => subs.forEach((f) => f());
 
 export const notices = (): Notice[] => items;
 export const unreadCount = (): number => unread;
+/** The most serious thing still unread, for the colour of the bell badge. */
+export const worstUnread = (): Kind => items.some((n) => !n.read && n.kind === "bad") ? "bad" : items.some((n) => !n.read && n.kind === "warn") ? "warn" : "info";
+
+/** What a tap on a notification shows when it has no page of its own (a test, a summary...): the notification itself, with what you can do about it. */
+export async function openNotification(id: number): Promise<void> {
+  let item: Row;
+  try { item = (await get<{ item: Row }>(`/api/notify/item/${id}`)).item; } catch (e) { toast(e instanceof Error ? e.message : "That notification is gone.", "error"); return; }
+  markRead(item.id);
+  let label = item.category;
+  try { label = (await get<{ items: { id: string; name: string }[] }>("/api/notify/categories")).items.find((c) => c.id === item.category)?.name ?? item.category; } catch { /* the id is readable enough */ }
+  const own = !item.route || item.route.startsWith("#/notifications");
+  const box = sheet("Notification", h("div", { class: "stack", style: "gap:14px" },
+    h("div", { class: `notice ${item.kind}`, style: "pointer-events:none" }, h("span", { class: "notice-ico" }, icon(item.icon, 18)), h("span", { class: "notice-main" }, h("strong", null, item.title), item.body ? h("span", null, item.body) : null)),
+    h("p", { class: "muted small" }, `${label} · ${dateTime(item.ts)}${item.count > 1 ? ` · happened ${item.count} times` : ""}`),
+    h("div", { class: "row wrap", style: "gap:8px" },
+      own ? null : h("button", { class: "btn primary", type: "button", onclick: () => { box.close(); location.hash = item.route; } }, icon("arrowRight", 16), "Open what it is about"),
+      h("button", { class: "btn ghost", type: "button", onclick: () => { box.close(); location.hash = "#/notifications?tab=categories"; } }, icon("sliders", 16), "Choose what reaches me"),
+      item.category === "test.test" ? null : h("button", { class: "btn ghost", type: "button", onclick: async () => {
+        try { await api("PATCH", "/api/notify/prefs", { categories: { [item.category]: { push: false, inapp: false } } }); toast(`${label} is switched off. You can turn it back on under Categories.`); box.close(); void refresh(); } catch (e) { toast(e instanceof Error ? e.message : "Could not change that", "error"); }
+      } }, icon("bellOff", 16), "Stop these"))));
+}
 export function onNotices(fn: () => void): () => void { subs.add(fn); return () => subs.delete(fn); }
 
 export async function refresh(): Promise<void> {
@@ -87,12 +108,12 @@ function panelContent(close: () => void): { el: HTMLElement; stop: () => void } 
     readAll.disabled = unreadCount() === 0;
     clear.disabled = items.length === 0;
     mount(list, shown.length ? shown.map((n) => {
-      const open = () => { markRead(n.id); if (n.href) { close(); location.hash = n.href; } };
+      const open = () => { markRead(n.id); if (n.href) { close(); location.hash = n.href; } };   // the href of a notification without a page of its own opens the notification itself
       return h("button", { class: `notice ${n.kind}${n.read ? "" : " unread"}`, type: "button", onclick: open },
         h("span", { class: "notice-ico" }, icon(n.icon, 18)),
         h("span", { class: "notice-body" }, h("strong", null, n.title), n.text ? h("span", { class: "small muted" }, n.text) : null, h("span", { class: "small muted" }, ago(n.ts))),
         n.read ? null : h("i", { class: "notice-dot", "aria-label": "Unread" }));
-    }) : h("div", { class: "empty" }, icon("checkCircle", 30), h("span", null, range.active ? `Nothing for ${range.label.toLowerCase()}.` : onlyUnread ? "No unread notifications." : loaded ? "You are all caught up. Events like stream start, reminders and problems appear here." : "Loading…")));
+    }) : h("div", { class: "empty" }, statusIcon("ok", 34), h("span", null, range.active ? `Nothing for ${range.label.toLowerCase()}.` : onlyUnread ? "No unread notifications." : loaded ? "You are all caught up. Events like stream start, reminders and problems appear here." : "Loading…")));
   }
   draw();
   const off = onNotices(draw);

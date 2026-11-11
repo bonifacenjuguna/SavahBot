@@ -75,6 +75,10 @@ _f(G, "firebase_web_app_id", "", "Firebase web app appId. Public by design.")
 _f(G, "firebase_messaging_sender_id", "", "Firebase messagingSenderId (Cloud Messaging tab). Public by design.")
 _f(G, "firebase_auth_domain", "", "Optional Firebase authDomain. Not needed for push; leave blank.")
 _f(G, "firebase_vapid_key", "", "Web Push certificate public key (Cloud Messaging > Web configuration > Generate key pair). Public by design.")
+_f(G, "activity_retention_days", 365, "How long the activity log is kept. 0 keeps it forever.")
+_f(G, "activity_notify_sensitive", False, "Send a notification when a sensitive change is logged, such as a security or sign-in setting.")
+_f(G, "voice_dir", "data/voices", "Folder where voice packs for the chat reader are stored. On Railway, attach a Volume at this path or uploads are lost on redeploy.")
+_f(G, "voice_pack_max_mb", 300, "Most megabytes of voice files you can keep. Uploads that would pass this are refused.")
 _f(G, "notify_retention_days", 30, "Notification history older than this is deleted automatically.")
 _f(G, "notify_max_push_per_hour", 30, "Most push messages sent per hour. Extras are folded into one summary.")
 _f(G, "notify_max_attempts", 5, "Times a failed push is retried (with growing delays) before it is marked failed.")
@@ -143,6 +147,21 @@ _f(G, "yt_cost_channel_list", 1, "Quota cost: look up a channel (the signed-in a
 _f(G, "yt_cost_search", 100, "Quota cost: search for a channel's live stream. Verify against the current YouTube docs.")
 _f(G, "yt_detect_budget_fraction", 0.1, "Share of the daily quota that searching for another channel's live stream may use.")
 _f(G, "youtube_target_detect_interval_seconds", 900, "How often to search for a live stream on a channel you do not own while it is offline. Searching is expensive, so it is also capped by YT_DETECT_BUDGET_FRACTION. Set YOUTUBE_VIDEO_ID to avoid searching.")
+_f(G, "yt_cost_subscription_list", 1, "Quota cost: check recent subscribers. Verify against the current YouTube docs.")
+_f(G, "yt_events_notify", True, "Tell me (bell, push, Telegram per the category settings) about new members, Super Chats, Super Stickers and membership gifts.")
+_f(G, "yt_events_thank", False, "Post a thank-you in chat for members, Super Chats and gifts. Off by default: it costs YouTube quota for every message.")
+_f(G, "yt_events_msg_member", "Welcome to the members, $(user)! 💚", "Thank-you for a new member. $(user) and $(count) are filled in; your own variables work too.")
+_f(G, "yt_events_msg_superchat", "Thank you $(user) for the $(amount)!", "Thank-you for a Super Chat or Super Sticker. $(user) and $(amount) are filled in.")
+_f(G, "yt_events_msg_gift", "Thank you $(user) for gifting $(count) memberships!", "Thank-you for membership gifts. $(user) and $(count) are filled in.")
+_f(G, "yt_subs_enabled", True, "Look for new subscribers while you are live. Best effort: YouTube only lists subscribers who made their subscription public.")
+_f(G, "yt_subs_minutes", 10, "How often to check for new subscribers, in minutes (5 to 120). Each check costs about 1 quota unit.")
+_f(G, "yt_subs_thank", False, "Post a thank-you in chat for a new subscriber you can see by name.")
+_f(G, "yt_subs_msg", "Thanks for subscribing, $(user)! 🎉", "Thank-you for a new subscriber. $(user) is filled in.")
+_f(G, "yt_subs_milestone_step", 100, "Alert me each time the subscriber count passes a multiple of this. 0 turns milestones off.")
+_f(G, "yt_live_enabled", True, "Track likes and people watching while you are live.")
+_f(G, "yt_live_seconds", 60, "How often to refresh likes and viewers, in seconds (30 to 600). Each refresh costs about 1 quota unit.")
+_f(G, "yt_live_likes_step", 100, "Alert me each time likes pass a multiple of this. 0 turns it off.")
+_f(G, "yt_live_viewers_step", 50, "Alert me each time viewers pass a multiple of this for the first time in a stream. 0 turns it off.")
 _f(G, "yt_cost_moderator_list", 50, "Quota cost: list moderators.")
 _f(G, "yt_read_budget_fraction", 0.6, "Share of the daily quota the bot may spend reading chat (the rest is kept for actions).")
 _f(G, "yt_min_poll_seconds", 5.0, "Never poll chat faster than this.")
@@ -337,7 +356,7 @@ BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 EDITABLE_PREFIXES = (
     "mod_", "command_", "urlfetch_", "demo_", "yt_", "timers_", "reminders_", "scheduler_",
     "telegram_notify_", "intel_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
-    "notify_", "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_",
+    "notify_", "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_", "activity_",
 )
 EDITABLE_KEYS = {"bot_mode", "telegram_mode", "owner_timezone"}
 ENUMS: dict[str, list[str]] = {

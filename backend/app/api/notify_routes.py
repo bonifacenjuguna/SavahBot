@@ -130,6 +130,14 @@ async def notify_inbox(request: Request, c: Any) -> dict:
                                   since=_f(request, "since"), until=_f(request, "until"))
 
 
+@R.add("/notify/item/{nid:int}", ["GET"])
+async def notify_item(request: Request, c: Any) -> dict:
+    out = await c.notifier.inbox(limit=1, nid=int(request.path_params["nid"]))
+    if not out["items"]:
+        raise ApiError("That notification is gone (it may have been cleared).", 404)
+    return {"item": out["items"][0]}
+
+
 @R.add("/notify/unread", ["GET"], limited_ok=True)
 async def notify_unread(request: Request, c: Any) -> dict:
     return {"unread": await c.notifier.unread()}

@@ -32,8 +32,12 @@ function variableChips(target: HTMLTextAreaElement, after: () => void): HTMLElem
     target.setSelectionRange(s + v.length, s + v.length);
     after();
   };
+  const chip = (v: string) => h("button", { class: "chip", type: "button", style: "cursor:pointer", onclick: () => insert(v) }, v);
+  const mine = h("div", { class: "row wrap", style: "gap:6px;margin-top:6px" });
+  // your own variables (Settings, Variables) sit beside the built-in ones
+  void get<{ variables: { name: string }[] }>("/api/variables").then((d) => { if (d.variables.length) mount(mine, h("span", { class: "muted small" }, "Yours:"), ...d.variables.map((v) => chip(`$(${v.name})`))); }).catch(() => undefined);
   return h("div", null, h("div", { class: "muted small", style: "margin-bottom:6px" }, "Tap a variable to insert it"),
-    h("div", { class: "row", style: "gap:6px" }, VARIABLES.map((v) => h("button", { class: "chip", type: "button", style: "cursor:pointer", onclick: () => insert(v) }, v))));
+    h("div", { class: "row", style: "gap:6px" }, VARIABLES.map(chip)), mine);
 }
 
 function livePreview(source: HTMLTextAreaElement): { el: HTMLElement; update: () => void } {

@@ -186,10 +186,12 @@ def test_polling_mode_consumes_updates_and_toggle_switches_back():
         assert await wait_for(lambda: len(fake.sent()) == 1)
         assert c.telegram._offset > 0
 
-        await say(c, OWNER, "/tgmode webhook")             # toggle at runtime
+        await say(c, OWNER, "/tgmode webhook")             # toggle at runtime (the switch finishes in its own task)
+        await c.telegram._switch_task
         assert c.cfg.get("telegram_mode") == "webhook"
         assert fake.server.calls("/setWebhook") and c.telegram.status()["polling"] is False
         await say(c, OWNER, "/tgmode polling")
+        await c.telegram._switch_task
         assert c.telegram.status()["polling"] is True and c.telegram.webhook_url == ""
         await c.stop()
     run(go())
@@ -425,3 +427,16 @@ async def test_telegram_control_api(api):
     st, b = await api.call("GET", "/api/telegram/log")
     assert st == 200 and any(e["kind"] == "shutdown" for e in b["items"])
     assert (await api.call("DELETE", "/api/telegram/log"))[0] == 200
+
+
+def test_mode_switch_from_inside_polling_registers_the_webhook():
+    async def go():
+        fake = FakeTelegram()
+        c = await boot(fake, TELEGRAM_MODE="polling")
+        await c.telegram.handle_update({"update_id": 11, "message": {"message_id": 1, "from": {"id": OWNER}, "chat": {"id": OWNER, "type": "private"}, "text": "/tgmode webhook"}})
+        await c.telegram._switch_task
+        assert c.cfg.get("telegram_mode") == "webhook" and c.telegram.webhook_url
+        assert fake.server.calls("/setWebhook")
+        assert "Switching" in fake.texts()[-2] and "now uses webhook" in fake.texts()[-1]
+        await c.stop()
+    run(go())

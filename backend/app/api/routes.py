@@ -510,7 +510,7 @@ async def chat_search(request: Request, c: Any) -> dict:
 @R.add("/chat/send", ["POST"])
 async def chat_send(request: Request, c: Any) -> dict:
     b = await parse(request, S.ChatSend)
-    if not await c.hub.send_chat(b.text):
+    if not await c.hub.send_chat(b.text, render=True):
         raise ApiError("Could not send. The chat source is not connected to a live chat.", 409)
     return {"ok": True}
 
@@ -629,6 +629,275 @@ async def youtube_start(request: Request, c: Any) -> dict:
     if not c.google.redirect_uri():
         raise ApiError("Set PUBLIC_BASE_URL so Google knows where to send you back.", 409)
     return {"url": c.google.auth_url(c.google.new_state()), "redirect_uri": c.google.redirect_uri()}
+
+
+@R.add("/reader/rules", ["GET"])
+async def reader_rules_get(request: Request, c: Any) -> dict:
+    """The chat reader's rules, shared by every device you sign in on. Voice, speed and volume stay on each device."""
+    import json
+    raw = await c.db.kv_get("reader_rules")
+    return {**S.ReaderRules().model_dump(), **(json.loads(raw) if raw else {})}
+
+
+@R.add("/reader/rules", ["POST"])
+async def reader_rules_set(request: Request, c: Any) -> dict:
+    b = await parse(request, S.ReaderRules)
+    clean_dict = []
+    for d in b.dictionary:
+        a, z = (d.get("from") or "").strip()[:40], (d.get("to") or "").strip()[:60]
+        if a and z:
+            clean_dict.append({"from": a, "to": z})
+    data = {**b.model_dump(), "dictionary": clean_dict}
+    import json
+    await c.db.kv_set("reader_rules", json.dumps(data))
+    await c.activity.record("settings", "reader", "Changed the chat reader rules", "routine")
+    return data
+
+
+@R.add("/voices", ["GET"])
+async def voices_list(request: Request, c: Any) -> dict:
+    """Uploaded voice packs, the storage status (is it a folder that survives a redeploy?) and the optional model host link."""
+    return {**c.voices.status(), "packs": c.voices.packs(), "host": await c.db.kv_get("voice_host", "") or "",
+            "files_base": (c.settings.public_url or "") + "/api/voices/files/"}
+
+
+@R.add("/voices/file", ["POST"])
+async def voices_file(request: Request, c: Any) -> dict:
+    """One file, sent as the raw request body. ?pack=name&path=folder/file.onnx. Zips go to /voices/zip."""
+    from ..voices import VoiceError
+    try:
+        n = await c.voices.save_stream(request.query_params.get("pack", ""), request.query_params.get("path", ""), request.stream())
+    except VoiceError as exc:
+        raise ApiError(exc.message, exc.status) from None
+    await c.activity.record("settings", "voices", f"Uploaded a voice file to {request.query_params.get('pack')}", "routine")
+    return {"bytes": n}
+
+
+@R.add("/voices/zip", ["POST"])
+async def voices_zip(request: Request, c: Any) -> dict:
+    from ..voices import VoiceError
+    data = b""
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > c.voices.max_bytes:
+            raise ApiError("That zip is bigger than the voice file limit.", 413)
+    try:
+        n = c.voices.save_zip(request.query_params.get("pack", ""), data)
+    except VoiceError as exc:
+        raise ApiError(exc.message, exc.status) from None
+    await c.activity.record("settings", "voices", f"Uploaded a voice pack zip ({n} files) to {request.query_params.get('pack')}", "routine")
+    return {"files": n}
+
+
+@R.add("/voices/delete", ["POST"])
+async def voices_delete(request: Request, c: Any) -> dict:
+    from ..voices import VoiceError
+    b = await parse(request, S.VoiceDelete)
+    try:
+        gone = c.voices.delete(b.pack)
+    except VoiceError as exc:
+        raise ApiError(exc.message, exc.status) from None
+    if gone:
+        await c.activity.record("settings", "voices", f"Deleted the voice pack {b.pack}", "notable")
+    return {"deleted": gone}
+
+
+@R.add("/voices/host", ["POST"])
+async def voices_host(request: Request, c: Any) -> dict:
+    """A link to voice files you host yourself (https only). The browser, not the server, downloads from it."""
+    from urllib.parse import urlparse
+    b = await parse(request, S.VoiceHost)
+    url = b.url.strip().rstrip("/")
+    if url:
+        p = urlparse(url)
+        if p.scheme != "https" or not p.hostname or "." not in p.hostname:
+            raise ApiError("Use a full https:// address.", 422)
+    await c.db.kv_set("voice_host", url)
+    return {"host": url}
+
+
+@R.add("/voices/files/{pack}/{path:path}", ["GET"], public=True)
+async def voices_serve(request: Request, c: Any) -> Response:
+    """Serves one stored voice file to your browser. Public on purpose (the model loader cannot send your sign-in) and harmless: voice models only."""
+    from starlette.responses import FileResponse
+    p = c.voices.path_for(request.path_params["pack"], request.path_params["path"])
+    if p is None:
+        raise ApiError("No such voice file.", 404)
+    return FileResponse(p, headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*"})
+
+
+@R.add("/chat/act", ["POST"])
+async def chat_act(request: Request, c: Any) -> dict:
+    """Delete a message, or time out or ban its author, from the chat. Returns ban_id so the page can offer Undo (which lifts it)."""
+    b = await parse(request, S.ChatAct)
+    res = await c.hub.manual(b.id, b.action, b.seconds)
+    if not res["ok"]:
+        raise ApiError(res["error"], res.get("code", 400))
+    return res
+
+
+@R.add("/chat/person", ["GET"])
+async def chat_person(request: Request, c: Any) -> dict:
+    """The person card: who this is, how long they have been around, what they said lately, and what has happened to them."""
+    aid = request.query_params.get("author_id", "")
+    platform = request.query_params.get("platform", "youtube")
+    if not aid:
+        raise ApiError("author_id is required.", 422)
+    db = c.store.db
+    stats = await db.fetchone("SELECT COUNT(*) AS n, MIN(ts) AS first, MAX(ts) AS last, MAX(author_name) AS name FROM chat_messages WHERE platform = ? AND author_id = ? AND level != 'bot'", (platform, aid))
+    recent = await db.fetchall("SELECT id, ts, body, verdict FROM chat_messages WHERE platform = ? AND author_id = ? ORDER BY ts DESC, id DESC LIMIT 12", (platform, aid))
+    actions = await db.fetchall("SELECT ts, kind, status, source FROM bans WHERE platform = ? AND author_id = ? ORDER BY ts DESC LIMIT 10", (platform, aid))
+    notes = [n for n in await c.store.list_notes() if stats["name"] and f"@{stats['name']}".lower() in (n.get("body") or "").lower()][:5]
+    return {"name": stats["name"], "messages": stats["n"], "first_seen": stats["first"], "last_seen": stats["last"], "recent": recent, "actions": actions,
+            "notes": notes, "regular": bool(c.store.is_regular(aid, stats["name"] or ""))}
+
+
+@R.add("/chat/costs", ["GET"])
+async def chat_costs(request: Request, c: Any) -> dict:
+    """What each chat action costs in YouTube quota today, so the page can show it before you confirm."""
+    q = c.quota
+    return {"delete": q.cost("chat_delete"), "timeout": q.cost("ban"), "ban": q.cost("ban"), "send": q.cost("chat_insert"), "remaining": q.remaining}
+
+
+@R.add("/live/stats", ["GET"])
+async def live_stats(request: Request, c: Any) -> dict:
+    """Likes and viewers for the current stream, as YouTube last reported them, with how old that is."""
+    out = await c.extras.stats()
+    if c.hub.mode == "demo":
+        out = demo_live_stats()
+    return out
+
+
+@R.add("/live/events", ["GET"])
+async def live_events(request: Request, c: Any) -> dict:
+    return {"items": await c.extras.recent_events(30)}
+
+
+@R.add("/live/streams", ["GET"])
+async def live_streams(request: Request, c: Any) -> dict:
+    return {"items": await c.extras.streams(20)}
+
+
+def demo_live_stats() -> dict:
+    """Demo mode has no YouTube, so the live card shows a repeatable made-up stream and says so."""
+    import math
+    now = time.time()
+    series = [{"ts": now - (59 - i) * 60, "likes": 120 + i * 3 + int(8 * math.sin(i / 4)), "viewers": 40 + int(25 * math.sin(i / 9) + i / 2)} for i in range(60)]
+    return {"video_id": "demo", "likes": series[-1]["likes"], "viewers": series[-1]["viewers"], "updated": now - 12, "peak_viewers": max(p["viewers"] for p in series), "likes_hidden": False,
+            "note": "", "likes_per_min": 3.4, "series": series, "sample": True, "subscribers": {"state": "demo", "note": "", "count": 1520, "checked": now - 60}, "cost_per_hour": 60, "enabled": True}
+
+
+@R.add("/moderation/level", ["GET"])
+async def moderation_level_get(request: Request, c: Any) -> dict:
+    from ..moderation.levels import describe
+    return describe(c.cfg)
+
+
+@R.add("/moderation/level", ["POST"])
+async def moderation_level_set(request: Request, c: Any) -> dict:
+    """Apply a ready-made set of thresholds (basic, balanced, strict). The on/off mode is not changed."""
+    from ..moderation.levels import LEVELS, describe
+    b = await parse(request, S.ModLevel)
+    if b.level not in LEVELS:
+        raise ApiError("Pick basic, balanced or strict.", 422)
+    for k, v in LEVELS[b.level]["values"].items():
+        await c.cfg.set(k, v)
+    await c.activity.record("moderation", "level", f"Auto-moderation level set to {LEVELS[b.level]['label']}", "notable")
+    return describe(c.cfg)
+
+
+@R.add("/activity", ["GET"])
+async def activity_list(request: Request, c: Any) -> dict:
+    """The activity log, newest first, filtered by area, importance, text and dates. `before` continues from the last id seen."""
+    q = request.query_params
+
+    def num(k: str, d: float = 0) -> float:
+        try:
+            return float(q.get(k, d))
+        except ValueError:
+            return d
+    return await c.activity.query(q.get("area", ""), q.get("importance", ""), q.get("q", ""), num("since"), num("until"), int(num("before")), int(num("limit", 30)))
+
+
+@R.add("/activity/export", ["GET"])
+async def activity_export(request: Request, c: Any) -> Any:
+    """Everything that matches, as a CSV file. Holds the same limited fields as the page, never secrets or message text."""
+    import csv
+    import io
+    q = request.query_params
+    res = await c.activity.query(q.get("area", ""), q.get("importance", ""), q.get("q", ""), 0, 0, 0, 200)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["time", "area", "importance", "action", "summary", "before", "after"])
+    for r in res["items"]:
+        w.writerow([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["ts"])), r["area"], r["importance"], r["action"], r["summary"], r["before_v"], r["after_v"]])
+    from starlette.responses import Response
+    return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=savahbot-activity.csv"})
+
+
+@R.add("/variables", ["GET"])
+async def variables_list(request: Request, c: Any) -> dict:
+    """Your own variables with how many places use each, plus the built-ins their names must not clash with."""
+    from ..variables import BUILTIN
+    return {"variables": await c.variables.listing(), "builtin": [{"name": k, "help": v} for k, v in BUILTIN.items()]}
+
+
+@R.add("/variables", ["POST"])
+async def variables_save(request: Request, c: Any) -> dict:
+    from ..variables import VariableError
+    b = await parse(request, S.VariableIn)
+    try:
+        saved = await c.variables.save(b.name, b.value, b.kind, b.note, time.time())
+    except VariableError as exc:
+        raise ApiError(exc.message, exc.status) from None
+    await c.activity.record("variables", "variable", f"{'Changed' if saved['replaced'] else 'Added'} $({saved['name']})", "routine", "", saved["value"] if saved["kind"] != "text" else "")
+    return saved
+
+
+@R.add("/variables/delete", ["POST"])
+async def variables_delete(request: Request, c: Any) -> dict:
+    """Without force, a variable that is still used is kept and the places using it are listed, so nothing breaks silently."""
+    b = await parse(request, S.VariableDelete)
+    used = await c.variables.delete(b.name, b.force)
+    if used:
+        names = ", ".join(f"{u['kind']} {u['name']}" for u in used[:6])
+        raise ApiError(f"$({b.name}) is still used in {len(used)} place(s): {names}. Delete anyway and it will show as typed.", 409, "in_use")
+    await c.activity.record("variables", "variable", f"Deleted $({b.name})", "notable")
+    return {"deleted": b.name}
+
+
+@R.add("/youtube/source", ["POST"])
+async def youtube_source(request: Request, c: Any) -> dict:
+    """Where the live stream comes from: search the channel automatically, a link you paste, or both (the link wins while it is live)."""
+    from ..services.youtube import VIDEO_ID_RE, parse_video_id
+    body = await parse(request, S.YoutubeSource)
+    out: dict[str, Any] = {}
+    if body.auto_detect is not None:
+        await c.cfg.set("youtube_auto_detect_live", bool(body.auto_detect))
+    if body.video is not None:
+        raw = body.video.strip()
+        if not raw:
+            await c.cfg.set("youtube_video_id", "")
+        else:
+            vid = parse_video_id(raw)
+            if not VIDEO_ID_RE.match(vid):
+                raise ApiError("That does not look like a YouTube video link or ID. Paste the watch link, a youtu.be link, a /live/ link, or the 11-character ID.", 422)
+            out["checked"] = False
+            if await c.google.connected() and c.youtube.target and c.quota.can_afford("video_list"):
+                await c.quota.spend(c.quota.cost("video_list"))
+                status, data = await c.youtube._api("GET", "/videos", params={"part": "snippet,liveStreamingDetails", "id": vid})
+                item = ((data.get("items") or [None])[0]) if status == 200 and isinstance(data, dict) else None
+                if status == 200 and not item:
+                    raise ApiError("YouTube does not know that video, or this account cannot see it.", 404)
+                if item:
+                    if (item.get("snippet") or {}).get("channelId") != c.youtube.target["channel_id"]:
+                        raise ApiError("That video belongs to a different channel than the one you moderate, so SavahBot will not attach to it.", 409)
+                    out.update(checked=True, title=(item.get("snippet") or {}).get("title", ""), live=bool((item.get("liveStreamingDetails") or {}).get("activeLiveChatId")))
+            await c.cfg.set("youtube_video_id", vid)
+        if c.youtube.chat_id and parse_video_id(c.cfg.get("youtube_video_id")) not in ("", c.youtube.video_id):
+            c.youtube._detach()           # a different stream was chosen: leave the old chat
+    c.youtube.nudge()
+    return {**out, "ok": True, "source": c.youtube.source()}
 
 
 @R.add("/youtube/use-own-channel", ["POST"])

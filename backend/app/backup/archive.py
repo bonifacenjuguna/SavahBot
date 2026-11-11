@@ -16,7 +16,7 @@ from .container import BackupError
 
 SCOPES: dict[str, dict[str, Any]] = {
     "settings": {"label": "Settings you changed in the dashboard", "default": True, "tables": ["settings"], "kv": []},
-    "commands": {"label": "Commands, timers, auto replies and reminders", "default": True, "tables": ["commands", "timers", "triggers", "reminders"], "kv": ["seeded"]},
+    "commands": {"label": "Commands, timers, auto replies, reminders and your variables", "default": True, "tables": ["commands", "timers", "triggers", "reminders", "custom_vars"], "kv": ["seeded"]},
     "community": {"label": "Quotes, regulars, blacklist and notebook", "default": True, "tables": ["quotes", "regulars", "blacklist", "notes"], "kv": []},
     "knowledge": {"label": "Knowledge packs, your phrases and everything learned", "default": True,
                   "tables": ["knowledge_packs", "knowledge_entries", "knowledge_feeds", "knowledge_suggestions", "knowledge_log", "intel_examples", "intel_packs",

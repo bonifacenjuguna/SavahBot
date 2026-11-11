@@ -30,6 +30,10 @@ from .services.scheduler import Scheduler
 from .services.telegram import TelegramBot
 from .services.youtube import GoogleAuth, QuotaTracker, YouTubeSource
 from .store import Store
+from .variables import CustomVars
+from .activity import ActivityLog
+from .voices import VoiceStore
+from .services.live_extras import LiveExtras
 
 logger = logging.getLogger("savahbot")
 
@@ -54,6 +58,11 @@ class Container:
         self.feeds = FeedManager(self.db, self.cfg, self.intel, self.knowledge)
         self.knowledge.learning, self.knowledge.feeds = self.learning, self.feeds
         self.renderer = Renderer(self.cfg, self.store, uptime_fn=lambda: self.hub.uptime())
+        self.variables = CustomVars(self.db)
+        self.activity = ActivityLog(self.db, self.cfg)
+        self.cfg.activity = self.activity
+        self.activity.attach(self.bus)
+        self.renderer.custom = self.variables
         self.commands = CommandEngine(self.cfg, self.store, self.renderer, self.permits, uptime_fn=lambda: self.hub.uptime(),
                                       channel_fn=self._channel_name)
         self.hub = Hub(self.cfg, self.store, self.bus, self.engine, self.commands)
@@ -76,6 +85,13 @@ class Container:
         self.scheduler.hooks.append(self.access.purge)    # lifts old automatic bans if you set a second-chance time
         self.scheduler.hooks.append(self.weather.tick)       # refresh + alert rules; the scheduler only calls hooks on the leader
         self.scheduler.hooks.append(self.notifier.tick)
+        self.activity.notify = self.notifier
+        self.extras = LiveExtras(self)
+        self.voices = VoiceStore(self.cfg.get("voice_dir"), int(self.cfg.get("voice_pack_max_mb")))
+        self.renderer.live = self.extras
+        self.access.activity = self.activity
+        self.scheduler.hooks.append(self.extras.tick)
+        self.scheduler.hooks.append(self.activity.purge)
         self.scheduler.hooks.append(self.knowledge.tick)        # live data refresh, learning review; runs on the leader only
         self.keeper = StateKeeper(self.shared, self.cfg, self.engine, self.commands, self.hub)
         self.leader = Leader(self.shared, "leader", float(self.settings.redis_leader_ttl_seconds), on_gain=self._lead, on_lose=self._follow)

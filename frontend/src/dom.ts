@@ -135,6 +135,54 @@ export function iconButton(name: string, label: string, onclick: (e: Event) => v
 let openSheets = 0;
 
 /** Modal panel: bottom sheet on phones, centred dialog on larger screens. Esc and the backdrop close it. */
+/**
+ * Pull a sheet down by its grip bar or its title row (or by the content when it is scrolled to the top) and let go: past a third of the way,
+ * or with a quick flick, it closes; otherwise it springs back. The X button and Escape still work. Touch only, so a mouse or keyboard is unaffected.
+ */
+function enableDragToClose(panel: HTMLElement, overlay: HTMLElement, close: () => void): void {
+  const body = panel.querySelector(".sheet-body") as HTMLElement;
+  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let y0 = 0, dy = 0, t0 = 0, active = false, armed = false;
+  const start = (e: TouchEvent) => {
+    if (e.touches.length !== 1 || (e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    const inBody = (e.target as HTMLElement).closest(".sheet-body") !== null;
+    if (inBody && body.scrollTop > 0) return;
+    armed = true; active = false; y0 = e.touches[0].clientY; dy = 0; t0 = e.timeStamp;
+    panel.dataset.dragFromBody = inBody ? "1" : "";
+  };
+  const move = (e: TouchEvent) => {
+    if (!armed) return;
+    dy = e.touches[0].clientY - y0;
+    if (!active) {
+      if (dy > 8 && (panel.dataset.dragFromBody !== "1" || body.scrollTop === 0)) { active = true; panel.style.transition = "none"; }
+      else if (dy < -8) { armed = false; return; }
+      else return;
+    }
+    e.preventDefault();                                     // the page behind and the sheet's own scroll stay still while it is being pulled
+    panel.style.transform = `translateY(${Math.max(0, dy)}px)`;
+    overlay.style.setProperty("--drag", String(Math.min(1, Math.max(0, dy) / 400)));
+  };
+  const end = (e: TouchEvent) => {
+    if (!armed) return;
+    armed = false;
+    if (!active) return;
+    active = false;
+    const fast = dy / Math.max(1, e.timeStamp - t0) > 0.6;
+    panel.style.transition = reduced ? "none" : "transform 0.18s ease-out";
+    if (dy > panel.offsetHeight / 3 || (fast && dy > 40)) {
+      panel.style.transform = "translateY(105%)";
+      window.setTimeout(close, reduced ? 0 : 170);
+    } else {
+      panel.style.transform = "";
+      overlay.style.removeProperty("--drag");
+    }
+  };
+  panel.addEventListener("touchstart", start, { passive: true });
+  panel.addEventListener("touchmove", move, { passive: false });
+  panel.addEventListener("touchend", end, { passive: true });
+  panel.addEventListener("touchcancel", end, { passive: true });
+}
+
 export function sheet(title: string, body: Node, onClose?: () => void): { close: () => void } {
   const previous = document.activeElement as HTMLElement | null;
   const overlay = h("div", { class: "overlay" });
@@ -152,6 +200,7 @@ export function sheet(title: string, body: Node, onClose?: () => void): { close:
     h("header", { class: "sheet-head" }, h("h2", null, title), h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: close }, icon("x", 20))),
     h("div", { class: "sheet-body" }, body));
   overlay.appendChild(panel);
+  enableDragToClose(panel, overlay, close);
   overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) close(); });
   document.body.appendChild(overlay);
   document.body.classList.add("no-scroll");

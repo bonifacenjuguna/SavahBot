@@ -316,3 +316,16 @@ def test_old_notifications_table_is_repaired_on_startup(tmp_path):
         return cols
     cols = asyncio.run(go())
     assert {"dedupe_key", "category", "count", "read_ts"} <= cols
+
+
+def test_test_notification_opens_itself_and_item_lookup():
+    async def go():
+        n = await make()
+        r = await n.send_test(NOON)
+        assert r["ok"]
+        item = next(i for i in (await n.inbox())["items"] if i["category"] == "test.test")
+        assert item["route"] == f"#/notifications?open={item['id']}"
+        one = await n.inbox(limit=1, nid=item["id"])
+        assert [x["id"] for x in one["items"]] == [item["id"]]
+        assert (await n.inbox(limit=1, nid=999999))["items"] == []
+    run(go())

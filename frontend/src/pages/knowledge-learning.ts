@@ -1,7 +1,7 @@
 /** Settings > Knowledge > Learning: review, lessons, quality and history. Everything here talks to /api/knowledge/*. */
 import { get, patch, post, del } from "../api.js";
 import { busy, debounce, h, mount, toast, toastAction } from "../dom.js";
-import { icon } from "../icons.js";
+import { icon , statusIcon } from "../icons.js";
 import { ago, kcard, meter, pct, signalName, type LearningData, type Suggestion } from "./knowledge-shared.js";
 import { empty } from "./shared.js";
 import { confirmAct, figures, invite, lede, plural, seg } from "./widgets.js";
@@ -164,7 +164,7 @@ async function quality(host: HTMLElement): Promise<void> {
       h("span", { class: "ham", style: `height:${(t.ham / max) * 100}%` }), h("span", { class: "spam", style: `height:${(t.spam / max) * 100}%` }))));
   const reliable = ld.stats.signals.filter((s) => s.detector);
   mount(host,
-    d.drifting ? h("div", { class: "k-warn", role: "status" }, icon("alert", 18), h("div", null, h("strong", null, "Its accuracy has dropped recently"),
+    d.drifting ? h("div", { class: "k-warn", role: "status" }, statusIcon("warn", 22), h("div", null, h("strong", null, "Its accuracy has dropped recently"),
       h("div", { class: "k-note" }, `Over the last 2 weeks it was right ${pct(d.recent.accuracy)} of the time, down from ${pct(d.before.accuracy)} before. Check the latest lessons, forget any that were mistakes, or restore a snapshot in History.`))) : null,
     kcard("target", "How well it is doing", d.overall.n ? h("div", { class: "k-stack" },
       figures([{ value: acc(d.overall), label: "right before it learned the answer", tone: (d.overall.accuracy ?? 0) >= 0.8 ? "ok" : "warn" }, { value: String(d.overall.n), label: "lessons measured" },

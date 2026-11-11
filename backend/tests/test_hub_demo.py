@@ -308,3 +308,4 @@ def test_ambient_chat_never_looks_like_a_raid():
         assert len(rows) > 40, len(rows)
         assert all(r["verdict"] in (None, "allow") for r in rows), [r for r in rows if r["verdict"] not in (None, "allow")][:3]
     run(go())
+

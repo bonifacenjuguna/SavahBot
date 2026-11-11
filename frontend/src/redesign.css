@@ -316,3 +316,109 @@ body.zoom-open .tabbar { z-index: 10; }
 @media (max-height: 560px) { .login-pane { place-items: start center; } .lc-top { grid-template-columns: auto 1fr; text-align: left; justify-items: start; align-items: center; } .lc-logo { width: 48px; height: 48px; border-radius: 15px; } }
 @media (prefers-reduced-motion: reduce) { .login-card, .lc-conn, .lc-btn .spin { animation: none !important; } }
 .lc-conn[hidden] { display: none; }
+
+/* ---- 1.3.0 polish ------------------------------------------------------------------------------------------- */
+/* #7 Cards that a page places side by side in the page itself (no wrapper) used to touch. One rule gives them the same gap everywhere. */
+.main > :is(.block, .sp-card, .banner, .stack, .n-log) + :is(.block, .sp-card, .banner, .stack),
+.sheet-body > :is(.block, .sp-card) + :is(.block, .sp-card),
+.k-stack > :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 20px; }
+.stack > .banner, .stack > .sp-card, .stack > .block { margin: 0; }
+.banner + .block, .banner + .sp-card { margin-top: 16px; }
+
+/* #1 A setting row puts its label above the control on a phone, so the control gets the whole width instead of running off the card. */
+@media (max-width: 640px) {
+  .n-row:not(:has(> .switch)) { flex-direction: column; align-items: stretch; gap: 8px; }
+  .n-row:not(:has(> .switch)) > :not(.n-row-main) { max-width: 100%; min-width: 0; }
+  .n-row .seg-control { width: 100%; }
+  .n-row .swatch { flex: none; }
+  .n-row:has(> .switch) .switch { flex: none; }
+}
+.n-row-main > .muted { overflow-wrap: anywhere; }
+
+/* #7 The notification panel: the filter rows keep their height (they used to be squeezed over the first item) and never wrap a label. */
+.notice-panel > * { flex: none; }
+.notice-panel > .notice-list { flex: 1 1 auto; min-height: 0; }
+.notice-tools { flex-wrap: wrap; row-gap: 8px; }
+.notice-tools .btn, .notice-tools .seg-control button { white-space: nowrap; }
+.notice-panel > .daterange { padding: 10px 12px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.notice-panel > .daterange::-webkit-scrollbar { display: none; }
+.notice-list > .notice { flex: none; }
+
+/* #2 Status marks: tinted disc + ring + a different shape per state, instead of flat solid emoji-like dots. */
+.sti { flex: none; vertical-align: -0.2em; }
+.sti.ok { color: var(--ok); } .sti.warn { color: var(--warn); } .sti.bad { color: var(--bad); }
+.sti.info { color: var(--accent); } .sti.wait, .sti.skip { color: var(--muted); }
+.sti-bg { fill: color-mix(in srgb, currentColor 15%, transparent); stroke: color-mix(in srgb, currentColor 48%, transparent); stroke-width: 1.5; }
+.sti-g { stroke: currentColor; stroke-width: 2.2; }
+.sn-item .sn-dot:has(.sti), .ov-row .mark:has(.sti) { background: none; border: 0; width: auto; height: auto; }
+.sn-item[data-tone="ok"] .sn-dot:has(.sti), .sn-item[data-tone="bad"] .sn-dot:has(.sti) { background: none; border: 0; }
+.ov-row.done .mark:has(.sti) { background: none; border: 0; }
+.banner > .sti { align-self: flex-start; margin-top: 1px; }
+.chip > .sti { vertical-align: -0.28em; }
+
+/* ---- navigation: progress line, "on this page" chip, back to top, folded lists, tab strips ----------------------- */
+.read-progress { position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60; background: var(--accent); transform-origin: left; transform: scaleX(0); pointer-events: none; }
+.jump-dock { position: fixed; right: 14px; bottom: calc(var(--tabbar-h, 60px) + 14px + env(safe-area-inset-bottom, 0px)); z-index: 40; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+.jump-dock > * { pointer-events: auto; }
+@media (min-width: 900px) { .jump-dock { bottom: 20px; } }
+.jump-chip { display: inline-flex; align-items: center; gap: 8px; max-width: min(72vw, 320px); min-height: 40px; padding: 0 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--ink); box-shadow: var(--shadow-2, 0 6px 20px rgba(0, 0, 0, 0.28)); font-size: 0.86rem; font-weight: 600; cursor: pointer; }
+.jump-chip[hidden], .to-top[hidden] { display: none; }
+.jump-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.jump-chip .ico { color: var(--accent); flex: none; }
+.to-top { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--line); color: var(--ink); box-shadow: var(--shadow-2, 0 6px 20px rgba(0, 0, 0, 0.28)); cursor: pointer; }
+.jump-list { display: grid; gap: 4px; }
+.jump-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 8px 12px; border-radius: 12px; background: none; border: 1px solid transparent; color: var(--ink); text-align: left; cursor: pointer; font-size: 0.95rem; }
+.jump-item:hover { background: var(--raised); }
+.jump-item[aria-current="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); font-weight: 600; }
+.jump-n { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; background: var(--raised); color: var(--muted); }
+.fold-more { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 10px 14px; margin-top: 8px; border-radius: 12px; background: var(--raised); border: 1px dashed var(--line); color: var(--accent); font-weight: 600; cursor: pointer; }
+.fold-end { text-align: center; padding: 12px 0 4px; margin: 0; }
+.fold-list { display: grid; gap: 8px; }
+:is(.block, .sp-card, .k-card, [data-jump]) { scroll-margin-top: calc(var(--topbar-h) + 12px); }
+
+/* tab strips: fade at the edges that still hide tabs, and no hidden scrollbar track */
+.an-items { position: relative; scrollbar-width: none; scroll-snap-type: x proximity; }
+.an-items::-webkit-scrollbar { display: none; }
+.an-items > a { scroll-snap-align: center; flex: none; }
+.area-nav { position: relative; }
+.an-all { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--raised); border: 1px solid var(--line); color: var(--ink); cursor: pointer; }
+.an-fade { position: absolute; top: 0; bottom: 0; width: 28px; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 0.15s; }
+.an-fade.l { left: 0; background: linear-gradient(90deg, var(--panel), transparent); }
+.an-fade.r { background: linear-gradient(270deg, var(--panel), transparent); }
+.an-fade.on { opacity: 1; }
+.crumbs { display: flex; align-items: center; gap: 6px; padding: 8px clamp(14px, 3vw, 40px) 0; font-size: 0.82rem; color: var(--muted); flex-wrap: wrap; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--ink); text-decoration: underline; }
+.crumbs [aria-current] { color: var(--ink); font-weight: 600; }
+.crumbs[hidden] { display: none; }
+.pal-recent { opacity: 0.95; }
+@media (prefers-reduced-motion: reduce) { .an-fade { transition: none; } }
+
+/* ---- count badges: one design for the bell and the Moderation tab -------------------------------------------- */
+.icon-btn .badge, .tab .badge {
+  position: absolute; display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 800; line-height: 1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2.5px var(--bg), 0 2px 6px rgba(0, 0, 0, 0.35);       /* a ring in the page colour cuts the badge out of the icon */
+}
+.icon-btn .badge { top: -3px; right: -4px; }
+.tab .badge { top: 1px; left: calc(50% + 4px); }
+.icon-btn .badge.accent { background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 82%, #fff), var(--accent)); color: var(--accent-ink, #fff); }
+.icon-btn .badge[data-tone="warn"] { background: linear-gradient(160deg, #ffc247, var(--warn, #f59e0b)); color: #2a1b00; }
+.icon-btn .badge[data-tone="bad"] { background: linear-gradient(160deg, #ff7a7a, var(--bad)); color: #fff; }
+.tab .badge:not(.accent) { background: linear-gradient(160deg, #ffc247, var(--warn, #f59e0b)); color: #2a1b00; }
+.badge.pop { animation: badge-pop 0.35s cubic-bezier(0.3, 1.5, 0.5, 1); }
+@keyframes badge-pop { 0% { transform: scale(0.6); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .badge.pop { animation: none; } }
+.an-wrap { position: relative; flex: 1 1 0; min-width: 0; border-radius: 12px; }
+.an-wrap > .an-items { overflow-x: auto; }
+.an-wrap > .an-fade { z-index: 2; border-radius: 12px; }
+.tile-grid { display: grid; gap: 8px; }
+
+/* chat: action sheet, pins and multi-select */
+.line.picked { background: color-mix(in srgb, var(--accent) 14%, transparent); outline: 1px solid var(--accent); border-radius: 8px; }
+.line { -webkit-touch-callout: none; }
+.pin-bar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--raised); font-size: .85rem; overflow: hidden; }
+.pin-bar .pin-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--raised); }
+.sel-bar[hidden], .pin-bar[hidden] { display: none; }
+.sel-bar strong { flex: 1; }

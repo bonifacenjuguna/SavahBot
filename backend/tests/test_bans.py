@@ -105,6 +105,22 @@ def test_approving_a_ban_writes_the_ledger_row():
 
 
 
+def test_manual_actions_from_a_stored_chat_message():
+    """Chosen from the chat: simulated in demo, the owner and bot are protected, a ban reaches the ledger and can be lifted (the Undo button)."""
+    async def go():
+        s = await build_stack()
+        add = lambda name, level="everyone": s.store.add_chat({"platform": "demo", "msg_id": "m", "author_id": "u1", "author_name": name, "text": "hi", "level": level, "ts": 1.0, "demo": True})
+        a, owner = await add("Zed"), await add("Boss", "owner")
+        assert (await s.hub.manual(a, "delete"))["ok"] and (await s.hub.bans.counts())["active"] == 0
+        r = await s.hub.manual(a, "timeout", 60)
+        assert r["ok"] and r["simulated"] and r["ban_id"]
+        assert (await s.hub.bans.counts())["active"] == 1
+        assert (await s.hub.unban(r["ban_id"]))["ok"]
+        assert not (await s.hub.manual(owner, "ban"))["ok"]
+        assert (await s.hub.manual(999, "ban"))["code"] == 404 and (await s.hub.manual(a, "nuke"))["code"] == 422
+    asyncio.run(go())
+
+
 @e2e
 async def test_bans_api(api):
     assert (await api.call("GET", "/api/bans", auth=False))[0] == 401
@@ -114,3 +130,13 @@ async def test_bans_api(api):
     assert st == 200 and p["action"] == "ban" and not p["changed"]
     assert (await api.call("POST", "/api/bans/preview", {"action": "flag"}))[0] == 404
     assert (await api.call("POST", "/api/bans/99/lift"))[0] == 404
+
+
+@e2e
+async def test_chat_person_card_and_costs(api):
+    assert (await api.call("GET", "/api/chat/person"))[0] == 422
+    st, p = await api.call("GET", "/api/chat/person?author_id=nobody")
+    assert st == 200 and p["messages"] == 0 and p["recent"] == [] and p["actions"] == []
+    st, k = await api.call("GET", "/api/chat/costs")
+    assert st == 200 and k["ban"] > k["delete"] > 0
+    assert (await api.call("POST", "/api/chat/act", {"id": 12345, "action": "ban"}))[0] == 404

@@ -1,4 +1,4 @@
-/* SavahBot service worker (1.2.0).
+/* SavahBot service worker (1.3.0).
  *
  * Deliberately small. The dashboard is a live, signed-in tool, so there is nothing safe to keep for offline use. This worker exists for three reasons:
  *   1. a friendly "you are offline" page when the installed app is opened without a connection (instead of the browser's error page);
@@ -17,7 +17,7 @@
  */
 "use strict";
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const CACHE = `savahbot-offline-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -78,19 +78,19 @@ function readPayload(event) {
 }
 
 self.addEventListener("push", (event) => {
-  const p = readPayload(event);
-  if (!p) return;
+  // A push with no readable content still has to show something: if a push handler shows nothing, Chrome adds its own generic
+  // "SavahBot" notification (the stray one in the notification shade).
+  const p = readPayload(event) || { title: "SavahBot", body: "Something needs a look.", route: "#/notifications", tag: "savahbot-generic", priority: "normal", nid: "", category: "" };
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const watching = wins.some((c) => c.visibilityState === "visible" && c.focused);
     wins.forEach((c) => c.postMessage({ type: "notify-push", nid: p.nid, category: p.category }));
-    // Keep ordinary foreground events in the in-app bell, but always display an explicit
-    // test push. Otherwise pressing "Send a test" while this dashboard is open appears
-    // to do nothing: the worker receives the push, then silently suppresses its only
-    // visible confirmation.
+    // You are looking at the dashboard: the bell and a toast already show it, so no second alert on top.
+    // EXCEPT the explicit test notification: its whole purpose is to prove that a system notification appears, so it must show even
+    // while the dashboard is open. (A tests/test_push_worker.py regression test pins this line. Do not drop the exception.)
     if (watching && p.category !== "test.test") return;
     await self.registration.showNotification(p.title, {
-      body: p.body, icon: "/icon-192.png", badge: "/icon-192.png", tag: p.tag || undefined, renotify: !!p.tag,
+      body: p.body, icon: "/icon-192.png", badge: "/badge-96.png", tag: p.tag || undefined, renotify: !!p.tag,
       requireInteraction: p.priority === "critical", data: { route: p.route, nid: p.nid || "" }, timestamp: Date.now(),
     });
   })());

@@ -1,7 +1,7 @@
 /** Settings landing page: what needs attention, a card for every area with status that was actually checked, and search. */
 import { get } from "../api.js";
 import { dateTime, h, mount } from "../dom.js";
-import { icon } from "../icons.js";
+import { icon, statusIcon } from "../icons.js";
 import { INDEX, GROUPS, recents, remember, search, type Entry } from "./settings-index.js";
 import { card, empty } from "./shared.js";
 
@@ -42,7 +42,7 @@ export async function renderOverview(el: HTMLElement): Promise<void> {
   };
   input.oninput = showSearch;
   const attention = o.attention.length ? card("alert", `Needs a look (${o.attention.length})`, h("div", { class: "n-log" }, o.attention.map((a) => h("a", { class: `n-hist ${a.level === "bad" ? "bad" : a.level === "warn" ? "warn" : "info"}`, href: a.route },
-    icon(a.level === "info" ? "info" : "alert", 18), h("span", { class: "set-main" }, a.text), icon("chevronRight", 16)))), { flush: true })
+    statusIcon(a.level === "info" ? "info" : a.level === "bad" ? "bad" : "warn", 20), h("span", { class: "set-main" }, a.text), icon("chevronRight", 16)))), { flush: true })
     : card("check", "All clear", h("p", { style: "padding:12px 14px" }, "Nothing needs attention right now."), { flush: true });
   const yt: [Tone, string] = i.youtube.connected ? (i.youtube.error ? ["warn", "problem"] : ["ok", "connected"]) : ["", "not connected"];
   const tg: [Tone, string] = i.telegram.configured ? (i.telegram.error ? ["warn", "problem"] : i.telegram.owner_bound ? ["ok", "linked"] : ["warn", "not claimed"]) : ["", "not set up"];
@@ -52,6 +52,10 @@ export async function renderOverview(el: HTMLElement): Promise<void> {
     tile("plug", "Integrations", "YouTube, Telegram, push service.", "#/setup", dot(yt[0], `YouTube ${yt[1]}`), "i-youtube"),
     tile("send", "Telegram", "Your private control panel.", "#/setup", dot(tg[0], tg[1]), "i-telegram"),
     tile("shield", "Moderation & automation", "Rules, bans, knowledge, commands.", "#/moderation", null, "m-mod"),
+    tile("volume", "Chat reader", "Read chat aloud, voices, voice packs.", "#/reader", null, "i-reader"),
+    tile("radio", "Stream alerts", "Likes, viewers, subscribers, members.", "#/stream-settings", null, "i-stream"),
+    tile("checklist", "Activity log", "What changed, by importance and area.", "#/activity", null, "s-activity"),
+    tile("sparkle", "Variables", "Your own $(names) for links and text.", "#/variables", null, "m-vars"),
     tile("cloudSun", "Weather & location", "Places, units, alerts.", "#/weather-settings", dot(o.weather.location ? "ok" : "", o.weather.location ?? "no place"), "w-places"),
     tile("sparkle", "Appearance", "Theme, accent, density, text size.", "#/settings?tab=appearance", null, "a-theme"),
     tile("database", "Privacy & data", "What is stored and for how long.", "#/settings?tab=privacy", null, "p-data"),

@@ -90,6 +90,8 @@ class Renderer:
         self.store = store
         self.uptime_fn = uptime_fn or (lambda: None)
         self.fetch = fetch or safe_fetch
+        self.live: Any = None            # live likes / viewers / subscribers (services/live_extras.py), set by the container
+        self.custom: Any = None          # your own variables (app/variables.py), set by the container
 
     async def render(self, template: str, ctx: Ctx) -> str:
         budget = _Budget(self.cfg.get("command_max_expansions"))
@@ -128,7 +130,7 @@ class Renderer:
             else:
                 budget.left -= 1
                 inner = await self._render(text[j + 2:k], ctx, depth + 1, budget)
-                out.append(await self._call(inner, ctx, text[j:k + 1]))
+                out.append(await self._call(inner, ctx, text[j:k + 1], depth, budget))
             i = k + 1
         return "".join(out)
 
@@ -142,7 +144,7 @@ class Renderer:
             dt = dt.replace(tzinfo=self._tz(""))
         return dt.timestamp()
 
-    async def _call(self, inner: str, ctx: Ctx, literal: str) -> str:
+    async def _call(self, inner: str, ctx: Ctx, literal: str, depth: int = 0, budget: _Budget | None = None) -> str:
         name, _, rest = inner.strip().partition(" ")
         name, rest = name.lower(), rest.strip()
         try:
@@ -199,4 +201,11 @@ class Renderer:
             return f"[{name}: {exc}]"
         except (ValueError, KeyError, OverflowError):
             return f"[{name}: invalid input]"
+        if name in ("likes", "viewers", "subs") and self.live is not None:
+            v = self.live.live.get(name) if name != "subs" else self.live.subs.get("count")
+            return f"{v:,}" if isinstance(v, int) else "n/a"
+        if self.custom is not None and not rest:
+            value = await self.custom.lookup(name)
+            if value is not None:
+                return await self._render(value, ctx, depth + 1, budget or _Budget(self.cfg.get("command_max_expansions")))
         return literal

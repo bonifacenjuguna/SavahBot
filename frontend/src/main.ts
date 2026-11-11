@@ -8,10 +8,11 @@ import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
-import { resetClock } from "./pages/kit.js";
+import { AREAS, areaOf, resetClock } from "./pages/kit.js";
 
 let resetTimer = 0;
-import { onNotices, openNotifications, refresh as refreshBell, startNotifications, unreadCount } from "./notifications.js";
+import { installPageNav, trackRecent } from "./nav.js";
+import { onNotices, openNotifications, refresh as refreshBell, startNotifications, unreadCount, worstUnread } from "./notifications.js";
 import { initAppearance } from "./appearance.js";
 import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
 import { APP_VERSION } from "./version.js";
@@ -24,6 +25,10 @@ import { security } from "./pages/security.js";
 import { notifications } from "./pages/notifications.js";
 import { weather } from "./pages/weather.js";
 import { weatherSettings } from "./pages/weather-settings.js";
+import { variables } from "./pages/variables.js";
+import { activity } from "./pages/activity.js";
+import { streamSettings } from "./pages/stream-settings.js";
+import { readerSettings } from "./pages/reader-settings.js";
 import { listenForTaps, resumePush } from "./push.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
@@ -38,7 +43,7 @@ import type { Page } from "./pages/types.js";
 
 export { APP_VERSION };
 
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, backup, insights, demo, setup, settings, more];
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, variables, activity, streamSettings, readerSettings, backup, insights, demo, setup, settings, more];
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Operate", ids: ["desk", "moderation", "commands"] },
   { title: "Manage", ids: ["notebook", "community", "bans", "security", "notifications", "weather", "backup", "insights", "demo"] },
@@ -115,6 +120,7 @@ function showLogin(): void {
   const finish = (r: LoginReply): void => {
     if (r.token) {
       setToken(r.token);
+      location.hash = r.lockdown ? "#/security" : "#/desk";   // a fresh sign-in always starts on the Desk, never on the page you left
       boot();
       if (r.lockdown) location.hash = "#/security";
       else if (r.setup_needed) window.setTimeout(() => toast("Only your password protects this dashboard. Add a passkey or an authenticator app on the Security page."), 1200);
@@ -256,7 +262,8 @@ function showShell(): void {
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
   const skip = h("a", { class: "skip", href: "#content", onclick: (e: Event) => { e.preventDefault(); content.focus(); } }, "Skip to content");
-  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, content)), tabbar);
+  const crumbs = h("nav", { class: "crumbs", "aria-label": "You are here", hidden: true });
+  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, crumbs, content)), tabbar);
 
   // ----- sheets
   function modeCards(close: () => void): HTMLElement {
@@ -276,7 +283,15 @@ function showShell(): void {
   }
   // ----- routing
   let cleanup: (() => void) | void;
+  let cleanupNav: (() => void) | undefined;
   let lastId = "";
+  /** More > Manage > Notifications: where you are and a way back up, shown for pages that live behind More. */
+  const drawCrumbs = (pageId: string, title: string) => {
+    const key = areaOf(pageId);
+    crumbs.hidden = !key;
+    if (!key) return;
+    mount(crumbs, h("a", { href: "#/more" }, "More"), icon("chevronRight", 12), h("span", null, AREAS[key].title), icon("chevronRight", 12), h("span", { "aria-current": "page" }, title));
+  };
   const render = () => {
     cleanup?.();
     const { id, query } = route();
@@ -287,7 +302,11 @@ function showShell(): void {
     if (TAB_IDS.includes(page.id)) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
     document.title = `${page.title} · SavahBot`;
     clear(content);
+    cleanupNav?.();
+    drawCrumbs(page.id, page.title);
+    trackRecent(page.id);
     cleanup = page.render(content, query);
+    cleanupNav = installPageNav(content);
     if (lastId && lastId !== page.id) window.scrollTo(0, 0);
     lastId = page.id;
   };
@@ -333,7 +352,7 @@ function showShell(): void {
     badge.hidden = s.pending === 0;
     badge.textContent = String(s.pending);
     tabBadge.hidden = s.pending === 0;
-    tabBadge.textContent = String(s.pending);
+    tabBadge.textContent = s.pending > 99 ? "99+" : String(s.pending);
     // the pages were drawn for the previous mode: draw them again so Demo and Live never show each other's data
     if (shownMode && shownMode !== s.hub.mode) render();
     shownMode = s.hub.mode;
@@ -348,7 +367,9 @@ function showShell(): void {
   const syncBell = () => {
     const n = unreadCount();
     bellBadge.hidden = n === 0;
-    bellBadge.textContent = n > 9 ? "9+" : String(n);
+    const text = n > 99 ? "99+" : String(n);
+    if (bellBadge.textContent !== text) { bellBadge.textContent = text; bellBadge.classList.remove("pop"); void bellBadge.offsetWidth; bellBadge.classList.add("pop"); }
+    bellBadge.dataset.tone = worstUnread();
     bell.setAttribute("aria-label", n ? `Notifications, ${n} unread` : "Notifications");
   };
   offs.push(onNotices(syncBell));
@@ -378,6 +399,7 @@ function boot(): void {
 }
 
 loggedOut.addEventListener("out", () => {
+  location.hash = "#/desk";
   toast("Your session ended. Sign in again.", "error");
   showLogin();
 });

@@ -1,7 +1,8 @@
 /** Security & Access Centre: how you sign in, who is signed in, what happened, and the emergency brake. */
 import { ApiError, del, get, patch, post } from "../api.js";
 import { busy, dateTime, h, mount, sheet, toast } from "../dom.js";
-import { icon } from "../icons.js";
+import { icon, statusIcon } from "../icons.js";
+import { folded } from "../nav.js";
 import { createPasskey, passkeyError, passkeysSupported } from "../passkeys.js";
 import { areaNav } from "./kit.js";
 import { card, empty, pageHead } from "./shared.js";
@@ -86,7 +87,7 @@ export const security: Page = {
         figures([{ value: `${r.score}%`, label: "protected", tone }, { value: String(ov.methods), label: "sign-in methods" }, { value: String(r.failed_logins_24h), label: "failed attempts today", tone: r.failed_logins_24h ? "warn" : "ok" }]),
         ov.enforced ? h("p", { class: "muted small" }, "Two-step sign-in is on: every sign-in must prove any two of your password, a passkey and an authenticator code.")
           : h("p", { class: "muted small", style: "color:var(--warn)" }, "Two-step sign-in is OFF. Anyone with your password can sign in. Add a passkey or an authenticator app below to turn it on."),
-        h("ul", { class: "list" }, r.checks.map((c) => h("li", null, icon(c.ok ? "checkCircle" : "alert", 16), " ", c.title, c.ok ? null : h("div", { class: "muted small" }, c.fix))))), { flush: true });
+        h("ul", { class: "list" }, r.checks.map((c) => h("li", null, statusIcon(c.ok ? "ok" : "warn", 20), " ", c.title, c.ok ? null : h("div", { class: "muted small" }, c.fix))))), { flush: true });
     }
 
     function methodsCard(ov: Overview): HTMLElement {
@@ -181,7 +182,7 @@ export const security: Page = {
     function activityCard(a: Activity): HTMLElement {
       const rows = [...a.events.map((e) => ({ ts: e.ts, bad: !e.ok, text: `${nice(EVENT, e.kind)}${e.method ? " (" + e.method + ")" : ""}`, sub: `${e.device} · ${e.ip}${e.detail ? " · " + e.detail : ""}` })),
         ...a.audit.map((e) => ({ ts: e.ts, bad: false, text: nice(ACTION, e.action), sub: e.detail || e.ip }))].sort((x, y) => y.ts - x.ts).slice(0, 40);
-      return card("history", "Recent activity", rows.length ? h("ul", { class: "list", style: "padding:6px 14px" }, rows.map((r) => h("li", null, icon(r.bad ? "alert" : "check", 15), " ", h("strong", null, r.text), h("span", { class: "muted small" }, ` · ${dateTime(r.ts)}`), h("div", { class: "muted small" }, r.sub)))) : empty("history", "Nothing yet."), { flush: true });
+      return card("history", "Recent activity", rows.length ? h("ul", { class: "list", style: "padding:6px 14px" }, folded(rows, (r) => h("li", null, statusIcon(r.bad ? "bad" : "ok", 20), " ", h("strong", null, r.text), h("span", { class: "muted small" }, ` · ${dateTime(r.ts)}`), h("div", { class: "muted small" }, r.sub)), { noun: "events", title: "Security activity", initial: 6, text: (r) => `${r.text} ${r.sub}` })) : empty("history", "Nothing yet."), { flush: true });
     }
 
     function lockdownCard(ov: Overview): HTMLElement {

@@ -60,6 +60,10 @@ Removed in 1.2.0: `NTFY_URL`, `NTFY_TOPIC` (push now uses Firebase), `WEATHER_AP
 | `FIREBASE_MESSAGING_SENDER_ID` _public by design_ | `edit-me` | Firebase messagingSenderId (Cloud Messaging tab). Public by design. |
 | `FIREBASE_AUTH_DOMAIN` _public by design_ | blank (not needed for push notifications) | Optional Firebase authDomain. Not needed for push; leave blank. |
 | `FIREBASE_VAPID_KEY` _public by design_ | `edit-me` | Web Push certificate public key (Cloud Messaging > Web configuration > Generate key pair). Public by design. |
+| `ACTIVITY_RETENTION_DAYS` | `365` | How long the activity log is kept. 0 keeps it forever. |
+| `ACTIVITY_NOTIFY_SENSITIVE` | `False` | Send a notification when a sensitive change is logged, such as a security or sign-in setting. |
+| `VOICE_DIR` | `data/voices` | Folder where voice packs for the chat reader are stored. On Railway, attach a Volume at this path or uploads are lost on redeploy. |
+| `VOICE_PACK_MAX_MB` | `300` | Most megabytes of voice files you can keep. Uploads that would pass this are refused. |
 | `NOTIFY_RETENTION_DAYS` | `30` | Notification history older than this is deleted automatically. |
 | `NOTIFY_MAX_PUSH_PER_HOUR` | `30` | Most push messages sent per hour. Extras are folded into one summary. |
 | `NOTIFY_MAX_ATTEMPTS` | `5` | Times a failed push is retried (with growing delays) before it is marked failed. |
@@ -143,6 +147,21 @@ Removed in 1.2.0: `NTFY_URL`, `NTFY_TOPIC` (push now uses Firebase), `WEATHER_AP
 | `YT_COST_SEARCH` | `100` | Quota cost: search for a channel's live stream. Verify against the current YouTube docs. |
 | `YT_DETECT_BUDGET_FRACTION` | `0.1` | Share of the daily quota that searching for another channel's live stream may use. |
 | `YOUTUBE_TARGET_DETECT_INTERVAL_SECONDS` | `900` | How often to search for a live stream on a channel you do not own while it is offline. Searching is expensive, so it is also capped by YT_DETECT_BUDGET_FRACTION. Set YOUTUBE_VIDEO_ID to avoid searching. |
+| `YT_COST_SUBSCRIPTION_LIST` | `1` | Quota cost: check recent subscribers. Verify against the current YouTube docs. |
+| `YT_EVENTS_NOTIFY` | `True` | Tell me (bell, push, Telegram per the category settings) about new members, Super Chats, Super Stickers and membership gifts. |
+| `YT_EVENTS_THANK` | `False` | Post a thank-you in chat for members, Super Chats and gifts. Off by default: it costs YouTube quota for every message. |
+| `YT_EVENTS_MSG_MEMBER` | `Welcome to the members, $(user)! 💚` | Thank-you for a new member. $(user) and $(count) are filled in; your own variables work too. |
+| `YT_EVENTS_MSG_SUPERCHAT` | `Thank you $(user) for the $(amount)!` | Thank-you for a Super Chat or Super Sticker. $(user) and $(amount) are filled in. |
+| `YT_EVENTS_MSG_GIFT` | `Thank you $(user) for gifting $(count) memberships!` | Thank-you for membership gifts. $(user) and $(count) are filled in. |
+| `YT_SUBS_ENABLED` | `True` | Look for new subscribers while you are live. Best effort: YouTube only lists subscribers who made their subscription public. |
+| `YT_SUBS_MINUTES` | `10` | How often to check for new subscribers, in minutes (5 to 120). Each check costs about 1 quota unit. |
+| `YT_SUBS_THANK` | `False` | Post a thank-you in chat for a new subscriber you can see by name. |
+| `YT_SUBS_MSG` | `Thanks for subscribing, $(user)! 🎉` | Thank-you for a new subscriber. $(user) is filled in. |
+| `YT_SUBS_MILESTONE_STEP` | `100` | Alert me each time the subscriber count passes a multiple of this. 0 turns milestones off. |
+| `YT_LIVE_ENABLED` | `True` | Track likes and people watching while you are live. |
+| `YT_LIVE_SECONDS` | `60` | How often to refresh likes and viewers, in seconds (30 to 600). Each refresh costs about 1 quota unit. |
+| `YT_LIVE_LIKES_STEP` | `100` | Alert me each time likes pass a multiple of this. 0 turns it off. |
+| `YT_LIVE_VIEWERS_STEP` | `50` | Alert me each time viewers pass a multiple of this for the first time in a stream. 0 turns it off. |
 | `YT_COST_MODERATOR_LIST` | `50` | Quota cost: list moderators. |
 | `YT_READ_BUDGET_FRACTION` | `0.6` | Share of the daily quota the bot may spend reading chat (the rest is kept for actions). |
 | `YT_MIN_POLL_SECONDS` | `5.0` | Never poll chat faster than this. |

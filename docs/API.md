@@ -7,6 +7,13 @@ Generated from the server's route table by `python scripts/gen_api_doc.py`. All 
 Secrets are never returned by any route: only whether they are set. Push device tokens, TOTP secrets, recovery codes and session tokens are never listed.
 
 
+## activity
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/activity` |  |
+| GET | `/api/activity/export` |  |
+
 ## analytics
 
 | Method | Path | Notes |
@@ -63,7 +70,10 @@ Bans and timeouts.
 
 | Method | Path | Notes |
 |---|---|---|
+| POST | `/api/chat/act` |  |
+| GET | `/api/chat/costs` |  |
 | DELETE | `/api/chat/demo` |  |
+| GET | `/api/chat/person` |  |
 | GET | `/api/chat/recent` |  |
 | GET | `/api/chat/search` |  |
 | POST | `/api/chat/send` |  |
@@ -155,6 +165,14 @@ Knowledge packs, detectors, learning, live lists.
 | POST | `/api/knowledge/suggestions/{sid:int}/dismiss` |  |
 | POST | `/api/knowledge/test` |  |
 
+## live
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/live/events` |  |
+| GET | `/api/live/stats` |  |
+| GET | `/api/live/streams` |  |
+
 ## mode
 
 | Method | Path | Notes |
@@ -166,6 +184,8 @@ Knowledge packs, detectors, learning, live lists.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/moderation/history` |  |
+| GET | `/api/moderation/level` |  |
+| POST | `/api/moderation/level` |  |
 | GET | `/api/moderation/pending` |  |
 | POST | `/api/moderation/test` |  |
 | POST | `/api/moderation/{id:int}/{verb}` |  |
@@ -196,6 +216,7 @@ Notification Centre: preferences, inbox, devices, test, stats.
 | DELETE | `/api/notify/devices/{device_id:int}` |  |
 | PATCH | `/api/notify/devices/{device_id:int}` |  |
 | GET | `/api/notify/inbox` |  |
+| GET | `/api/notify/item/{nid:int}` |  |
 | GET | `/api/notify/log` |  |
 | POST | `/api/notify/pause` |  |
 | GET | `/api/notify/prefs` |  |
@@ -212,6 +233,13 @@ Notification Centre: preferences, inbox, devices, test, stats.
 | GET | `/api/quotes` |  |
 | POST | `/api/quotes` |  |
 | DELETE | `/api/quotes/{id:int}` |  |
+
+## reader
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/reader/rules` |  |
+| POST | `/api/reader/rules` |  |
 
 ## regulars
 
@@ -322,6 +350,25 @@ Telegram bot control.
 | DELETE | `/api/triggers/{id:int}` |  |
 | PATCH | `/api/triggers/{id:int}` |  |
 
+## variables
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/variables` |  |
+| POST | `/api/variables` |  |
+| POST | `/api/variables/delete` |  |
+
+## voices
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/voices` |  |
+| POST | `/api/voices/delete` |  |
+| POST | `/api/voices/file` |  |
+| GET | `/api/voices/files/{pack}/{path:path}` | public |
+| POST | `/api/voices/host` |  |
+| POST | `/api/voices/zip` |  |
+
 ## weather
 
 Weather: places, forecast, preferences, alert rules.
@@ -359,6 +406,7 @@ YouTube connection and quota.
 | GET | `/api/youtube/oauth/callback` | public |
 | POST | `/api/youtube/oauth/start` |  |
 | POST | `/api/youtube/quota` |  |
+| POST | `/api/youtube/source` |  |
 | GET | `/api/youtube/status` |  |
 | POST | `/api/youtube/use-own-channel` |  |
 | POST | `/api/youtube/verify` |  |
