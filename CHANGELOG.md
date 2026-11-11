@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.5
+
+One chat per livestream, a stream history, and a dashboard that reconnects by itself.
+
+### Fixed
+- **Going live again continued the old chat.** Every livestream is now its own session. A new stream starts on an empty Desk; the Desk never shows lines from an earlier stream. When a stream ends its last lines stay readable until the next one starts.
+- **Overlapping dates in saved chat.** The date was printed on every line and ran into the author's name. Saved chat now shows one small heading per day ("Today", "Yesterday", "Mon, Nov 9") and a fixed-width time on each line. The date filter chips wrap instead of being cut off ("Cust...").
+- **Refreshing after the backend or the connection dropped.** The live feed now notices a dead connection within 40 seconds (and straight away when the tab wakes up or the network returns), retries every 0.5 to 10 seconds, and tells you why: "Offline" (no internet) or "Reconnecting (n)" (server not answering). Tap the chip to retry now. When it is back, the Desk fetches the lines it missed, other pages redraw themselves, and if the dashboard itself was updated meanwhile it reloads.
+
+### Added
+- **Streams** (button on the Desk chat): every stream with its date, start and end time, duration, lines, chatters, flagged lines, deletes, timeouts and bans, busiest minute and most active chatters. Open a stream to read its chat, rename it, export it as a .txt file, or delete it.
+- **Stream strip** under the chat toolbar: what is on air, for how long, and a Stream link shortcut.
+- **Stream link shortcut:** the YouTube row in Bot status is now tappable (and so is the Stream link button). It opens a small sheet to paste the live video link, with the video ID checked as you type, plus the auto-search switch. It saves through the same endpoint as Setup.
+- API: `GET /api/streams`, `/api/streams/last`, `/api/streams/{id}`, `/api/streams/{id}/chat`, `/api/streams/{id}/export`, `PATCH` and `DELETE /api/streams/{id}`. `GET /api/chat/recent` returns only the current stream.
+
+### Notes
+- A stream that drops and comes back within 10 minutes (same video, or a backend restart) resumes its own session instead of starting a new one. A session with no chat that lasted under 2 minutes is not kept.
+- New table `stream_sessions` and column `chat_messages.session_id`, added automatically on start. Chat lines made before 1.3.5 have no stream and do not appear in Streams (they still appear in Dates).
+- Chat lines follow the retention setting; each stream's numbers are kept.
+- New files: `backend/app/sessions.py`, `backend/app/api/stream_routes.py`, `frontend/src/pages/streams.ts`, `frontend/src/pages/stream-link.ts`, `frontend/src/streams.css`. Tests in `backend/tests/test_sessions.py`.
+- Checked here: backend tests, TypeScript, and a browser run against the real backend (history, saved chat, link sheet, backend killed and restarted with no refresh). Not checked: `vite build`, a real YouTube stream.
+
 ## 1.3.4
 
 Desktop layout. Phones and tablets are unchanged (checked pixel for pixel against 1.3.3); everything new applies only at 1100px wide and up.

@@ -7,6 +7,7 @@ import "./polish.css";
 import "./desktop.css";
 import "./moderation.css";
 import "./chat-zoom.css";
+import "./streams.css";
 import { ApiError, apiBase, get, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
@@ -174,6 +175,26 @@ function showLogin(): void {
   pass.focus({ preventScroll: true });
 }
 
+// ------------------------------------------------------------------------------------------------ new version
+/** The file names of the scripts this page was loaded with, e.g. /assets/index-3f9a.js. A new deployment changes them. */
+const scriptsNow = (): string => Array.from(document.querySelectorAll("script[src]")).map((e) => e.getAttribute("src")).filter((x) => x && x.includes("assets/")).sort().join(",");
+const loadedWith = scriptsNow();
+let checking = false;
+
+/** After an outage, see whether the dashboard itself was updated while you were away. If so the page reloads (your sign-in is kept), instead of you having to refresh. */
+async function checkForNewVersion(): Promise<void> {
+  if (checking || !loadedWith) return;
+  checking = true;
+  try {
+    const html = await (await fetch(`${location.pathname}?v=${Date.now()}`, { cache: "no-store" })).text();
+    const next = Array.from(html.matchAll(/<script[^>]+src="([^"]+)"/g)).map((m) => m[1]).filter((x) => x.includes("assets/")).sort().join(",");
+    if (!next || next === loadedWith) return;
+    const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if (document.hidden || !typing) { toast("Dashboard updated. Reloading…"); window.setTimeout(() => location.reload(), 900); }
+    else toast("A new version of the dashboard is ready. Reload when you are done typing.");
+  } catch { /* offline again: the next reconnect checks again */ } finally { checking = false; }
+}
+
 // ------------------------------------------------------------------------------------------------ shell
 function showShell(): void {
   shellCleanup?.();
@@ -245,7 +266,7 @@ function showShell(): void {
   const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbIco, tbTitle, tbDetail);
   const searchBtn = h("button", { class: "search-btn", type: "button", onclick: () => openPalette(ctx), "aria-label": "Search and jump to" },
     icon("search", 18), h("span", { class: "grow" }, "Search pages and actions"), h("kbd", null, "Ctrl K"));
-  const connChip = h("span", { class: "conn-chip down", role: "status" }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
+  const connChip = h("button", { class: "conn-chip down", type: "button", role: "status", title: "The live feed is down. Tap to try again now.", onclick: () => { feed.retryNow(); void refreshStatus(); } }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
   const bellBadge = h("span", { class: "badge accent", hidden: true }, "0");
   const bell = h("button", { class: "icon-btn", type: "button", "aria-label": "Notifications", "aria-haspopup": "dialog", "aria-expanded": "false", title: "Notifications", onclick: () => openNotifications(bell) }, icon("bell", 20), bellBadge);
   const topbar = h("header", { class: "topbar" },
@@ -361,11 +382,31 @@ function showShell(): void {
     if (shownMode && shownMode !== s.hub.mode) render();
     shownMode = s.hub.mode;
   }));
-  offs.push(feed.onConnection((up) => {
-    connText.textContent = up ? "Live feed: connected" : "Live feed: reconnecting";
+  /** Says what is wrong in plain words: no internet at all, or the server is not answering (it may be restarting). */
+  const paintConn = () => {
+    const up = feed.connected;
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    const word = up ? "Live" : offline ? "Offline" : feed.attempts > 2 ? `Reconnecting (${feed.attempts})` : "Reconnecting";
+    connText.textContent = up ? "Live feed: connected" : offline ? "Live feed: no internet" : "Live feed: reconnecting";
     mount(connIcon, icon(up ? "wifi" : "wifiOff", 16));
     connChip.classList.toggle("down", !up);
-    mount(connChip, icon(up ? "wifi" : "wifiOff", 16), h("span", { class: "txt" }, up ? "Live" : "Reconnecting"));
+    mount(connChip, icon(up ? "wifi" : "wifiOff", 16), h("span", { class: "txt" }, word));
+    connChip.title = up ? "The live feed is connected." : offline ? "This device has no internet. It reconnects by itself when it is back." : "The server is not answering. It reconnects by itself. Tap to try again now.";
+  };
+  offs.push(feed.onConnection(() => paintConn()));
+  const connTick = window.setInterval(() => { if (!feed.connected) paintConn(); }, 2000);     // the attempt count moves while it is down
+  offs.push(() => window.clearInterval(connTick));
+  const onNet = () => { paintConn(); if (navigator.onLine) { feed.retryNow(); void refreshStatus(); } };
+  window.addEventListener("online", onNet);
+  window.addEventListener("offline", onNet);
+  offs.push(() => { window.removeEventListener("online", onNet); window.removeEventListener("offline", onNet); });
+  // Back after an outage: refresh the status, and redraw the page you are on so it shows what it missed (the Desk catches up by itself, without a redraw).
+  offs.push(feed.onReconnect((downMs) => {
+    void refreshStatus();
+    void refreshBell();
+    const busyNow = document.querySelector(".sheet, .popover, .palette") || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && content.contains(document.activeElement));
+    if (downMs >= 4000 && route().id !== "desk" && !busyNow) render();
+    void checkForNewVersion();
   }));
   for (const t of ["mode", "stream", "mod_pending", "mod_resolved"]) offs.push(feed.on(t, () => void refreshStatus()));
   const syncBell = () => {

@@ -8,6 +8,8 @@ import { dateRange, rangeQuery, resetClock, zoomToFill, type RangeValue } from "
 import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./shared.js";
 import { variableChips } from "./variables.js";
 import { liveCard } from "./live-card.js";
+import { dayLabel, openStreams, spanText, streamName, whenText, type Stream } from "./streams.js";
+import { openStreamLink } from "./stream-link.js";
 import { pins, wireLine, type ActionCtx } from "../chat-actions.js";
 import { readerControl, readerItems } from "../reader-ui.js";
 import { reader } from "../reader.js";
@@ -43,8 +45,12 @@ export const desk: Page = {
     let stick = true;
     let pendingItems: Action[] = [];
     let range: RangeValue = { label: "", active: false };
-    let saved: Line[] = [];            // rows from the database while a date range is chosen
+    let saved: Line[] = [];            // rows from the database while a date range is chosen, or a past stream is open
     let savedNote = "";
+    let viewing: Stream | null = null; // a past stream opened from the Streams list (read-only)
+    let sessionId = "";                // the stream running now ("" when none): a different one means a new stream, which starts on an empty chat
+    let lastStream: Stream | null = null;   // the stream that ended most recently, offered while nothing is running
+    const seen = new Set<number>();    // ids of the lines on screen, so catching up after a dropped connection never shows a line twice
     let sizeIdx = (() => { try { const v = Number(localStorage.getItem(SIZE_KEY)); return Number.isInteger(v) && v >= 0 && v < SIZES.length ? v : 1; } catch { return 1; } })();
     const arrivals: number[] = []; // epoch seconds of chat lines, used for the live rate
 
@@ -53,7 +59,7 @@ export const desk: Page = {
     const pendingBox = h("div");
     const health = h("div");
     const kpis = h("div", { class: "kpis swipe" });
-    const savedMode = () => range.active;
+    const savedMode = () => range.active || viewing !== null;
 
     list.addEventListener("scroll", () => {
       stick = list.scrollTop + list.clientHeight >= list.scrollHeight - 30;
@@ -116,14 +122,22 @@ export const desk: Page = {
       updateCounts();
       if (savedMode()) {
         const rows = saved.filter(visible);
-        list.replaceChildren(...rows.map((m) => lineEl(m, true)));
+        // one small heading per day instead of a date on every line: nothing to overlap, and it reads like a chat history
+        const out: HTMLElement[] = [];
+        let day = "";
+        for (const m of rows) {
+          const d = dayLabel(m.ts);
+          if (d !== day) { out.push(h("div", { class: "day-sep", role: "separator" }, h("span", null, d))); day = d; }
+          out.push(lineEl(m));
+        }
+        list.replaceChildren(...out);
         if (!rows.length) list.appendChild(empty("calendar", savedNote || "No saved chat in this range."));
         list.scrollTop = list.scrollHeight;
         jump.hidden = true;
         return;
       }
       list.replaceChildren(...lines.filter(visible).map((m) => lineEl(m)));
-      if (!list.childElementCount) list.appendChild(empty("message", lines.length ? "No chat lines match this filter." : "No chat yet. Lines appear here as they arrive."));
+      if (!list.childElementCount) list.appendChild(lines.length ? empty("message", "No chat lines match this filter.") : waitingState());
       list.scrollTop = list.scrollHeight;
       stick = true;
       jump.hidden = true;
@@ -141,6 +155,7 @@ export const desk: Page = {
       if (stick) stickSoon();
     };
     const add = (m: Line, fromHistory = false) => {
+      if (m.id !== undefined && m.id !== null) { if (seen.has(m.id)) return; seen.add(m.id); }
       arrivals.push(m.ts);
       if (arrivals.length > 4000) arrivals.splice(0, arrivals.length - 4000);
       if (!fromHistory) reader.offer({ ...m, arrived: Date.now() });   // lines loaded from history are never read aloud; the reader decides by its own rules; it does nothing unless Read chat was tapped
@@ -151,6 +166,14 @@ export const desk: Page = {
     // ----- saved chat (date range)
     const loadSaved = async () => {
       const verdict = filter === "all" ? "" : `&verdict=${filter}`;
+      if (viewing) {
+        const r = await get<{ items: Line[] }>(`/api/streams/${viewing.id}/chat?limit=2000&q=${encodeURIComponent(needleRaw())}${verdict}`);
+        saved = r.items;
+        savedNote = "No lines in this stream match.";
+        redraw();
+        updateBanner(r.items.length);
+        return;
+      }
       const r = await get<{ items: Line[]; retention_days: number }>(`/api/chat/search?limit=300&q=${encodeURIComponent(needleRaw())}${rangeQuery(range)}${verdict}`);
       saved = r.items;
       savedNote = `Nothing saved for ${range.label.toLowerCase()}. Chat is kept for ${r.retention_days} days.`;
@@ -160,19 +183,31 @@ export const desk: Page = {
     const reload = () => { void loadSaved().catch((e) => toast(e.message, "error")); };
     const needleRaw = () => search.value.trim();
     const banner = h("div", { class: "saved-banner", hidden: true });
+    const backToLive = () => { dates.reset(); range = { label: "", active: false }; viewing = null; saved = []; updateBanner(); updatePause(); redraw(); };
     const updateBanner = (n = saved.length) => {
       banner.hidden = !savedMode();
       if (!savedMode()) return;
-      mount(banner, icon("calendar", 16), h("span", { class: "grow" }, `Saved chat · ${range.label} · ${n}${n >= 300 ? "+" : ""} line${n === 1 ? "" : "s"}`),
-        h("button", { class: "btn small", type: "button", onclick: () => { dates.reset(); range = { label: "", active: false }; saved = []; updateBanner(); updatePause(); redraw(); } }, icon("radio", 14), "Back to live"));
+      const what = viewing
+        ? h("span", { class: "grow sb-text" }, h("strong", null, streamName(viewing)), h("span", { class: "muted" }, ` · ${dayLabel(viewing.started)}, ${whenText(viewing)} · ${spanText(viewing.duration)} · ${n}${n >= 2000 ? "+" : ""} line${n === 1 ? "" : "s"}`))
+        : h("span", { class: "grow sb-text" }, `Saved chat · ${range.label} · ${n}${n >= 300 ? "+" : ""} line${n === 1 ? "" : "s"}`);
+      mount(banner, icon(viewing ? "history" : "calendar", 16), what,
+        h("button", { class: "btn small", type: "button", onclick: backToLive }, icon("radio", 14), sessionId ? "Back to live" : "Back"));
       updatePause();
     };
-    const dates = dateRange({ anyLabel: "Live", label: "Chat date range" }, (v) => { range = v; if (v.active) reload(); else { saved = []; updateBanner(); updatePause(); redraw(); } });
+    const dates = dateRange({ anyLabel: "Live", label: "Chat date range" }, (v) => { range = v; if (v.active) { viewing = null; reload(); } else { saved = []; viewing = null; updateBanner(); updatePause(); redraw(); } });
     const dateWrap = h("div", { class: "toolbar-dates", hidden: true }, dates.el);
     const dateBtn = h("button", { class: "btn small ghost", type: "button", "aria-expanded": "false", "aria-label": "Filter by date", title: "Filter by date", onclick: () => {
       dateWrap.hidden = !dateWrap.hidden;
       dateBtn.setAttribute("aria-expanded", String(!dateWrap.hidden));
     } }, icon("calendar", 15), h("span", { class: "hide-narrow" }, "Dates"));
+
+    // ----- streams: every livestream is its own chat; past ones are read from here
+    const openStream = (st: Stream) => { viewing = st; range = { label: "", active: false }; dates.reset(); dateWrap.hidden = true; dateBtn.setAttribute("aria-expanded", "false"); reload(); };
+    const streamsBtn = h("button", { class: "btn small ghost", type: "button", "aria-label": "Past streams", title: "Past streams", onclick: () => openStreams({
+      current: sessionId || null, open: openStream,
+      changed: (st, id) => { if (viewing && viewing.id === id) { if (st) { viewing = st; updateBanner(); } else backToLive(); } void loadLast(); },
+    }) }, icon("history", 15), h("span", { class: "hide-narrow" }, "Streams"));
+    const loadLast = async () => { try { lastStream = (await get<{ item: Stream | null }>("/api/streams/last")).item; } catch { /* the empty state just has no shortcut */ } if (!sessionId && !lines.length) redraw(); };
 
     // ----- toolbar: filters, search, pause
     const count = (f: Filter) => (savedMode() ? saved : lines).filter((m) => (f === "flagged" ? kindOf(m) !== "ok" : kindOf(m) === "blocked")).length;
@@ -196,7 +231,34 @@ export const desk: Page = {
     updatePause();
     const toolbar = h("div", { class: "toolbar" },
       h("div", { class: "seg-control", role: "group", "aria-label": "Show" }, filterBtns),
-      h("div", { class: "input-icon" }, icon("search", 16), search), dateBtn, pauseBtn);
+      h("div", { class: "input-icon" }, icon("search", 16), search), streamsBtn, dateBtn, pauseBtn);
+
+    // ----- what is on air: this stream's name, how long it has run, and a shortcut to its link
+    const strip = h("div", { class: "stream-strip", "data-state": "off" });
+    let startedAt = 0, streamTitle = "";
+    const paintStrip = () => {
+      const live = Boolean(sessionId);
+      strip.setAttribute("data-state", live ? "live" : "off");
+      const yt = status?.youtube;
+      const link = h("button", { class: "btn small ghost", type: "button", title: "Paste or change the stream link", "aria-label": "Stream link", onclick: () => openStreamLink() }, icon("youtube", 15), h("span", { class: "hide-narrow" }, "Stream link"));
+      mount(strip, h("span", { class: "ss-dot", "aria-hidden": "true" }),
+        h("span", { class: "ss-text" }, live
+          ? [h("strong", null, streamTitle || (status?.hub.mode === "demo" ? "Demo stream" : "On air")), h("span", { class: "muted" }, ` · ${spanText(Date.now() / 1000 - startedAt)} · fresh chat for this stream`)]
+          : [h("strong", null, "No stream running"), h("span", { class: "muted" }, yt?.connected ? " · waiting for you to go live" : " · YouTube not connected")]),
+        status?.hub.mode === "demo" ? null : link);
+    };
+    const waitingState = (): HTMLElement => {
+      const el = empty(sessionId ? "message" : "radio", sessionId ? "A new stream, a fresh chat. Lines appear here as they arrive." : "No stream is running. Your next stream starts on a fresh, empty chat.");
+      if (!sessionId && lastStream) el.appendChild(h("button", { class: "btn small", type: "button", style: "margin-top:10px", onclick: () => openStream(lastStream!) }, icon("history", 14), `Read the last stream: ${streamName(lastStream)}`));
+      return el;
+    };
+    /** A different stream began (or the first one was found): the old chat goes away and the new one starts empty. */
+    const newStream = (id: string, title: string, started: number) => {
+      sessionId = id; streamTitle = title; startedAt = started;
+      lines.length = 0; queue.length = 0; arrivals.length = 0; seen.clear();
+      if (!savedMode()) redraw();
+      paintStrip(); renderFacts();
+    };
 
     // ----- send as the bot
     const input = h("input", { type: "text", maxLength: 500, placeholder: "Say something as the bot", "aria-label": "Message to send" });
@@ -256,21 +318,23 @@ export const desk: Page = {
     const healthBlock = (s: Status): HTMLElement => {
       const q = s.youtube.quota;
       const pct = Math.min(100, Math.round(q.fraction * 100));
-      const row = (ic: string, title: string, text: string, chip: [string, string]) =>
-        h("div", { class: "status-row" }, icon(ic, 18), h("div", { class: "grow" }, h("div", null, title), h("div", { class: "muted small" }, text)), h("span", { class: `chip ${chip[0]}` }, chip[1]));
+      const row = (ic: string, title: string, text: string, chip: [string, string], onclick?: () => void) => {
+        const kids = [icon(ic, 18), h("div", { class: "grow" }, h("div", null, title), h("div", { class: "muted small" }, text)), h("span", { class: `chip ${chip[0]}` }, chip[1]), onclick ? icon("chevronRight", 16, "sr-go") : null];
+        return onclick ? h("button", { class: "status-row clickable", type: "button", onclick, title: "Paste or change the stream link", "aria-label": `${title}: ${text}. Tap to set the stream link` }, ...kids) : h("div", { class: "status-row" }, ...kids);
+      };
       return h("div", null,
         h("div", { class: "health" }, ring(s.hub.mode === "demo" ? 0 : q.fraction, s.hub.mode === "demo" ? "Demo" : `${pct}%`, "YouTube quota used today", pct >= 75 ? "hot" : ""),
           h("dl", null, h("dt", null, "YouTube quota"), h("dd", null, s.hub.mode === "demo" ? "Not used in demo mode" : `${q.used} of ${q.daily} units (estimate)`),
             s.hub.mode === "demo" ? null : h("dt", null, "Resets"), s.hub.mode === "demo" ? null : h("dd", { class: "reset-line" }, resetText(s)),
             h("dt", null, "Last chat poll"), h("dd", null, s.hub.mode === "demo" ? "Simulated" : ago(s.youtube.last_poll)))),
         h("div", { class: "status-rows" },
-          row("youtube", "YouTube", s.youtube.chat_attached ? (s.youtube.title || "Chat attached") : s.youtube.connected ? "Connected, no stream attached" : "Not connected", s.youtube.last_error ? ["bad", "Error"] : s.youtube.chat_attached ? ["ok", "Attached"] : s.youtube.connected ? ["warn", "Idle"] : ["", "Off"]),
+          row("youtube", "YouTube", s.youtube.chat_attached ? (s.youtube.title || "Chat attached") : s.youtube.connected ? "Connected, no stream attached" : "Not connected", s.youtube.last_error ? ["bad", "Error"] : s.youtube.chat_attached ? ["ok", "Attached"] : s.youtube.connected ? ["warn", "Idle"] : ["", "Off"], () => openStreamLink()),
           row("telegram", "Telegram", s.telegram.configured ? (s.telegram.bot_username ? `@${s.telegram.bot_username} (${s.telegram.mode})` : s.telegram.mode) : "No bot token", s.telegram.last_error ? ["bad", "Error"] : s.telegram.configured && s.telegram.owner_bound ? ["ok", "Ready"] : ["warn", s.telegram.configured ? "Not claimed" : "Off"]),
           row("database", "Database", s.database, ["ok", "OK"]),
           redisRow(s, row)));
     };
     /** Sits right under Database. Redis is optional, so "off" is a normal state, not a warning. */
-    const redisRow = (s: Status, row: (ic: string, title: string, text: string, chip: [string, string]) => HTMLElement): HTMLElement | null => {
+    const redisRow = (s: Status, row: (ic: string, title: string, text: string, chip: [string, string], onclick?: () => void) => HTMLElement): HTMLElement | null => {
       const r = s.redis;
       if (!r) return null;
       if (r.mode === "off") return row("zap", "Redis", "Not set up, running in memory", ["", "Off"]);
@@ -288,7 +352,7 @@ export const desk: Page = {
 
     // ----- the chat card, which can grow to fill the workspace
     const readerUi = readerControl();
-    const main = h("div", { class: "chat-main" }, toolbar, readerUi.note, dateWrap, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
+    const main = h("div", { class: "chat-main" }, toolbar, strip, readerUi.note, dateWrap, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
     const side = h("aside", { class: "zoom-side", "aria-label": "Waiting for you" },
       h("div", { class: "zs-head" }, h("h3", null, icon("inbox", 16), "Waiting for you", sideCount), h("button", { class: "icon-btn zs-close", type: "button", "aria-label": "Close the waiting list", onclick: () => chatPane.classList.remove("side-open") }, icon("x", 18))),
       h("div", { class: "zs-body" }));
@@ -354,17 +418,35 @@ export const desk: Page = {
     };
     document.addEventListener("keydown", onKey);
 
-    get<{ items: Line[] }>("/api/chat/recent?limit=150").then((r) => { r.items.forEach((m) => add(m, true)); list.scrollTop = list.scrollHeight; if (!lines.length) redraw(); renderFacts(); }).catch((e) => toast(e.message, "error"));
+    /** Loads the chat of the stream that is running now. With `catchUp` it only adds what a dropped connection missed. */
+    const loadRecent = (catchUp = false) => get<{ items: Line[]; session: { id: string; started: number; title: string } | null; last: Stream | null }>("/api/chat/recent?limit=150").then((r) => {
+      lastStream = r.last;
+      if ((r.session?.id ?? "") !== sessionId) newStream(r.session?.id ?? "", r.session?.title ?? "", r.session?.started ?? 0);
+      else if (r.session) { streamTitle = r.session.title || streamTitle; startedAt = r.session.started; }
+      // With no stream running, whatever is left is the stream that just ended: shown for reading, never mixed into the next one
+      for (const m of r.items) add(m, true);
+      if (!catchUp) list.scrollTop = list.scrollHeight;
+      if (!lines.length || !catchUp) redraw();
+      paintStrip(); renderFacts();
+    }).catch((e) => { if (!catchUp) toast(e.message, "error"); });
+    void loadRecent();
     void loadPending().catch((e) => toast(e.message, "error"));
     renderFacts();
     const offs = [
       feed.on("chat", (e) => { if (Boolean(e.data.demo) === (status?.hub.mode === "demo")) add(e.data); }),
+      feed.on("session", (e) => {
+        if (e.data.live) { if (e.data.id !== sessionId) newStream(e.data.id, e.data.title ?? "", e.data.started ?? Date.now() / 1000); }
+        else if (e.data.id === sessionId) { sessionId = ""; paintStrip(); void loadLast(); if (!savedMode()) redraw(); }
+      }),
+      feed.on("stream", (e) => { if (e.data.live && e.data.title) { streamTitle = e.data.title; paintStrip(); } }),
       feed.on("mod_pending", () => void loadPending()),
       feed.on("mod_resolved", () => void loadPending()),
       feed.on("mod_expired", () => void loadPending()),
+      // the connection dropped and came back: fetch what was missed instead of making you refresh
+      feed.onReconnect(() => { void loadRecent(true); void loadPending().catch(() => undefined); if (savedMode() && viewing?.live) reload(); }),
     ];
     offs.push(onStatus(() => renderFacts()));
-    const t = window.setInterval(renderFacts, 5000);
+    const t = window.setInterval(() => { renderFacts(); if (sessionId) paintStrip(); }, 5000);
     return () => { offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },
 };

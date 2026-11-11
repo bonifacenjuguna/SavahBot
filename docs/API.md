@@ -305,6 +305,18 @@ Environment settings and the Settings overview.
 |---|---|---|
 | GET | `/api/status` |  |
 
+## streams
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/streams` |  |
+| GET | `/api/streams/last` |  |
+| DELETE | `/api/streams/{sid}` |  |
+| GET | `/api/streams/{sid}` |  |
+| PATCH | `/api/streams/{sid}` |  |
+| GET | `/api/streams/{sid}/chat` |  |
+| GET | `/api/streams/{sid}/export` |  |
+
 ## system
 
 Service health and the data inventory.

@@ -137,6 +137,10 @@ class ChatSend(_In):
     text: str = Field(min_length=1, max_length=500)
 
 
+class StreamPatch(_In):
+    label: str = Field(max_length=80)
+
+
 class ModeIn(_In):
     mode: str
 

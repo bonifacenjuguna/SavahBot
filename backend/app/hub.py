@@ -19,6 +19,7 @@ from .models import ChatMessage
 from .services.telegram_ui import approval_card, approval_keyboard, flag_card, stream_card
 from .moderation.bans import Bans
 from .moderation import ACTION_RANK, ModerationEngine, ModInput, Verdict
+from .sessions import Sessions
 from .store import Store
 from .utils import split_csv, truncate
 
@@ -65,6 +66,11 @@ class Hub:
         self.learning: Any = None   # app.intel.Learning: learns from approve/reject decisions (optional)
         self._mode_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
+        # 1.3.5: every livestream is its own session with its own chat (see sessions.py)
+        self.sessions = Sessions(store.db)
+        self.session: dict[str, Any] | None = None     # the stream that is running now
+        self._session_lock = asyncio.Lock()            # begin/end run one at a time, in the order they were asked for
+        self._session_pending: "asyncio.Future[Any] | None" = None
 
     # ------------------------------------------------------------------ sources and mode
     # 1.1.8: the "just punished" memory and the recent-message ids, as plain data
@@ -116,6 +122,7 @@ class Hub:
                 except Exception:
                     logger.exception("Stopping %s failed", s.name)
             self.source = None
+        await self.end_session()
 
     # ------------------------------------------------------------------ stream state
     def stream_state(self, live: bool, title: str = "") -> None:
@@ -125,16 +132,83 @@ class Hub:
         self.stream_live = live
         self.stream_title = title if live else ""
         self._stream_started = time.time() if live and not was_live else (self._stream_started if live else None)
+        # A stream starting is a new session (with a fresh chat); a stream ending closes it. The work is queued, never blocking this call.
+        if live and not was_live:
+            demo, src = self.mode == "demo", self.source
+            # what identifies the stream is read now: a moment later the source may already have let go of it
+            self._session_pending = self._spawn(self._begin_session(title, "" if demo else str(getattr(src, "video_id", "") or ""), src.name if src else "", demo))
+        elif live:
+            self._spawn(self._retitle_session(title))
+        elif was_live:
+            self._spawn(self.end_session())
         self.bus.publish("stream", {"live": live, "title": self.stream_title})
         if self.mode == "live" and self.cfg.get("telegram_notify_stream_events"):
             self._spawn(self._notify(stream_card(live, title)))
 
+    # ------------------------------------------------------------------ stream sessions
+    @property
+    def session_id(self) -> str:
+        return self.session["id"] if self.session else ""
+
+    async def _begin_session(self, title: str, video_id: str, platform: str, demo: bool) -> None:
+        async with self._session_lock:
+            if self.session is not None:       # one is already open (a repeated start): keep it
+                return
+            try:
+                row, resumed = await self.sessions.begin(time.time(), title, video_id, platform, demo)
+            except Exception:
+                logger.exception("Could not start a stream session; chat will still work but will not be grouped")
+                return
+            self.session = row
+            if resumed:
+                # the same stream came back (a reconnect or a restart): carry on in its chat
+                self.lines = int(((await self.sessions.compute(row, time.time())) or {}).get("messages", 0))
+                self.buffer.clear()
+                for m in (await self.sessions.chat(row["id"], limit=self.buffer.maxlen or 400))[-(self.buffer.maxlen or 400):]:
+                    self.buffer.append(m)
+            else:
+                self.buffer.clear()            # a new stream starts with an empty chat
+                self.lines = 0
+            self.bus.publish("session", {"id": row["id"], "live": True, "resumed": resumed, "title": row.get("title", ""), "started": row["started"]})
+
+    async def _retitle_session(self, title: str) -> None:
+        async with self._session_lock:
+            if self.session is not None and title:
+                self.session["title"] = title
+                try:
+                    await self.sessions.set_title(self.session["id"], title)
+                except Exception:
+                    logger.exception("Could not update the stream title")
+
+    async def end_session(self) -> None:
+        async with self._session_lock:
+            cur, self.session = self.session, None
+            if cur is None:
+                return
+            try:
+                done = await self.sessions.finish(cur["id"], time.time())
+            except Exception:
+                logger.exception("Could not close the stream session")
+                done = None
+            # the buffer is NOT cleared here: for a moment after the stream ends you can still read its last lines. The next stream's start clears it.
+            self.bus.publish("session", {"id": cur["id"], "live": False, "kept": done is not None})
+
+    async def _session_ready(self) -> None:
+        """A message must not be filed before its stream's session exists."""
+        p = self._session_pending
+        if p is not None and not p.done():
+            try:
+                await asyncio.shield(p)
+            except Exception:
+                pass
+
     def uptime(self) -> float | None:
         return time.time() - self._stream_started if self.stream_live and self._stream_started else None
 
-    def _spawn(self, coro: Awaitable[Any]) -> None:
+    def _spawn(self, coro: Awaitable[Any]) -> "asyncio.Future[Any]":
         task = asyncio.ensure_future(coro)
         task.add_done_callback(lambda t: t.cancelled() or t.exception() is None or logger.error("Background task failed: %s", t.exception()))
+        return task
 
     # ------------------------------------------------------------------ outbound
     async def _notify(self, text: str, buttons: list[list[tuple[str, str]]] | None = None) -> None:
@@ -173,6 +247,8 @@ class Hub:
 
     # ------------------------------------------------------------------ the pipeline
     async def ingest(self, msg: ChatMessage) -> ChatMessage:
+        if self._session_pending is not None and not self._session_pending.done():
+            await self._session_ready()
         # With Redis on, a message id is claimed once: a restart, or a second instance overlapping during a hand-over,
         # never moderates or answers the same live message twice. (Demo and unlabelled messages are not tracked.)
         if self.shared is not None and self.shared.configured and msg.msg_id and not msg.demo:
@@ -198,7 +274,7 @@ class Hub:
                 await self._handle_verdict(msg, verdict)
 
         try:
-            msg.id = await self.store.add_chat(msg.to_dict() | {"text": msg.text})
+            msg.id = await self.store.add_chat(msg.to_dict() | {"text": msg.text, "session_id": self.session_id})
         except Exception:
             logger.exception("Could not store chat message")
         if self.learning is not None and not msg.backfill and not msg.from_bot:
@@ -435,5 +511,6 @@ class Hub:
             "mode": self.mode, "source": self.source.name if self.source else None, "source_status": src,
             "stream_live": self.stream_live, "stream_title": self.stream_title, "uptime": self.uptime(),
             "mod_mode": self.cfg.get("mod_mode"), "lines": self.lines,
+            "session": {"id": self.session["id"], "started": self.session["started"], "title": self.session.get("title", ""), "resumed": bool(self.session.get("resumed"))} if self.session else None,
             "blacklist_size": self.engine.matcher.size,
         }

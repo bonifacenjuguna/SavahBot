@@ -153,6 +153,10 @@ class Container:
             await self.weather.load()
         except Exception:
             logger.exception("Weather failed to start; the rest of the bot is unaffected")
+        try:
+            await self.hub.sessions.close_orphans()      # a stream session left open by a crash is closed at its last chat line
+        except Exception:
+            logger.exception("Could not tidy stream sessions")
         await self.hub.reload_blacklist()
         await self.quota.sync()
         self._wait_for_telegram = wait_for_telegram

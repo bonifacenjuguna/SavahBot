@@ -22,7 +22,7 @@ SCOPES: dict[str, dict[str, Any]] = {
                   "tables": ["knowledge_packs", "knowledge_entries", "knowledge_feeds", "knowledge_suggestions", "knowledge_log", "intel_examples", "intel_packs",
                              "intel_user", "learning_lessons", "learning_snapshots"], "kv": ["intel_custom_feeds", "intel_scale", "intel_backfilled", "lessons_migrated"]},
     "moderation": {"label": "Moderation history and the ban ledger", "default": True, "tables": ["mod_actions", "bans"], "kv": []},
-    "history": {"label": "Long-term chart history (daily and hourly totals)", "default": True, "tables": ["stats_hourly", "stats_daily"], "kv": ["history_rolled_until"]},
+    "history": {"label": "Long-term chart history (daily and hourly totals)", "default": True, "tables": ["stats_hourly", "stats_daily", "stream_sessions"], "kv": ["history_rolled_until"]},
     "chat": {"label": "Raw chat messages (large)", "default": False, "tables": ["chat_messages"], "kv": []},
     "credentials": {"label": "Sign-in methods and connections (password, passkeys, authenticator, Google and Telegram links)", "default": False,
                     "tables": ["access_passkeys", "access_recovery", "access_totp"],

@@ -482,14 +482,16 @@ async def reminders_cancel(request: Request, c: Any) -> dict:
 # ================================================================================= chat, mode, demo, analytics
 @R.add("/chat/recent", ["GET"])
 async def chat_recent(request: Request, c: Any) -> dict:
+    """The chat of the stream that is running now. A new stream always starts empty; older streams are in /streams."""
     limit = max(1, min(int(request.query_params.get("limit", 100)), 500))
     want_demo = _demo_filter(c)  # only the chat of the mode you are in; demo and live never mix
     items = [m for m in c.hub.buffer if bool(m.get("demo")) == want_demo][-limit:]
-    if not items:
-        items = [m | {"from_bot": m["level"] == "bot", "reasons": []} for m in await c.store.recent_chat(limit, want_demo)]
-        for m in items:
-            m["text"], m["demo"] = m.pop("body"), bool(m["demo"])
-    return {"items": items}
+    sid = c.hub.session_id
+    if not items and sid:
+        items = await c.hub.sessions.chat(sid, limit=limit)
+    cur = c.hub.status()["session"]
+    # With no stream running, `items` is only what was left of the stream that just ended (or nothing); `last` says which stream that was.
+    return {"items": items, "session": cur, "last": None if cur else await c.hub.sessions.last_finished(want_demo)}
 
 
 @R.add("/chat/search", ["GET"])
@@ -1019,6 +1021,7 @@ async def events(request: Request, c: Any) -> Any:
 from . import knowledge_routes  # noqa: E402,F401  (Knowledge API, Settings > Knowledge)
 from . import bans_routes  # noqa: E402,F401  (Ban management API)
 from . import history_routes  # noqa: E402,F401  (long-range chart history)
+from . import stream_routes  # noqa: E402,F401  (stream history: one session per livestream)
 from . import access_routes  # noqa: E402,F401  (sign-in and Security & Access Centre)
 from . import backup_routes  # noqa: E402,F401  (encrypted backup and restore)
 from . import notify_routes  # noqa: E402,F401  (Notification Centre)

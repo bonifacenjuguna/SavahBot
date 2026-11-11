@@ -395,10 +395,10 @@ class Store:
     # ------------------------------------------------------------------ chat log
     async def add_chat(self, m: dict) -> int:
         return await self.db.insert(
-            "INSERT INTO chat_messages (platform, msg_id, author_id, author_name, body, level, ts, score, verdict, demo) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO chat_messages (platform, msg_id, author_id, author_name, body, level, ts, score, verdict, demo, session_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (m["platform"], m.get("msg_id", ""), m["author_id"], m["author_name"], m["text"], m.get("level", "everyone"),
-             m["ts"], m.get("score", 0), m.get("verdict", "allow"), int(m.get("demo", False))),
+             m["ts"], m.get("score", 0), m.get("verdict", "allow"), int(m.get("demo", False)), m.get("session_id", "") or ""),
         )
 
     async def recent_chat(self, limit: int = 100, demo: bool | None = None) -> list[dict]:
@@ -439,6 +439,7 @@ class Store:
 
     async def clear_demo_data(self) -> None:
         await self.db.execute("DELETE FROM chat_messages WHERE demo = 1")
+        await self.db.execute("DELETE FROM stream_sessions WHERE demo = 1 AND ended IS NOT NULL")
         await self.db.execute("DELETE FROM mod_actions WHERE demo = 1")
         await self.db.execute("DELETE FROM bans WHERE demo = 1")
 

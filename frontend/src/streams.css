@@ -1,0 +1,72 @@
+/* 1.3.5 streams: one chat per livestream, the stream history, the stream strip, the clickable YouTube row, and the saved-chat layout fixes. */
+
+/* ---- saved chat: a day heading instead of a date on every line, so nothing can overlap ---- */
+.line { grid-template-columns: 6.6em minmax(0, 1fr); }
+.line time { min-width: 0; overflow: hidden; text-overflow: clip; }
+.day-sep { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 6px 16px 4px; color: var(--muted); font-size: 0.76rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: linear-gradient(var(--raised) 70%, transparent); }
+.day-sep::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.saved-banner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; min-width: 0; }
+.saved-banner .sb-text { min-width: 0; overflow-wrap: anywhere; }
+.saved-banner .btn { white-space: nowrap; }
+@media (max-width: 520px) { .saved-banner { grid-template-columns: auto minmax(0, 1fr); } .saved-banner .btn { grid-column: 1 / -1; justify-self: start; } }
+/* the date filter wraps instead of scrolling sideways, so "Custom" is never cut off */
+.toolbar-dates .dr-chips { flex-wrap: wrap; overflow: visible; }
+.toolbar-dates .dr-chips > .ico { align-self: center; }
+.dr-custom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dr-custom input { min-width: 0; width: 100%; }
+@media (max-width: 719px) { .line { grid-template-columns: 1fr; } .day-sep { padding-left: 14px; padding-right: 14px; } }
+
+/* ---- the strip under the chat toolbar ---- */
+.stream-strip { display: flex; align-items: center; gap: 10px; padding: 7px 16px; border-bottom: 1px solid var(--line); font-size: 0.86rem; min-width: 0; }
+.stream-strip .ss-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stream-strip .ss-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: 0.55; }
+.stream-strip[data-state="live"] .ss-dot { background: var(--bad); opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent); animation: ss-pulse 2s infinite; }
+.stream-strip .btn { flex: none; }
+@keyframes ss-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .stream-strip[data-state="live"] .ss-dot { animation: none; } }
+
+/* ---- the YouTube row in Bot status is a button now ---- */
+button.status-row { width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); color: inherit; font: inherit; cursor: pointer; transition: background 0.15s; }
+button.status-row:last-child { border-bottom: 0; }
+button.status-row:hover, button.status-row:focus-visible { background: var(--hover); }
+button.status-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.status-row .sr-go { color: var(--muted); flex: none; }
+.sl-hint { display: flex; align-items: center; gap: 6px; min-height: 1.4em; margin: 0; }
+.sl-hint.ok { color: var(--ok); }
+.sl-hint.bad { color: var(--bad); }
+
+/* ---- the stream history ---- */
+.streams { display: grid; gap: 12px; min-width: 0; }
+.st-note { margin: 0; }
+.st-list { display: grid; gap: 8px; min-width: 0; }
+.st-day { margin: 8px 2px 0; font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.st-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); color: inherit; font: inherit; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.st-row:hover, .st-row:focus-visible { border-color: var(--accent); }
+.st-row.live { border-color: color-mix(in srgb, var(--bad) 55%, var(--line)); background: color-mix(in srgb, var(--bad) 5%, var(--raised)); }
+.st-ico { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--panel); color: var(--muted); }
+.st-row.live .st-ico { color: var(--bad); }
+.st-main { display: grid; gap: 3px; min-width: 0; }
+.st-top { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.st-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.st-when { color: var(--muted); font-size: 0.84rem; }
+.st-stats { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.8rem; color: var(--muted); }
+.st-stat { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.st-stat.warn { color: var(--warn); }
+.st-go { color: var(--muted); }
+.st-more { justify-self: center; }
+.st-back { justify-self: start; }
+.st-head h3 { margin: 0 0 2px; overflow-wrap: anywhere; }
+.st-head p { margin: 0; }
+.st-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.st-tile { display: grid; gap: 2px; justify-items: start; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); min-width: 0; }
+.st-tile .ico { color: var(--muted); }
+.st-tile strong { font-size: 1.15rem; overflow-wrap: anywhere; }
+.st-top-list h4 { margin: 0 0 6px; }
+.st-top-list ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.st-top-list li { display: flex; gap: 10px; padding: 6px 10px; border-radius: 8px; background: var(--panel); min-width: 0; }
+.st-top-list li .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 520px) { .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .st-row { padding: 10px; gap: 10px; } .st-ico { width: 32px; height: 32px; } }
+
+/* ---- the connection chip is a button: tap it to try again right now ---- */
+button.conn-chip { cursor: pointer; font: inherit; }
+button.conn-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
