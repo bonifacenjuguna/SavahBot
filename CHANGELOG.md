@@ -9,6 +9,9 @@ One chat per livestream, a stream history, and a dashboard that reconnects by it
 - **Overlapping dates in saved chat.** The date was printed on every line and ran into the author's name. Saved chat now shows one small heading per day ("Today", "Yesterday", "Mon, Nov 9") and a fixed-width time on each line. The date filter chips wrap instead of being cut off ("Cust...").
 - **Refreshing after the backend or the connection dropped.** The live feed now notices a dead connection within 40 seconds (and straight away when the tab wakes up or the network returns), retries every 0.5 to 10 seconds, and tells you why: "Offline" (no internet) or "Reconnecting (n)" (server not answering). Tap the chip to retry now. When it is back, the Desk fetches the lines it missed, other pages redraw themselves, and if the dashboard itself was updated meanwhile it reloads.
 
+### Changed
+- **Connection chip redesigned** (same behaviour: tap to retry now). A soft pill with a glowing status dot: green and gently pulsing when live, amber and blinking while reconnecting, red when the device has no internet. On phones it is just the dot and the signal icon so the top bar stays uncrowded; on wider screens it also says "Live" / "Reconnecting (n)" / "Offline". This also removes the grey box 1.3.5 first showed around it on phones.
+
 ### Added
 - **Streams** (button on the Desk chat): every stream with its date, start and end time, duration, lines, chatters, flagged lines, deletes, timeouts and bans, busiest minute and most active chatters. Open a stream to read its chat, rename it, export it as a .txt file, or delete it.
 - **Stream strip** under the chat toolbar: what is on air, for how long, and a Stream link shortcut.

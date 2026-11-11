@@ -67,6 +67,33 @@ button.status-row:focus-visible { outline: 2px solid var(--accent); outline-offs
 .st-top-list li .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 520px) { .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .st-row { padding: 10px; gap: 10px; } .st-ico { width: 32px; height: 32px; } }
 
-/* ---- the connection chip is a button: tap it to try again right now ---- */
-button.conn-chip { cursor: pointer; font: inherit; }
+/* ---- the connection chip: a soft pill with a glowing status dot. Green = live, amber = reconnecting, red = no internet. ---- */
+button.conn-chip, button.conn-chip.down {
+  --cc: var(--ok);
+  appearance: none; -webkit-appearance: none; position: relative; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px 0 10px; margin: 0;
+  border: 1px solid color-mix(in srgb, var(--cc) 38%, transparent); border-radius: 999px; font: inherit; font-size: 0.78rem; font-weight: 650; letter-spacing: 0.01em; line-height: 1;
+  color: var(--cc); cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cc) 16%, transparent), color-mix(in srgb, var(--cc) 7%, transparent));
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 8%, transparent) inset, 0 4px 14px -8px var(--cc);
+  transition: color 0.3s, background 0.3s, border-color 0.3s, box-shadow 0.3s, transform 0.12s;
+}
+button.conn-chip::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cc); box-shadow: 0 0 0 0 color-mix(in srgb, var(--cc) 60%, transparent); }
+button.conn-chip[data-state="live"]::before { animation: cc-ping 2.4s ease-out infinite; }
+button.conn-chip[data-state="retry"] { --cc: var(--warn); }
+button.conn-chip[data-state="retry"]::before { animation: cc-blink 1s ease-in-out infinite; }
+button.conn-chip[data-state="retry"] .ico { animation: cc-breathe 1.4s ease-in-out infinite; }
+button.conn-chip[data-state="offline"] { --cc: var(--bad); }
+button.conn-chip:active { transform: scale(0.96); }
+button.conn-chip:hover { box-shadow: 0 1px 0 color-mix(in srgb, #fff 8%, transparent) inset, 0 6px 18px -8px var(--cc); }
 button.conn-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.conn-chip .ico { flex: none; }
+button.conn-chip .txt { display: inline; }
+/* on a phone it is only the dot and the signal icon (the colour and the blinking say the rest; tap or long-press for the words), so the top bar never gets crowded */
+@media (max-width: 719px) {
+  button.conn-chip { height: 32px; padding: 0 10px 0 9px; }
+  button.conn-chip .txt { display: none; }
+}
+@keyframes cc-ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cc) 60%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+@keyframes cc-blink { 50% { opacity: 0.25; } }
+@keyframes cc-breathe { 50% { opacity: 0.45; transform: scale(0.88); } }
+@media (prefers-reduced-motion: reduce) { button.conn-chip::before, button.conn-chip .ico { animation: none !important; } }

@@ -266,7 +266,7 @@ function showShell(): void {
   const tbTally = h("button", { class: "tb-tally", type: "button", "data-state": "standby", "aria-label": "Bot mode and status", onclick: () => openModeSheet() }, tbIco, tbTitle, tbDetail);
   const searchBtn = h("button", { class: "search-btn", type: "button", onclick: () => openPalette(ctx), "aria-label": "Search and jump to" },
     icon("search", 18), h("span", { class: "grow" }, "Search pages and actions"), h("kbd", null, "Ctrl K"));
-  const connChip = h("button", { class: "conn-chip down", type: "button", role: "status", title: "The live feed is down. Tap to try again now.", onclick: () => { feed.retryNow(); void refreshStatus(); } }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
+  const connChip = h("button", { class: "conn-chip down", "data-state": "retry", type: "button", role: "status", title: "The live feed is down. Tap to try again now.", onclick: () => { feed.retryNow(); void refreshStatus(); } }, icon("wifiOff", 16), h("span", { class: "txt" }, "Reconnecting"));
   const bellBadge = h("span", { class: "badge accent", hidden: true }, "0");
   const bell = h("button", { class: "icon-btn", type: "button", "aria-label": "Notifications", "aria-haspopup": "dialog", "aria-expanded": "false", title: "Notifications", onclick: () => openNotifications(bell) }, icon("bell", 20), bellBadge);
   const topbar = h("header", { class: "topbar" },
@@ -390,6 +390,7 @@ function showShell(): void {
     connText.textContent = up ? "Live feed: connected" : offline ? "Live feed: no internet" : "Live feed: reconnecting";
     mount(connIcon, icon(up ? "wifi" : "wifiOff", 16));
     connChip.classList.toggle("down", !up);
+    connChip.dataset.state = up ? "live" : offline ? "offline" : "retry";     // the look follows this; the behaviour is unchanged
     mount(connChip, icon(up ? "wifi" : "wifiOff", 16), h("span", { class: "txt" }, word));
     connChip.title = up ? "The live feed is connected." : offline ? "This device has no internet. It reconnects by itself when it is back." : "The server is not answering. It reconnects by itself. Tap to try again now.";
   };
