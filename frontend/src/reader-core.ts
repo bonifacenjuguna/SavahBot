@@ -5,7 +5,7 @@ export interface Rules {
   prefix: string; say_name: boolean; skip_links: boolean; skip_emoji: boolean; shorten: number; collapse_repeats: boolean; drop_backlog: number;
   users: Record<string, UserRule>; dictionary: { from: string; to: string }[];
 }
-export interface Msg { author_id?: string; author_name: string; text: string; level: string; verdict: string | null; ts: number }
+export interface Msg { author_id?: string; author_name: string; text: string; level: string; verdict: string | null; ts: number; /** when the dashboard received the line (ms); age is judged from this, not from `ts`, which is YouTube's publish time on another clock */ arrived?: number }
 
 export const DEFAULT_RULES: Rules = { who: "everyone", prefix: "!say", say_name: true, skip_links: true, skip_emoji: true, shorten: 160, collapse_repeats: true, drop_backlog: 15, users: {}, dictionary: [] };
 
@@ -17,7 +17,10 @@ export function shouldRead(m: Msg, r: Rules, now = Date.now() / 1000): boolean {
   if (m.verdict && m.verdict !== "allow") return false;
   const u = m.author_id ? r.users[m.author_id] : undefined;
   if (u?.mode === "never") return false;
-  if (r.drop_backlog > 0 && now - m.ts > r.drop_backlog) return false;
+  // Age is counted from when this dashboard received the line. YouTube's own publish time runs behind by the polling gap and by any
+  // difference between the server clock and this phone's clock, which made nearly every real line look "too old" and silently skipped.
+  const age = m.arrived !== undefined ? now - m.arrived / 1000 : now - m.ts;
+  if (r.drop_backlog > 0 && age > r.drop_backlog) return false;
   if (u?.mode === "always" || u?.mode === "voice") return true;
   switch (r.who) {
     case "mods": return MOD.has(m.level);

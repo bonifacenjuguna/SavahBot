@@ -14,6 +14,9 @@ Fixes from phone testing: tab rows, layers, cut-off cards, the stream-ended bug 
 - **Read chat has its own place.** The button moved into the chat header (icon only on a phone); loading and error messages show on a thin line under the toolbar and take no room when empty. It no longer sits on top of chat lines.
 - **Stream ended, bot still "On air".** The bot now notices the end of a stream from YouTube's own offline marker, from a send or delete that YouTube refuses with "chat ended", and from a quiet chat check (one cheap `videos.list` call, at most every 90 seconds, only while the chat is quiet). The Desk then returns to Standby, and a send attempt says plainly that the stream has ended.
 
+- **Read chat read only the test sentence.** Real lines were judged "too old" by YouTube's publish time (behind by the polling gap and any clock difference), so they were skipped. Age is now counted from when the dashboard received the line, and lines loaded from history are never read.
+- **Expanded chat:** the Close button is icon only.
+
 ### Performance
 - **The neural voice runs in a Web Worker.** Downloading and running Kokoro no longer blocks the page, so scrolling, taps and the live chat stay smooth while it loads and speaks. The worker reports download progress, and the reader keeps only the newest 4 lines waiting for the neural voice so it never falls behind.
 - The reader control redraws at most once per frame, releases its listener when you leave the Desk, and stops cleanly if Read chat is switched off while a line is being made.

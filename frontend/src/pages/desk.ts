@@ -140,10 +140,10 @@ export const desk: Page = {
       while (list.childElementCount > MAX) list.firstElementChild?.remove();
       if (stick) stickSoon();
     };
-    const add = (m: Line) => {
+    const add = (m: Line, fromHistory = false) => {
       arrivals.push(m.ts);
       if (arrivals.length > 4000) arrivals.splice(0, arrivals.length - 4000);
-      reader.offer(m);                    // the reader decides by its own rules; it does nothing unless Read chat was tapped
+      if (!fromHistory) reader.offer({ ...m, arrived: Date.now() });   // lines loaded from history are never read aloud; the reader decides by its own rules; it does nothing unless Read chat was tapped
       if (paused) { queue.push(m); updatePause(); return; }
       push(m);
     };
@@ -297,7 +297,7 @@ export const desk: Page = {
     const sizeUp = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Larger text", title: "Larger text", onclick: () => setSize(sizeIdx + 1) }, icon("textSize", 18), h("span", { class: "sz" }, "+"));
     const expandBtn = h("button", { class: "icon-btn expand-btn", type: "button", "aria-label": "Expand the chat to fill the screen", "aria-expanded": "false", title: "Expand chat (F)", onclick: (e: Event) => { e.preventDefault(); zoom.toggle(); } });
     const paintExpand = (open: boolean) => {
-      mount(expandBtn, icon(open ? "collapse" : "expand", 18), open ? h("span", { class: "close-label" }, "Close") : null);
+      mount(expandBtn, icon(open ? "collapse" : "expand", 18));      // the icon says it; the label is in aria-label and the tooltip
       expandBtn.setAttribute("aria-expanded", String(open));
       expandBtn.setAttribute("aria-label", open ? "Shrink the chat back" : "Expand the chat to fill the screen");
       expandBtn.title = open ? "Shrink chat (Esc)" : "Expand chat (F)";
@@ -354,7 +354,7 @@ export const desk: Page = {
     };
     document.addEventListener("keydown", onKey);
 
-    get<{ items: Line[] }>("/api/chat/recent?limit=150").then((r) => { r.items.forEach(add); list.scrollTop = list.scrollHeight; if (!lines.length) redraw(); renderFacts(); }).catch((e) => toast(e.message, "error"));
+    get<{ items: Line[] }>("/api/chat/recent?limit=150").then((r) => { r.items.forEach((m) => add(m, true)); list.scrollTop = list.scrollHeight; if (!lines.length) redraw(); renderFacts(); }).catch((e) => toast(e.message, "error"));
     void loadPending().catch((e) => toast(e.message, "error"));
     renderFacts();
     const offs = [
