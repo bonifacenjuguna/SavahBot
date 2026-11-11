@@ -16,6 +16,20 @@ Clean URLs. The dashboard no longer uses `/#/desk`; every page has a real addres
 ### Added
 - `npm test` runs the routing rules (`frontend/tests/routes.test.ts`, Node's built-in test runner, no new dependencies).
 
+### Fixed (engineering audit of the clean-URL release)
+- **Sign out now closes the session on the server.** It used to forget the token only in the browser, so a copied token kept working until it expired. `POST /api/auth/logout` is now called (best effort) with the token being signed out.
+- **A late "401" can no longer sign you out of a newer sign-in**, and a request that carried no token no longer reports "Your session ended". When the session really does end, several requests failing together give one notice and one redraw (the page behind is torn down first, so it no longer re-requests data with no token).
+- **The sign-in lockout could be dodged.** The client address was read from the *first* `X-Forwarded-For` value, which a caller can invent for every request. It is now read from the right, counting `TRUSTED_PROXY_HOPS` proxies (default 1, Railway). Set `0` if the server is reached directly with no proxy. The restore-token lockout and the audit log use the same address.
+- **Reflected markup in the Google sign-in callback page.** When `FRONTEND_URL` is not set, the small page the callback shows printed the `error` parameter unescaped. It is escaped now and the page carries a locked-down `Content-Security-Policy`.
+- **API answers are `Cache-Control: no-store`** (plus `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`) so signed-in data is never kept by a browser or proxy. Routes that choose their own caching (live feed, public voice files) are left alone.
+- **Vercel:** added `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` and a `Permissions-Policy` that turns off camera, microphone, payment and USB.
+- **Router:** a `#fragment` is kept when an unusual spelling (`/Security#keys`) is rewritten to the canonical path; a back or forward step that only moves the `#fragment` no longer redraws the page; the "Page not found" page no longer lights up the More tab.
+- **Test:** `test_a_protected_user_refusal...` expected an older wording of the "stream has ended" message; it now checks the message the code gives.
+
+### Tests
+- Frontend: `tests/api.test.ts` (sign-out and 401 handling), `tests/router.test.ts` (history, legacy links, back/forward, fragments), `tests/vercel.test.ts` (rewrite and headers). `npm test` now runs 30 tests.
+- Backend: `tests/test_hardening.py` (client address, lockout with forged headers, response headers, server-side sign-out, escaped callback page).
+
 ## 1.3.5
 
 One chat per livestream, a stream history, and a dashboard that reconnects by itself.

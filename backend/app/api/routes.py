@@ -3,6 +3,7 @@ requires the owner's bearer token."""
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import time
@@ -88,8 +89,20 @@ async def parse(request: Request, model: type[BaseModel]) -> Any:
 
 
 def client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "")
-    return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "unknown")
+    """The address the sign-in lockout and the audit log use.
+
+    X-Forwarded-For is a list that every proxy appends to, and a client can write anything it likes at the START of it. Only the entries added by
+    our own proxies (the last `trusted_proxy_hops`) can be believed, so the address is read from the right, never the left. Reading the leftmost
+    value let anyone rotate a made-up address per request and never reach the lockout."""
+    peer = request.client.host if request.client else "unknown"
+    try:
+        hops = int(request.app.state.c.settings.trusted_proxy_hops)
+    except (AttributeError, TypeError, ValueError):
+        hops = 1
+    if hops <= 0:
+        return peer
+    chain = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    return chain[-hops][:64] if len(chain) >= hops else peer
 
 
 def need(found: bool, what: str = "item") -> None:
@@ -132,7 +145,9 @@ async def youtube_callback(request: Request, c: Any) -> Any:
         if front:
             from urllib.parse import quote
             return RedirectResponse(f"{front}/setup?youtube={'connected' if ok else 'error'}&message={quote(message)}", status_code=303)
-        return HTMLResponse(f"<h3>{'Connected' if ok else 'Could not connect'}</h3><p>{message}</p><p>You can close this tab.</p>")
+        # `message` can contain the `error` query parameter, which anyone can put in a link: it must never reach the page as markup
+        return HTMLResponse(f"<h3>{'Connected' if ok else 'Could not connect'}</h3><p>{html.escape(message)}</p><p>You can close this tab.</p>",
+                            headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff"})
 
     if q.get("error"):
         return done(False, f"Google said: {q.get('error')}")

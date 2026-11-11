@@ -20,7 +20,7 @@ You cannot remove a method if that would leave you with fewer than two.
 - **Authenticator app:** the secret is encrypted at rest and never returned by the API after setup. A code cannot be used twice.
 - **Recovery codes:** 10 single-use codes, stored only as keyed hashes. Shown once.
 - **Passkeys:** only the public key is stored. Supported key types: ES256, RS256, EdDSA. The signature counter is checked, so a cloned key is refused.
-- **Sessions:** opaque random tokens, stored only as a hash. You can see and sign out every device, and signing out really ends the session on the server. Sessions end after `JWT_EXPIRE_HOURS` (72) and after `SESSION_IDLE_MINUTES` (1440) of no use.
+- **Sessions:** opaque random tokens, stored only as a hash. You can see and sign out every device, and signing out really ends the session on the server (the dashboard calls `POST /auth/logout`, so a copied token stops working at once). Sessions end after `JWT_EXPIRE_HOURS` (72) and after `SESSION_IDLE_MINUTES` (1440) of no use.
 - **Step-up:** changing sign-in methods, removing passkeys, making recovery codes or lifting lockdown asks for your password again (valid `SECURITY_STEP_UP_MINUTES`, 5).
 - **Activity and audit log:** sign-ins, failures and every security change, kept `SECURITY_LOG_RETENTION_DAYS` (365). A new device signing in also sends you a Telegram message.
 
@@ -43,3 +43,11 @@ Tested with automated tests: hashing, TOTP against the RFC 6238 vectors, recover
 - *Passkey says "different site":* `FRONTEND_URL` or `WEBAUTHN_RP_ID` does not match the address in your browser bar.
 - *Authenticator codes rejected:* your phone's clock is off; turn on automatic time.
 - *Locked out:* sign in with password + a recovery code. If you lost everything, set a new `OWNER_PASSWORD` and clear the access tables (see docs/TROUBLESHOOTING.md once written).
+
+## Client address and the sign-in lockout (1.3.6)
+
+The lockout counts failed sign-ins per client address. Behind a proxy that address comes from `X-Forwarded-For`, a list every proxy appends to; a caller can write anything at the start of it. SavahBot therefore reads it from the **right**, skipping nothing but the `TRUSTED_PROXY_HOPS` entries your own proxies added (default `1`, which is Railway). If more proxies sit in front (a CDN plus Railway), set `2`. If the server is reached directly with no proxy, set `0` so the header is ignored. A wrong value does not open anything: with too few entries the connection's own address is used.
+
+## Response headers
+
+Every API answer carries `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. The Vercel dashboard sets `X-Frame-Options: DENY`, a `Content-Security-Policy` limited to framing, base, object and form rules, and a `Permissions-Policy`. A full script-source policy is not set: the Chat reader loads its voice runtime and models from other hosts, and the server address is typed at sign-in, so a fixed allow-list would break working features without being tested in a real build.

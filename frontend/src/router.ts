@@ -26,6 +26,8 @@ let ids: string[] = [];
 let started = false;
 
 const here = (): string => location.pathname + location.search;
+/** The path and query of the page that is drawn now. A back or forward step that only moves the `#fragment` leaves it unchanged and must not redraw the page. */
+let shown = "";
 
 export function current(): Where {
   const r: Resolved = resolvePath(location.pathname, ids);
@@ -38,7 +40,7 @@ export function onRoute(fn: Listener): () => void {
   return () => listeners.delete(fn);
 }
 
-const notify = () => listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
+const notify = () => { shown = here(); listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } }); };
 
 /**
  * Go to a page. Returns false (and does nothing) when `to` is not a route of this app.
@@ -57,7 +59,7 @@ export function navigate(to: string, opts: { replace?: boolean } = {}): boolean 
 /** Updates the query string of the current page (a selected tab, a wizard step) without a redraw and without a new history entry. */
 export function replaceQuery(q: string | URLSearchParams): void {
   const url = location.pathname + queryString(q);
-  if (url !== here()) history.replaceState(null, "", url);
+  if (url !== here()) { history.replaceState(null, "", url); shown = here(); }   // the page already shows this state: nothing to redraw
 }
 
 /** The clean address for a route, for `href` attributes: `href("settings?tab=x")` is `/settings?tab=x`. Falls back to the Desk for a non-route. */
@@ -76,7 +78,7 @@ function adoptLegacyHash(): boolean {
 /** The path `/` and unusual spellings (`/Desk`, `/dashboard`, `/desk/`) are rewritten to the one canonical form, keeping the query. */
 function canonicalize(): void {
   const r = resolvePath(location.pathname, ids);
-  if (r.kind === "page" && !r.canonical) history.replaceState(null, "", `/${r.id}${location.search}`);
+  if (r.kind === "page" && !r.canonical) history.replaceState(null, "", `/${r.id}${location.search}${location.hash}`);   // the #fragment is kept
 }
 
 function onClick(e: MouseEvent): void {
@@ -99,11 +101,12 @@ export function startRouter(pageIds: readonly string[]): void {
   if (started) return;
   started = true;
   if (!adoptLegacyHash()) canonicalize();
-  window.addEventListener("popstate", () => { notify(); });
+  shown = here();
+  window.addEventListener("popstate", () => { if (here() !== shown) notify(); });
   // An old bookmark clicked while the app is already open only changes the hash, so nothing reloads: convert it here.
   window.addEventListener("hashchange", () => { if (adoptLegacyHash()) notify(); });
   document.addEventListener("click", onClick);
 }
 
 /** Test hook: lets a test run the same setup again with another page list. */
-export function _reset(): void { ids = []; started = false; listeners.clear(); }
+export function _reset(): void { ids = []; started = false; shown = ""; listeners.clear(); }

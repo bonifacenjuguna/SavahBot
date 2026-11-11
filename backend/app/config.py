@@ -62,6 +62,7 @@ _f(G, "security_log_retention_days", 365, "How long sign-in activity and the sec
 _f(G, "webauthn_rp_id", "", "Passkey site id. Leave empty to use the host name of FRONTEND_URL (for example dash.example.app). Must be the dashboard's host, not the API's.")
 _f(G, "webauthn_origins", "", "Comma-separated dashboard origins allowed to use passkeys. Leave empty to use FRONTEND_URL.")
 _f(G, "webauthn_require_uv", False, "Require passkeys to verify you (fingerprint, face or PIN). Turn on if every passkey you use supports it.")
+_f(G, "trusted_proxy_hops", 1, "How many reverse proxies sit in front of this server and append to X-Forwarded-For (Railway: 1). Used to find the real client address for the sign-in lockout; addresses a client adds to the left of that are ignored. 0 means no proxy: the connection's own address is used.")
 _f(G, "login_max_attempts", 5, "Failed logins allowed before the lockout starts.")
 _f(G, "login_lockout_minutes", 15, "How long a locked-out client must wait.")
 

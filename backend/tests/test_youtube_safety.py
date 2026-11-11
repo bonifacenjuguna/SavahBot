@@ -255,7 +255,7 @@ def test_a_protected_user_refusal_is_not_a_permission_denial_and_other_403s_are(
         assert len(fake.calls("/liveChat/bans", "POST")) == 2 and "ban" not in c.youtube.status()["denied_for"]
         fake.action_status = {"messages": (403, {"error": {"errors": [{"reason": "liveChatEnded"}]}})}
         ok, err = await c.youtube.delete("m1")
-        assert not ok and "no longer available" in err and "delete" not in c.youtube.status()["denied_for"]
+        assert not ok and "stream has ended" in err and "delete" not in c.youtube.status()["denied_for"]     # the wording the code gives (youtube.py); it once read "no longer available"
         await c.stop()
     run(go())
 

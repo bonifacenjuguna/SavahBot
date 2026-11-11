@@ -46,6 +46,18 @@ export function setToken(token: string): void {
 
 export const loggedOut = new EventTarget();
 
+/**
+ * Sign out for real: forget the token here AND close the session on the server. Before, only the local copy was dropped, so a token that had been
+ * copied (or read from another tab's storage) kept working until it expired. The call is best effort and fire-and-forget; it uses the token it was
+ * given, never the current one, and never raises the "session ended" notice.
+ */
+export function endSession(): void {
+  const old = memoryToken;
+  setToken("");
+  if (!old) return;
+  try { void fetch(apiBase() + "/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${old}` }, keepalive: true }).catch(() => undefined); } catch { /* offline: the server closes it when it expires */ }
+}
+
 /** Sends one file as the raw request body (no JSON, no form), for uploads that can be large. The backend address is used directly, never the Vercel proxy, whose request size limit is small. */
 export async function upload<T = any>(path: string, file: Blob): Promise<T> {
   let res: Response;
@@ -61,13 +73,14 @@ export async function upload<T = any>(path: string, file: Blob): Promise<T> {
 
 export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
   const base = apiBase();
+  const sent = memoryToken;     // the token THIS request carried: a late answer must not sign out a newer sign-in
   let res: Response;
   try {
     res = await fetch(base + path, {
       method,
       headers: {
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-        ...(memoryToken ? { Authorization: `Bearer ${memoryToken}` } : {}),
+        ...(sent ? { Authorization: `Bearer ${sent}` } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
@@ -88,7 +101,9 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   }
   // A wrong code or password on a sign-in or confirm screen is not a lost session; anything else with 401 is.
   const signingIn = path.startsWith("/api/auth/") || path === "/api/security/step-up" || path === "/api/security/password";
-  if (res.status === 401 && !signingIn) {
+  // Only a request that carried the CURRENT token can end the session: a late answer to a request sent before sign-out or before a newer sign-in, or one
+  // sent with no token at all, says nothing about the session you have now.
+  if (res.status === 401 && !signingIn && sent && sent === memoryToken) {
     setToken("");
     loggedOut.dispatchEvent(new Event("out"));
   }

@@ -44,6 +44,7 @@ Removed in 1.2.0: `NTFY_URL`, `NTFY_TOPIC` (push now uses Firebase), `WEATHER_AP
 | `WEBAUTHN_RP_ID` | blank | Passkey site id. Leave empty to use the host name of FRONTEND_URL (for example dash.example.app). Must be the dashboard's host, not the API's. |
 | `WEBAUTHN_ORIGINS` | blank | Comma-separated dashboard origins allowed to use passkeys. Leave empty to use FRONTEND_URL. |
 | `WEBAUTHN_REQUIRE_UV` | `False` | Require passkeys to verify you (fingerprint, face or PIN). Turn on if every passkey you use supports it. |
+| `TRUSTED_PROXY_HOPS` | `1` | How many reverse proxies sit in front of this server and append to X-Forwarded-For (Railway: 1). Used to find the real client address for the sign-in lockout; addresses a client adds to the left of that are ignored. 0 means no proxy: the connection's own address is used. |
 | `LOGIN_MAX_ATTEMPTS` | `5` | Failed logins allowed before the lockout starts. |
 | `LOGIN_LOCKOUT_MINUTES` | `15` | How long a locked-out client must wait. |
 

@@ -8,7 +8,7 @@ import "./desktop.css";
 import "./moderation.css";
 import "./chat-zoom.css";
 import "./streams.css";
-import { ApiError, apiBase, get, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
+import { ApiError, apiBase, endSession, get, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
@@ -85,7 +85,7 @@ function tallyState(s: Status | null): { state: "live" | "demo" | "standby"; tit
 }
 
 function signOut(): void {
-  setToken("");
+  endSession();       // closes the session on the server too, not just here
   showLogin();
 }
 
@@ -135,8 +135,7 @@ function showLogin(): void {
       setToken(r.token);
       navigate(r.lockdown ? "/security" : "/desk");   // a fresh sign-in always starts on the Desk, never on the page you left
       boot();
-      if (r.lockdown) navigate("/security");
-      else if (r.setup_needed) window.setTimeout(() => toast("Only your password protects this dashboard. Add a passkey or an authenticator app on the Security page."), 1200);
+      if (!r.lockdown && r.setup_needed) window.setTimeout(() => toast("Only your password protects this dashboard. Add a passkey or an authenticator app on the Security page."), 1200);
     } else if (r.step === "more") pane.replaceChildren(secondStep(r, finish, showLogin));
   };
   const setBusy = (on: boolean) => { btn.disabled = on; btn.replaceChildren(...(on ? [h("span", { class: "spin" }), "Signing in"] : [icon("lock", 16), "Sign in"])); };
@@ -333,7 +332,7 @@ function showShell(): void {
     for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     // More stays lit for every page that lives behind it (Notebook, Community, Setup and so on)
-    if (TAB_IDS.includes(page.id)) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
+    if (TAB_IDS.includes(page.id) || page === NOT_FOUND) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");
     document.title = `${page.title} · SavahBot`;
     clear(content);
     cleanupNav?.();
@@ -453,9 +452,10 @@ function boot(): void {
 }
 
 loggedOut.addEventListener("out", () => {
-  navigate("/desk");
+  if (!shellCleanup) return;      // already on the sign-in screen (several requests can fail at once): one notice, one redraw
+  showLogin();                    // first: tears the shell down, so changing the address below does not redraw a page that would only fail again
+  navigate("/desk", { replace: true });
   toast("Your session ended. Sign in again.", "error");
-  showLogin();
 });
 
 boot();
