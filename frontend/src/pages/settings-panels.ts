@@ -2,7 +2,7 @@
 import { get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
-import { ACCENTS, TOAST_SECS, accentPref, densityPref, motionPref, setAccent, setDensity, setMotion, setText, setToastMode, setToastPos, setToastSecs, textPref, toastMode, toastPos, toastSecs, type Accent, type ToastMode, type ToastPos } from "../appearance.js";
+import { ACCENTS, TOAST_SECS, accentPref, densityPref, motionPref, progressPref, setAccent, setDensity, setMotion, setProgress, setText, setToastMode, setToastPos, setToastSecs, textPref, toastMode, toastPos, toastSecs, type Accent, type ToastMode, type ToastPos } from "../appearance.js";
 import { applyTheme, themePref, type ThemePref } from "../ui.js";
 import { getPWAState, installApp, openInstallGuide } from "../pwa.js";
 import { card } from "./shared.js";
@@ -24,11 +24,13 @@ export function renderAppearance(el: HTMLElement): void {
   }));
   const density = seg<"comfortable" | "compact">("Density", [{ id: "comfortable", label: "Comfortable" }, { id: "compact", label: "Compact" }], densityPref(), setDensity).el;
   const text = seg<"normal" | "large" | "larger">("Text size", [{ id: "normal", label: "Normal" }, { id: "large", label: "Large" }, { id: "larger", label: "Larger" }], textPref(), setText).el;
+  const progress = seg<"scroll" | "full" | "off">("Progress line", [{ id: "scroll", label: "Follows scroll" }, { id: "full", label: "Always full" }, { id: "off", label: "Off" }], progressPref(), setProgress).el;
   const motion = h("input", { type: "checkbox", class: "switch", checked: motionPref() === "reduce", "aria-label": "Reduce motion", onchange: (e: Event) => setMotion((e.target as HTMLInputElement).checked ? "reduce" : "system") });
   mount(el, card("sparkle", "Look and feel", body(
     lede("These are saved on this device only, so your phone and your computer can look different. They never touch the server."),
     row("Theme", "System follows your device's light or dark setting.", theme), row("Accent colour", "Buttons, links and highlights.", swatches),
     row("Density", "Compact fits more on screen.", density), row("Text size", "Makes everything bigger, not just the text.", text),
+    row("Progress line", "The thin line along the top of the screen. It can follow how far you have scrolled, stay full with no movement, or be hidden.", progress),
     row("Reduce motion", "Also on automatically if your device asks for it.", motion)), ),
     toastCard());
 }

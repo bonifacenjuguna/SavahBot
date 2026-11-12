@@ -786,7 +786,11 @@ async def chat_person(request: Request, c: Any) -> dict:
         raise ApiError("author_id is required.", 422)
     db = c.store.db
     stats = await db.fetchone("SELECT COUNT(*) AS n, MIN(ts) AS first, MAX(ts) AS last, MAX(author_name) AS name FROM chat_messages WHERE platform = ? AND author_id = ? AND level != 'bot'", (platform, aid))
-    recent = await db.fetchall("SELECT id, ts, body, verdict FROM chat_messages WHERE platform = ? AND author_id = ? ORDER BY ts DESC, id DESC LIMIT 12", (platform, aid))
+    try:
+        limit = max(1, min(int(request.query_params.get("limit", "12")), 200))
+    except ValueError:
+        limit = 12
+    recent = await db.fetchall("SELECT id, ts, body, verdict FROM chat_messages WHERE platform = ? AND author_id = ? ORDER BY ts DESC, id DESC LIMIT ?", (platform, aid, limit))
     actions = await db.fetchall("SELECT id, ts, kind, status, source, ban_ref FROM bans WHERE platform = ? AND author_id = ? ORDER BY ts DESC LIMIT 10", (platform, aid))
     notes = [n for n in await c.store.list_notes() if stats["name"] and f"@{stats['name']}".lower() in (n.get("body") or "").lower()][:5]
     return {"name": stats["name"], "messages": stats["n"], "first_seen": stats["first"], "last_seen": stats["last"], "recent": recent, "actions": actions,

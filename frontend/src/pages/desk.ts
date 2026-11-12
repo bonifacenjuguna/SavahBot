@@ -68,22 +68,32 @@ export const desk: Page = {
 
     // ----- tapping a line: the action sheet, pins and multi-select
     const picked = new Set<Line>();
+    const els = new WeakMap<Line, HTMLElement>();      // the row on screen for each line, so a delete can take it off without redrawing the list
     let selecting = false;
+    /** Leave selection mode: nothing stays ticked and the bar goes away. Runs after Copy, Delete and Done. */
+    const endSelect = () => { selecting = false; picked.clear(); list.querySelectorAll(".line.picked").forEach((e) => e.classList.remove("picked")); paintSel(); };
     const selBar = h("div", { class: "sel-bar", hidden: true });
     const paintSel = () => {
       selBar.hidden = !selecting;
       const n = picked.size;
       mount(selBar, h("strong", null, `${n} selected`),
-        h("button", { class: "btn small", type: "button", disabled: !n, onclick: () => { void navigator.clipboard.writeText([...picked].map((m) => `${m.author_name}: ${m.text}`).join("\n")).then(() => toast("Copied")); } }, icon("copy", 14), "Copy"),
+        h("button", { class: "btn small", type: "button", disabled: !n, onclick: () => { void navigator.clipboard.writeText([...picked].map((m) => `${m.author_name}: ${m.text}`).join("\n")).then(() => { toast("Copied"); endSelect(); }); } }, icon("copy", 14), "Copy"),
         h("button", { class: "btn small danger", type: "button", disabled: !n, onclick: () => void bulkDelete() }, icon("trash", 14), "Delete"),
-        h("button", { class: "btn small ghost", type: "button", onclick: () => { selecting = false; picked.clear(); paintSel(); list.querySelectorAll(".line.picked").forEach((e) => e.classList.remove("picked")); } }, "Done"));
+        h("button", { class: "btn small ghost", type: "button", onclick: endSelect }, "Done"));
     };
     const bulkDelete = async () => {
       const items = [...picked].filter((m) => m.id !== undefined && m.level !== "owner" && m.level !== "bot");
       if (!items.length || !window.confirm(`Delete ${items.length} message${items.length === 1 ? "" : "s"}? Each costs YouTube quota in live mode.`)) return;
       let done = 0;
-      for (const m of items) { try { await post("/api/chat/act", { id: m.id, action: "delete" }); done++; } catch (e) { toast(e instanceof Error ? e.message : "Stopped", "error"); break; } }
-      toast(`Deleted ${done} of ${items.length}`); picked.clear(); selecting = false; paintSel();
+      const gone = new Set<Line>();
+      for (const m of items) { try { await post("/api/chat/act", { id: m.id, action: "delete" }); done++; gone.add(m); } catch (e) { toast(e instanceof Error ? e.message : "Stopped", "error"); break; } }
+      // what was deleted leaves the screen at once; the selection is over either way, so nothing is left ticked
+      for (const m of gone) { els.get(m)?.remove(); }
+      for (const arr of [lines, saved]) for (let i = arr.length - 1; i >= 0; i--) if (gone.has(arr[i])) arr.splice(i, 1);
+      toast(`Deleted ${done} of ${items.length}`);
+      endSelect();
+      updateCounts();
+      if (!list.querySelector(".line")) redraw();
     };
     const pinBar = h("div", { class: "pin-bar", hidden: true });
     const paintPins = () => {
@@ -118,6 +128,7 @@ export const desk: Page = {
           h("span", { class: `who ${m.level}` }, m.author_name),
           h("span", { class: "text" }, m.text),
           k !== "ok" ? h("div", { class: `why ${k}` }, icon(k === "blocked" ? "shield" : "flag", 13), h("span", null, whyText(m, k))) : null));
+      els.set(m, el);
       wireLine(el, m, actx);
       el.addEventListener("click", () => { if (!selecting) return; if (picked.has(m)) picked.delete(m); else picked.add(m); el.classList.toggle("picked", picked.has(m)); paintSel(); });
       return el;

@@ -410,7 +410,7 @@ class Store:
 
     async def chat_since(self, since: float, limit: int = 20000) -> list[dict]:
         return await self.db.fetchall(
-            "SELECT ts, author_id, author_name, level, verdict, score, demo FROM chat_messages WHERE ts >= ? ORDER BY ts LIMIT ?",
+            "SELECT ts, platform, author_id, author_name, level, verdict, score, demo FROM chat_messages WHERE ts >= ? ORDER BY ts LIMIT ?",
             (since, limit),
         )
 

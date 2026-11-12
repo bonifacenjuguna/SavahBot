@@ -422,3 +422,7 @@ body.zoom-open .tabbar { z-index: 10; }
 .sel-bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--raised); position: relative; z-index: 2; flex: none; }
 .sel-bar[hidden], .pin-bar[hidden] { display: none; }
 .sel-bar strong { flex: 1; }
+
+/* Progress line setting (Appearance): follow the scroll (default), always full, or hidden */
+html[data-progress="off"] .read-progress { display: none; }
+html[data-progress="full"] .read-progress { transform: scaleX(1) !important; transition: none; }

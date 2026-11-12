@@ -129,3 +129,23 @@ html[data-toast-pos="top"] .toasts { top: calc(var(--topbar-h) + env(safe-area-i
 .n-row > .chip.warn, .n-row-main .chip.warn { background: color-mix(in srgb, var(--warn) 17%, transparent); color: var(--warn); }
 .n-row > .chip.bad, .n-row-main .chip.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
 @media (max-width: 719px) { .n-row:not(:has(> .switch)) > .chip { align-self: flex-start; width: auto; } }
+
+/* Settings tiles and "Recently opened": the tag sits on top of each card so the title and text keep the full width */
+a.set-hit, a.set-tile { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic tag" "ic main"; align-items: start; column-gap: 12px; row-gap: 4px; }
+a.set-hit > .set-ic, a.set-tile > .set-ic { grid-area: ic; align-self: center; }
+a.set-hit > svg { grid-area: ic; align-self: center; }
+a.set-hit > .set-main, a.set-tile > .set-main { grid-area: main; }
+a.set-hit > .chip, a.set-tile > .chip { grid-area: tag; justify-self: start; align-self: start; max-width: 100%; font-size: .72rem; line-height: 1.5; padding: 0 9px; letter-spacing: .01em; }
+a.set-hit > .chip:empty, a.set-tile > .chip:empty { display: none; }
+a.set-hit:not(:has(> .chip)), a.set-tile:not(:has(> .chip)) { grid-template-areas: "ic main"; }
+a.set-tile { padding: 14px; }
+
+/* Live stats: the trend line gets a box of its own, so it can never run over the text below it */
+.live-spark { height: 64px; overflow: hidden; border-radius: 10px; margin: 6px 0 10px; }
+.live-spark .spark { width: 100%; height: 100%; }
+
+/* Cards that sit one after another in a plain container (no gap of their own) never touch: Insights' Past streams, Bans' Ledger and Be gentler, and any page like them */
+.ins-streams:not(:empty) { margin-top: 20px; }
+:is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 16px; }
+:is(.stack, .k-stack, .cols, .masonry, .grid) > :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 0; }
+@media (min-width: 720px) { .page:has(> .block, > .sp-card) > :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 0; } }

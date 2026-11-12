@@ -309,3 +309,25 @@ def test_ambient_chat_never_looks_like_a_raid():
         assert all(r["verdict"] in (None, "allow") for r in rows), [r for r in rows if r["verdict"] not in (None, "allow")][:3]
     run(go())
 
+
+
+def test_top_chatters_is_ten_people_with_ids_and_same_names_stay_apart():
+    async def go():
+        s = await build_stack()
+        now = s.clock.now()
+        ins = "INSERT INTO chat_messages (platform, msg_id, author_id, author_name, body, ts, demo) VALUES ('youtube', ?, ?, ?, 'hi', ?, 0)"
+        n = 0
+        for i in range(12):                                   # twelve different people, the first one the loudest
+            for _ in range(12 - i):
+                n += 1
+                await s.store.db.execute(ins, (f"m{n}", f"u{i}", f"Person{i}", now - 5))
+        for k in range(3):                                    # two different people who share a display name are two rows, not one
+            await s.store.db.execute(ins, (f"x{k}", "twinA", "Twin", now - 5))
+        await s.store.db.execute(ins, ("y1", "twinB", "Twin", now - 5))
+        a = await summary(s.store, hours=1, demo=False, now=now + 5)
+        top = a["top_chatters"]
+        assert len(top) == 10 and top[0]["author_id"] == "u0" and top[0]["platform"] == "youtube" and top[0]["messages"] == 12
+        assert all("author_id" in t for t in top)
+        twins = [t for t in top if t["name"] == "Twin"]
+        assert not twins or all(t["messages"] in (3, 1) for t in twins)
+    run(go())

@@ -204,3 +204,38 @@ def test_first_run_restore_needs_the_one_time_token(tmp_path, caplog):
         finally:
             await c.stop() if hasattr(c, "stop") else None
     asyncio.run(go())
+
+
+@e2e
+async def test_demo_rows_are_never_exported_or_imported(api):
+    """The dashboard ships its own demo data, so Demo-mode sample rows stay out of backups in both directions."""
+    db = api.c.db
+    ins = "INSERT INTO chat_messages (platform, msg_id, author_id, author_name, body, ts, demo) VALUES ('youtube', ?, ?, ?, ?, 1000, ?)"
+    await db.execute(ins, ("r1", "u1", "Real Person", "a real message", 0))
+    await db.execute(ins, ("d1", "ud", "Demo Person", "a made up message", 1))
+    await step_up(api)
+    st, exp = await api.call("POST", "/api/backup/export", {"scopes": ["chat"]})
+    assert st == 200
+    plain, _ = container.open_(base64.b64decode(exp["data"]), container.parse_key(exp["key"]))
+    manifest, parts = archive.read_zip(plain)
+    rows = parts["chat"]["tables"]["chat_messages"]["rows"]
+    assert len(rows) == 1 and "a real message" in json.dumps(rows) and "made up" not in json.dumps(rows)
+    info = (await api.call("GET", "/api/backup/info"))[1]
+    assert {s["id"]: s["rows"] for s in info["scopes"]}["chat"] == 1                        # the count shown to the owner is real rows only
+    # an older or hand-made backup that does hold demo rows: they are skipped, the real ones come in
+    cols = parts["chat"]["tables"]["chat_messages"]["columns"]
+    di = cols.index("demo")
+    mixed = {"tables": {"chat_messages": {"columns": cols, "rows": [
+        [*rows[0][:cols.index("msg_id")], "r2", *rows[0][cols.index("msg_id") + 1:]],
+        [*rows[0][:cols.index("msg_id")], "d2", *rows[0][cols.index("msg_id") + 1:]]]}}, "kv": {}}
+    mixed["tables"]["chat_messages"]["rows"][0][di] = 0
+    mixed["tables"]["chat_messages"]["rows"][1][di] = 1
+    key = container.new_key()
+    blob, _ = container.seal(archive.build_zip({"chat": mixed}, "test"), key, "", {"scopes": ["chat"], "app": "test"})
+    body = {"data": base64.b64encode(blob).decode(), "key": container.format_key(key), "mode": "replace"}
+    st, dry = await api.call("POST", "/api/backup/import", {**body, "dry_run": True})
+    assert st == 200 and dry["plan"]["chat"]["chat_messages"] == 1
+    st, done = await api.call("POST", "/api/backup/import", body)
+    assert st == 200 and done["applied"]["chat"]["demo_skipped"] == 1 and done["applied"]["chat"]["added"] == 1
+    left = {r["msg_id"]: r["demo"] for r in await db.fetchall("SELECT msg_id, demo FROM chat_messages")}
+    assert left == {"r2": 0, "d1": 1}      # replace swapped the real rows only; the existing demo row was left alone; nothing demo came in

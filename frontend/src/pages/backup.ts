@@ -117,7 +117,7 @@ export const backup: Page = {
         card("download", "Make a backup", h("div", { class: "k-stack", style: "padding:12px 14px" },
           lede("One file, encrypted with a random 256-bit key that is shown once and never stored. Pick what goes in."),
           h("div", { class: "k-stack" }, info.scopes.map((s) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: s.default, onchange: (e: Event) => picks.set(s.id, (e.target as HTMLInputElement).checked) }), ` ${s.label} `, h("span", { class: "muted small" }, `(${s.rows.toLocaleString()} rows)`)))),
-          h("p", { class: "muted small" }, "Never included, whatever you tick: signed-in sessions, push-notification device tokens, the server's signing secret and environment variables. Sign-in methods are only included if you tick the last box."),
+          h("p", { class: "muted small" }, "Never included, whatever you tick: signed-in sessions, push-notification device tokens, the server's signing secret and environment variables. Sign-in methods are only included if you tick the last box. Demo mode's sample data is never exported or imported: the dashboard already has its own."),
           pass, h("div", { class: "row" }, go),
           info.last_export ? h("p", { class: "muted small" }, `Last backup: ${new Date(info.last_export * 1000).toLocaleString()}`) : null), { flush: true }),
         card("upload", "Restore a backup", h("div", { class: "k-stack", style: "padding:12px 14px" }, restoreForm({ onDone: () => void load().catch(fail) }), undo), { flush: true }));

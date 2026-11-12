@@ -36,7 +36,15 @@ async def summary(store: Store, hours: float = 24, demo: bool | None = None, now
             if c["verdict"] != "allow":
                 timeline[i]["flagged"] += 1
 
-    chatters = Counter(c["author_name"] for c in chat if c["level"] != "bot")
+    # one entry per person (id + platform), not per display name, so two people with the same name stay apart and a row can open that person's profile
+    who: dict[tuple[str, str], str] = {}
+    chatters: Counter[tuple[str, str]] = Counter()
+    for c in chat:
+        if c["level"] == "bot":
+            continue
+        k = (c.get("platform") or "youtube", c.get("author_id") or c["author_name"])
+        who[k] = c["author_name"]
+        chatters[k] += 1
     by_action = Counter(a["action"] for a in actions)
     outcomes = Counter(a["status"] for a in actions)
     signals: Counter[str] = Counter()
@@ -53,7 +61,7 @@ async def summary(store: Store, hours: float = 24, demo: bool | None = None, now
             "actions": len(actions), "pending": outcomes.get("pending", 0),
         },
         "timeline": timeline,
-        "top_chatters": [{"name": n, "messages": c} for n, c in chatters.most_common(8)],
+        "top_chatters": [{"name": who[k], "messages": c, "author_id": k[1], "platform": k[0]} for k, c in chatters.most_common(10)],
         "actions_by_type": dict(by_action),
         "outcomes": dict(outcomes),
         "signals": [{"name": n, "count": c} for n, c in signals.most_common()],

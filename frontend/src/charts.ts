@@ -105,25 +105,48 @@ export function areaChart(points: Point[], opts: { labelA: string; labelB: strin
 
 export interface Slice { name: string; value: number }
 
-/** Donut with a centre total and a legend. */
+/** Donut with a centre total and a legend. Tap a slice (or its legend row) and it grows outward and the centre shows its share; tap it again to put it back. */
 export function donut(slices: Slice[], opts: { center: string; sub: string; ariaLabel: string }): HTMLElement {
   const total = slices.reduce((a, b) => a + b.value, 0);
-  const size = 140, r = 52, c = 2 * Math.PI * r;
+  const size = 140, r = 52, c = 2 * Math.PI * r, W = 18, GROW = 7;
   const svg = s("svg", { viewBox: `0 0 ${size} ${size}`, class: "donut-svg", role: "img", "aria-label": opts.ariaLabel });
-  svg.appendChild(s("circle", { cx: 70, cy: 70, r, class: "donut-track", fill: "none", "stroke-width": 18 }));
+  svg.appendChild(s("circle", { cx: 70, cy: 70, r, class: "donut-track", fill: "none", "stroke-width": W }));
+  const segs: (SVGElement | null)[] = [];
   let offset = 0;
   slices.forEach((sl, i) => {
-    if (!total || !sl.value) return;
+    if (!total || !sl.value) { segs.push(null); return; }
     const len = (sl.value / total) * c;
     const gap = slices.filter((x) => x.value).length > 1 ? 2 : 0;
-    svg.appendChild(s("circle", { cx: 70, cy: 70, r, fill: "none", "stroke-width": 18, class: `seg ${SERIES[i % SERIES.length]}`, "stroke-dasharray": `${Math.max(0, len - gap)} ${c}`, "stroke-dashoffset": -offset, transform: "rotate(-90 70 70)" }));
+    const seg = s("circle", { cx: 70, cy: 70, r, fill: "none", "stroke-width": W, class: `seg ${SERIES[i % SERIES.length]}`, "stroke-dasharray": `${Math.max(0, len - gap)} ${c}`, "stroke-dashoffset": -offset, transform: "rotate(-90 70 70)" });
+    seg.addEventListener("click", () => pick(i));
+    svg.appendChild(seg);
+    segs.push(seg);
     offset += len;
   });
-  svg.appendChild(s("text", { x: 70, y: 72, "text-anchor": "middle", class: "donut-num" }, opts.center));
-  svg.appendChild(s("text", { x: 70, y: 90, "text-anchor": "middle", class: "donut-sub" }, opts.sub));
-  const legend = h("ul", { class: "legend" }, slices.map((sl, i) =>
-    h("li", null, h("i", { class: `sw ${SERIES[i % SERIES.length]}` }), h("span", { class: "grow" }, sl.name), h("b", null, String(sl.value)), h("span", { class: "muted small pct" }, total ? `${Math.round((sl.value / total) * 100)}%` : "0%"))));
-  return h("div", { class: "donut" }, svg as unknown as Node, legend);
+  const num = s("text", { x: 70, y: 72, "text-anchor": "middle", class: "donut-num" }, opts.center);
+  const sub = s("text", { x: 70, y: 90, "text-anchor": "middle", class: "donut-sub" }, opts.sub);
+  svg.appendChild(num);
+  svg.appendChild(sub);
+  const rows = slices.map((sl, i) =>
+    h("li", { class: "lg-row", tabindex: "0", role: "button", "aria-pressed": "false", onclick: () => pick(i), onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(i); } } },
+      h("i", { class: `sw ${SERIES[i % SERIES.length]}` }), h("span", { class: "grow" }, sl.name), h("b", null, String(sl.value)), h("span", { class: "muted small pct" }, total ? `${Math.round((sl.value / total) * 100)}%` : "0%")));
+  let current = -1;
+  /** The chosen slice keeps its inner edge and grows outward (a wider stroke on a larger radius), so the ring never overlaps the centre text. */
+  function pick(i: number): void {
+    current = current === i ? -1 : i;
+    segs.forEach((seg, k) => {
+      if (!seg) return;
+      const on = k === current;
+      seg.setAttribute("r", String(on ? r + GROW / 2 : r));
+      seg.setAttribute("stroke-width", String(on ? W + GROW : W));
+      seg.classList.toggle("on", on);
+      seg.classList.toggle("dim", current >= 0 && !on);
+    });
+    rows.forEach((li, k) => { li.classList.toggle("on", k === current); li.setAttribute("aria-pressed", String(k === current)); });
+    num.textContent = current >= 0 ? `${total ? Math.round((slices[current].value / total) * 100) : 0}%` : opts.center;
+    sub.textContent = current >= 0 ? slices[current].name : opts.sub;
+  }
+  return h("div", { class: "donut" }, svg as unknown as Node, h("ul", { class: "legend" }, rows));
 }
 
 /** Circular progress. */

@@ -78,19 +78,26 @@ async function confirmAction(m: ChatLine, action: "delete" | "timeout" | "ban", 
   go.onclick = () => { box.close(); run(); }; no.onclick = () => box.close();
 }
 
-async function personCard(m: ChatLine): Promise<void> {
+/** The profile sheet for one person: how long they have been around, what happened to them and what they sent. Also opened from Insights. */
+export async function personCard(m: { author_id?: string; platform?: string; author_name: string }): Promise<void> {
   const body = h("div", { class: "stack" }, h("p", { class: "muted" }, "Loading…"));
   sheet(m.author_name, body);
-  try {
-    const p = await get<{ messages: number; first_seen: number | null; recent: { ts: number; body: string; verdict: string }[]; actions: { id: number; ts: number; kind: string; status: string }[]; notes: { body: string }[]; regular: boolean }>(`/api/chat/person?author_id=${encodeURIComponent(m.author_id ?? "")}&platform=${m.platform ?? "youtube"}`);
-    const when = (t: number) => new Date(t * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  type Person = { messages: number; first_seen: number | null; recent: { ts: number; body: string; verdict: string }[]; actions: { id: number; ts: number; kind: string; status: string }[]; notes: { body: string }[]; regular: boolean };
+  const when = (t: number) => new Date(t * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const load = async (limit: number) => get<Person>(`/api/chat/person?author_id=${encodeURIComponent(m.author_id ?? "")}&platform=${m.platform ?? "youtube"}&limit=${limit}`);
+  const draw = (p: Person, limit: number) => {
+    const more = p.messages > p.recent.length && p.recent.length >= limit && limit < 200;
+    const btn = h("button", { class: "btn small", type: "button" }, "Show more");
+    btn.onclick = () => { btn.disabled = true; load(Math.min(200, limit * 4)).then((q) => draw(q, Math.min(200, limit * 4))).catch((e) => { btn.disabled = false; toast(e instanceof Error ? e.message : "Could not load", "error"); }); };
     mount(body,
       h("p", null, `${p.messages.toLocaleString()} message${p.messages === 1 ? "" : "s"} stored`, p.first_seen ? ` · first seen ${when(p.first_seen)}` : "", p.regular ? " · regular" : ""),
       p.actions.length ? h("div", null, h("strong", null, "Bans and timeouts"), ...p.actions.map((a) => h("div", { class: "row between", style: "align-items:center" }, h("span", { class: "muted small" }, `${when(a.ts)}: ${a.kind}, ${a.status}`),
         a.status === "active" ? h("button", { class: "btn small", type: "button", onclick: (e: Event) => { const b = e.currentTarget as HTMLButtonElement; b.disabled = true; void post(`/api/bans/${a.id}/lift`).then(() => { toast("Lifted"); b.textContent = "Lifted"; }).catch((er) => { b.disabled = false; toast(er instanceof Error ? er.message : "Could not lift", "error"); }); } }, "Lift") : null))) : h("p", { class: "muted small" }, "Never banned or timed out."),
       p.notes.length ? h("div", null, h("strong", null, "Notes"), ...p.notes.map((n) => h("div", { class: "muted small wrap" }, n.body))) : null,
-      h("div", null, h("strong", null, "Recent messages"), ...(p.recent.length ? p.recent.map((r) => h("div", { class: "muted small wrap" }, `${when(r.ts)}: ${r.body}${r.verdict !== "allow" ? ` (${r.verdict})` : ""}`)) : [h("div", { class: "muted small" }, "None stored.")])));
-  } catch (e) { mount(body, h("p", { class: "muted" }, e instanceof Error ? e.message : "Could not load")); }
+      h("div", null, h("strong", null, "Messages"), ...(p.recent.length ? p.recent.map((r) => h("div", { class: "muted small wrap" }, `${when(r.ts)}: ${r.body}${r.verdict !== "allow" ? ` (${r.verdict})` : ""}`)) : [h("div", { class: "muted small" }, "None stored.")])),
+      more ? btn : null);
+  };
+  try { draw(await load(12), 12); } catch (e) { mount(body, h("p", { class: "muted" }, e instanceof Error ? e.message : "Could not load")); }
 }
 
 /** A plain explanation of why a line was flagged. The scores and the blocked words stay on the Moderation page. */

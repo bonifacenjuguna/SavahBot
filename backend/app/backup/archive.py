@@ -1,7 +1,7 @@
 """What goes into a backup, how it is zipped, and how it is applied safely.
 
 Never exported, whatever you tick: sign-in sessions and tickets, activity logs, push-notification device tokens, the server's
-signing secret and every environment variable. Sign-in methods and tokens are only included when you tick "credentials"."""
+signing secret and every environment variable. Demo-mode sample rows (the `demo` flag) are never exported and never imported. Sign-in methods and tokens are only included when you tick "credentials"."""
 from __future__ import annotations
 
 import hashlib
@@ -43,13 +43,19 @@ async def _exists(db: Any, table: str) -> bool:
     return bool(await _columns(db, table))
 
 
+async def _has_demo(db: Any, table: str) -> bool:
+    """Tables that mix real rows with Demo-mode sample rows carry a `demo` column."""
+    return "demo" in await _columns(db, table)
+
+
 async def dump_scope(c: Any, scope: str) -> dict[str, Any]:
+    """Demo-mode sample rows are never exported: the dashboard ships its own demo data, so a backup of it would only duplicate that."""
     db, spec = c.db, SCOPES[scope]
     out: dict[str, Any] = {"tables": {}, "kv": {}}
     for t in spec["tables"]:
         if not await _exists(db, t):
             continue
-        rows = await db.fetchall(f"SELECT * FROM {t}")
+        rows = await db.fetchall(f"SELECT * FROM {t} WHERE demo = 0" if await _has_demo(db, t) else f"SELECT * FROM {t}")
         cols = list(rows[0].keys()) if rows else await _columns(db, t)
         if scope == "settings":
             rows = [r for r in rows if not SECRETISH.search(r["key"])]
@@ -161,7 +167,7 @@ async def _fix_sequences(c: Any, tables: list[str]) -> None:
 
 async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str) -> dict[str, Any]:
     """Apply one scope. replace = the backup's rows become the only rows. merge = add what is missing, keep everything else."""
-    db, report = c.db, {"added": 0, "skipped": 0}
+    db, report = c.db, {"added": 0, "skipped": 0, "demo_skipped": 0}
     for t, d in data["tables"].items():
         target = "settings" if t == "settings_secret" else t
         if not await _exists(db, target):
@@ -170,6 +176,12 @@ async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str) -> di
         cols = [k for k in d["columns"] if k in have]
         idx = [d["columns"].index(k) for k in cols]
         rows = [[r[i] for i in idx] for r in d["rows"]]
+        demo_table = "demo" in have
+        if demo_table and "demo" in d["columns"]:     # an older backup may hold Demo-mode sample rows: they are left out, never imported
+            di = cols.index("demo")
+            kept = [r for r in rows if not int(r[di] or 0)]
+            report["demo_skipped"] += len(rows) - len(kept)
+            rows = kept
         if scope == "credentials" and t == "access_totp":
             from ..access import totp
             si = cols.index("secret")
@@ -179,6 +191,8 @@ async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str) -> di
                 for r in await db.fetchall("SELECT key FROM settings"):
                     if bool(SECRETISH.search(r["key"])) == (t == "settings_secret"):
                         await db.execute("DELETE FROM settings WHERE key = ?", (r["key"],))
+            elif demo_table:             # replace only swaps the real rows; the Demo sample rows are not part of any backup
+                await db.execute(f"DELETE FROM {target} WHERE demo = 0")
             else:
                 await db.execute(f"DELETE FROM {target}")
         existing: set[tuple] = set()

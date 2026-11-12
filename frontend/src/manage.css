@@ -460,3 +460,20 @@
 .swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--line); background: var(--sw); cursor: pointer; }
 .swatch[aria-checked="true"] { outline: 3px solid var(--sw); outline-offset: 2px; border-color: var(--surface); }
 @media (prefers-reduced-motion: reduce) { .set-tile { transition: none; } }
+
+/* Busiest hours: hold and drag to light up a bar */
+.hs-bars { position: relative; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.hs-bar i { transition: background .12s ease, transform .12s ease; transform-origin: bottom; }
+.hs-bar.hot i { background: var(--accent); transform: scaleX(1.25); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent); }
+.hs-bars:has(.hot) .hs-bar:not(.hot) i { opacity: .55; }
+.hs-tip { position: absolute; bottom: calc(100% + 6px); z-index: 3; pointer-events: none; display: grid; gap: 1px; padding: 5px 9px; border-radius: 8px; background: var(--ink); color: var(--bg); font-size: .78rem; line-height: 1.25; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.hs-tip[hidden] { display: none; }
+.hs-tip strong { font-weight: 700; }
+
+/* Most active: the whole row opens the person; the top three wear a medal */
+.rank li.rk-open { cursor: pointer; border-radius: 10px; margin: 0 -8px; padding: 4px 8px; transition: background .15s ease; }
+.rank li.rk-open:hover, .rank li.rk-open:focus-visible { background: color-mix(in srgb, var(--ink) 7%, transparent); outline: none; }
+.rank li.rk-open:active { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.rk-n.rk-medal { width: 22px; display: inline-flex; align-items: center; justify-content: center; }
+.rk-medal .medal { display: block; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.35)); }
+.rank .rk-n { width: 24px; flex: none; text-align: center; white-space: nowrap; }

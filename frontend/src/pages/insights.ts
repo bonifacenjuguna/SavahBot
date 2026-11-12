@@ -4,6 +4,7 @@ import { icon } from "../icons.js";
 import { areaChart, donut, hbars, sparkline } from "../charts.js";
 import { expandable, openChartDetail } from "../chart-detail.js";
 import { areaNav } from "./kit.js";
+import { personCard } from "../chat-actions.js";
 import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 import { SIGNAL, avatar, plural, sentence } from "./widgets.js";
@@ -13,7 +14,7 @@ interface Summary {
   hours: number; bucket_seconds: number;
   totals: Record<string, number>;
   timeline: Bucket[];
-  top_chatters: { name: string; messages: number }[];
+  top_chatters: { name: string; messages: number; author_id?: string; platform?: string }[];
   actions_by_type: Record<string, number>; outcomes: Record<string, number>;
   signals: { name: number | string; count: number }[]; levels: Record<string, number>;
 }
@@ -96,18 +97,66 @@ export const insights: Page = {
       const max = Math.max(...per, 1);
       const peakHour = per.indexOf(Math.max(...per));
       const label = (hr: number) => new Date(2000, 0, 1, hr).toLocaleTimeString([], { hour: "numeric" });
-      return h("div", { class: "hour-strip", role: "img", "aria-label": `Messages by hour of day. The busiest hour is ${label(peakHour)}.` },
-        h("div", { class: "hs-bars" }, per.map((v, hr) => h("span", { class: `hs-bar${hr === peakHour && v > 0 ? " peak" : ""}`, title: `${label(hr)}: ${n0(v)} messages` }, h("i", { style: `height:${Math.max(3, Math.round((v / max) * 100))}%` })))),
-        h("div", { class: "hs-axis" }, [0, 6, 12, 18].map((hr) => h("span", { style: `left:${(hr / 24) * 100}%` }, label(hr)))),
-        h("p", { class: "muted small" }, per[peakHour] ? `Busiest around ${label(peakHour)}, with ${n0(per[peakHour])} messages over this range.` : "No messages in this range."));
+      const note = h("p", { class: "muted small" }, per[peakHour] ? `Busiest around ${label(peakHour)}, with ${n0(per[peakHour])} messages over this range.` : "No messages in this range.");
+      const tip = h("div", { class: "hs-tip", hidden: true, "aria-hidden": "true" });
+      const bars = per.map((v, hr) => h("span", { class: `hs-bar${hr === peakHour && v > 0 ? " peak" : ""}`, title: `${label(hr)}: ${n0(v)} messages` }, h("i", { style: `height:${Math.max(3, Math.round((v / max) * 100))}%` })));
+      const wrap = h("div", { class: "hs-bars" }, ...bars, tip);
+      let on = -1;
+      /** Touch and hold, then drag across: the bar under the finger lights up and says its hour and count. */
+      const show = (hr: number) => {
+        if (hr === on) return;
+        on = hr;
+        bars.forEach((b, i) => b.classList.toggle("hot", i === hr));
+        tip.hidden = false;
+        tip.replaceChildren(h("strong", null, label(hr)), h("span", null, `${n0(per[hr])} message${per[hr] === 1 ? "" : "s"}`));
+        const wr = wrap.getBoundingClientRect(), br = bars[hr].getBoundingClientRect(), tw = tip.offsetWidth;
+        tip.style.left = `${Math.max(0, Math.min(wr.width - tw, br.left - wr.left + br.width / 2 - tw / 2))}px`;
+      };
+      const clear = () => { on = -1; bars.forEach((b) => b.classList.remove("hot")); tip.hidden = true; };
+      const at = (ev: PointerEvent) => {
+        const r = wrap.getBoundingClientRect();
+        show(Math.max(0, Math.min(23, Math.floor(((ev.clientX - r.left) / r.width) * 24))));
+      };
+      wrap.addEventListener("pointerdown", (ev) => { try { wrap.setPointerCapture(ev.pointerId); } catch { /* not every browser captures */ } at(ev); });
+      wrap.addEventListener("pointermove", (ev) => { if (ev.pointerType !== "mouse" || ev.buttons || wrap.matches(":hover")) at(ev); });
+      wrap.addEventListener("pointerup", () => { if (matchMedia("(pointer: coarse)").matches) setTimeout(clear, 1200); });
+      wrap.addEventListener("pointerleave", (ev) => { if (ev.pointerType === "mouse") clear(); });
+      wrap.addEventListener("pointercancel", clear);
+      return h("div", { class: "hour-strip", role: "img", "aria-label": `Messages by hour of day. The busiest hour is ${label(peakHour)}.` }, wrap,
+        h("div", { class: "hs-axis" }, [0, 6, 12, 18].map((hr) => h("span", { style: `left:${(hr / 24) * 100}%` }, label(hr)))), note);
     };
 
-    const rank = (rows: { name: string; messages: number }[], total: number): HTMLElement => {
+    /** Gold, silver and bronze for the top three: a small shield with the place number, nothing more. */
+    const MEDAL = ["#E3B341", "#AEB6C2", "#C98A52"];
+    const badge = (place: number): SVGElement => {
+      const NS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("viewBox", "0 0 24 28"); svg.setAttribute("width", "22"); svg.setAttribute("height", "26"); svg.setAttribute("class", `medal m${place}`); svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", ["First", "Second", "Third"][place - 1] + " place");
+      const shield = document.createElementNS(NS, "path");
+      shield.setAttribute("d", "M12 1.5 21 4.6v8.1c0 6-3.9 10.6-9 13-5.1-2.4-9-7-9-13V4.6z");
+      shield.setAttribute("fill", MEDAL[place - 1]);
+      const rim = document.createElementNS(NS, "path");
+      rim.setAttribute("d", "M12 4.2 18.8 6.6v6.1c0 4.6-2.8 8.2-6.8 10.4-4-2.2-6.8-5.8-6.8-10.4V6.6z");
+      rim.setAttribute("fill", "none"); rim.setAttribute("stroke", "rgba(0,0,0,.28)"); rim.setAttribute("stroke-width", "1");
+      const t = document.createElementNS(NS, "text");
+      t.setAttribute("x", "12"); t.setAttribute("y", "16.6"); t.setAttribute("text-anchor", "middle"); t.setAttribute("font-size", "11"); t.setAttribute("font-weight", "800"); t.setAttribute("fill", "#1b1300");
+      t.textContent = String(place);
+      svg.append(shield, rim, t);
+      return svg;
+    };
+
+    const rank = (rows: { name: string; messages: number; author_id?: string; platform?: string }[], total: number): HTMLElement => {
       if (!rows.length) return empty("users", "Nobody has chatted in this range.");
       const max = Math.max(...rows.map((r) => r.messages), 1);
-      return h("ol", { class: "rank" }, rows.map((r, i) => h("li", null, h("span", { class: "rk-n" }, String(i + 1)), avatar(r.name, 32),
-        h("div", { class: "rk-main" }, h("div", { class: "row between nowrap" }, h("strong", { class: "wrap" }, r.name), h("span", { class: "muted small" }, `${n0(r.messages)}${total ? ` (${Math.round((r.messages / total) * 100)}%)` : ""}`)),
-          h("span", { class: "track" }, h("i", { class: "s1", style: `width:${Math.max(3, (r.messages / max) * 100)}%` }))))));
+      return h("ol", { class: "rank" }, rows.map((r, i) => {
+        const open = () => void personCard({ author_id: r.author_id, platform: r.platform, author_name: r.name });
+        const can = !!r.author_id;
+        return h("li", can ? { class: "rk-open", role: "button", tabindex: 0, "aria-label": `${r.name}: see their messages`, onclick: open, onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } } } : null,
+          i < 3 ? h("span", { class: "rk-n rk-medal" }, badge(i + 1) as unknown as Node) : h("span", { class: "rk-n" }, String(i + 1)), avatar(r.name, 32),
+          h("div", { class: "rk-main" }, h("div", { class: "row between nowrap" }, h("strong", { class: "wrap" }, r.name), h("span", { class: "muted small" }, `${n0(r.messages)}${total ? ` (${Math.round((r.messages / total) * 100)}%)` : ""}`)),
+            h("span", { class: "track" }, h("i", { class: "s1", style: `width:${Math.max(3, (r.messages / max) * 100)}%` }))));
+      }));
     };
 
     const load = async () => {
@@ -155,7 +204,7 @@ export const insights: Page = {
             card("flag", "What triggered moderation", hbars(s.signals.map((x) => ({ name: nice(SIGNAL, String(x.name)), count: x.count })), "s2"), { flush: true }),
             card("ban", "Actions by type", hbars(Object.entries(s.actions_by_type).map(([name, count]) => ({ name: nice(ACTION, name), count })), "s4"), { flush: true }))));
     };
-    const streams = h("div");
+    const streams = h("div", { class: "ins-streams" });
     const openStream = async (id: string, when: string) => {
       const d = await get<{ sample: boolean; series: { ts: number; likes: number | null; viewers: number | null }[] }>(`/api/live/streams/${encodeURIComponent(id)}`);
       const v = d.series.map((p) => p.viewers ?? 0), l = d.series.filter((p) => p.likes !== null).map((p) => p.likes as number);

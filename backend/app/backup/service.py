@@ -32,7 +32,8 @@ class BackupService:
             n = 0
             for t in spec["tables"]:
                 if await archive._exists(self.c.db, t):
-                    n += (await self.c.db.fetchone(f"SELECT COUNT(*) AS n FROM {t}"))["n"]
+                    where = " WHERE demo = 0" if await archive._has_demo(self.c.db, t) else ""
+                    n += (await self.c.db.fetchone(f"SELECT COUNT(*) AS n FROM {t}{where}"))["n"]
             out.append({"id": name, "label": spec["label"], "default": spec["default"], "rows": n})
         undo = await self.c.db.kv_get(UNDO_KEY)
         last = await self.c.db.kv_get("backup_last_export")
@@ -84,7 +85,10 @@ class BackupService:
         chosen = [s for s in (scopes or list(parts)) if s in parts]
         if not chosen:
             raise BackupError("Nothing in the backup matches what you picked.")
-        plan = {s: {t: len(d["rows"]) for t, d in parts[s]["tables"].items()} for s in chosen}
+        def real(d: dict[str, Any]) -> int:     # Demo-mode sample rows in an older backup are never imported, so they are not part of the plan
+            di = d["columns"].index("demo") if "demo" in d["columns"] else -1
+            return sum(1 for r in d["rows"] if di < 0 or not int(r[di] or 0))
+        plan = {s: {t: real(d) for t, d in parts[s]["tables"].items()} for s in chosen}
         report: dict[str, Any] = {"ok": True, "dry_run": dry_run, "mode": mode, "scopes": chosen, "plan": plan, **self._summary(header, manifest)}
         if dry_run:
             return report
@@ -103,9 +107,11 @@ class BackupService:
                             continue
                         if t == "settings":
                             continue
-                        have = (await self.c.db.fetchone(f"SELECT COUNT(*) AS n FROM {t}"))["n"] if await archive._exists(self.c.db, t) else len(d["rows"])
-                        if have != len(d["rows"]):
-                            raise BackupError(f"Checking the result failed for {t}: expected {len(d['rows'])} rows, found {have}.")
+                        demo = await archive._has_demo(self.c.db, t) if await archive._exists(self.c.db, t) else False
+                        want = len(d["rows"]) - (sum(1 for r in d["rows"] if int(r[d["columns"].index("demo")] or 0)) if demo and "demo" in d["columns"] else 0)
+                        have = (await self.c.db.fetchone(f"SELECT COUNT(*) AS n FROM {t}{' WHERE demo = 0' if demo else ''}"))["n"] if await archive._exists(self.c.db, t) else want
+                        if have != want:
+                            raise BackupError(f"Checking the result failed for {t}: expected {want} rows, found {have}.")
             await self._reload(chosen)
         except Exception as exc:
             logger.exception("Import failed; rolling back")

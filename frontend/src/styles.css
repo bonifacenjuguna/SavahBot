@@ -564,3 +564,11 @@ details.group[open] > summary { border-bottom: 1px solid var(--line); }
 .notice-bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, var(--panel)); }
 .lc-alt { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .lc-code { letter-spacing: 0.25em; font-size: 1.2rem; text-align: center; }
+
+/* Donut: the tapped slice grows outward, the others step back */
+.donut .seg { cursor: pointer; transition: stroke-width .18s ease, r .18s ease, opacity .18s ease; }
+.donut .seg.dim { opacity: .45; }
+.donut .legend .lg-row { padding: 3px 6px; cursor: pointer; border-radius: 8px; transition: background .15s ease; }
+.donut .legend .lg-row.on { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.donut .legend .lg-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .donut .seg, .donut .legend .lg-row { transition: none; } }

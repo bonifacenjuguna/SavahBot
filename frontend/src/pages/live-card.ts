@@ -31,7 +31,7 @@ export function liveCard(): { el: HTMLElement; stop: () => void } {
         stat("thumbsUp", "Likes", d.likes_hidden ? "hidden" : num(d.likes), d.likes_per_min !== null ? `${d.likes_per_min}/min` : ""),
         stat("eye", "Watching", num(d.viewers), `peak ${num(d.peak_viewers)}`),
         stat("users", "Subscribers", num(d.subscribers?.count))),
-      viewers.length > 1 ? h("div", { style: "height:44px" }, sparkline(viewers)) : null,
+      viewers.length > 1 ? h("div", { class: "live-spark", role: "img", "aria-label": "Viewers over the last while" }, sparkline(viewers)) : null,
       d.note ? h("p", { class: "muted small wrap" }, d.note) : null,
       h("p", { class: "muted small" }, `Updated ${ago(d.updated)}. YouTube can lag behind real life by a minute or more.`));
   };

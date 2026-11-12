@@ -17,10 +17,24 @@ A tidier top of every page, a usable pinned message, and a calmer stream strip.
 - **More, on phones and tablets:** the "Keyboard shortcuts" row is hidden, since it needs a keyboard.
 - **Developer page status chips** ("ok", "connected", "available", "not set up") are small soft pills again. On a phone they were stretched full width with a heavy coloured outline.
 
+### Added (second batch)
+- **Backups never carry Demo-mode data.** Export leaves out every sample row, import skips any that an older file holds, and a Replace swaps only your real rows (the demo sample stays untouched). The counts on the Backup page show real rows only, and the import report says how many demo rows were skipped.
+- **Most active chatters: top 10, clickable, with medals.** Each row opens that person's profile with the messages they sent (with "Show more"). People are told apart by their ID, so two people with the same name are two rows. The top three wear a small gold, silver and bronze shield.
+- **Busiest hours: hold and drag** across the bars; the bar under your finger lights up and shows its hour and message count.
+- **Pie charts:** tap a slice (or its row) and it grows outward and the centre shows its share and name. Tap again to put it back.
+- **Progress line option** in Settings, Appearance: follows your scrolling (default), always full, or off.
+
+### Changed (second batch)
+- **Selecting several messages ends by itself.** After Copy or Delete (or Done) nothing stays ticked, and deleted messages leave the screen at once.
+- **Recently opened and the Settings tiles:** the tag sits on top of each card, so the title and text keep the full width.
+- **Live stats:** the trend line has a box of its own and can no longer run over the "Updated ... ago" text.
+- **Cards no longer touch** on Insights (Past streams), Bans (Ledger and Be gentler) and any page that stacks cards the same way.
+
 ### Fixed
 - **Pinned messages had no options.** Each pin is now its own row: tap it (or long-press or right-click) for the same options sheet as any chat line, and the new cross unpins it at once. Every pin is reachable (the bar scrolls instead of hiding all but three), long-pressing a pin no longer starts a text selection, and the pin and selection bars stay above the chat in the expanded view. Pins now remember the details the sheet needs (older pins still open with the basic options).
 
 ### Tests
+- Backup tests for Demo-mode rows (export, import, replace, counts); an analytics test for the top-10 list. 456 backend and 33 frontend tests pass; the one known failure (`test_timer_modes_and_auto_replies`) is unchanged.
 - `frontend/tests/pins.test.ts`. `npm test` runs 33 tests.
 
 ## 1.3.6
