@@ -125,11 +125,10 @@ export async function renderDeveloper(el: HTMLElement): Promise<void> {
       h("p", null, h("a", { class: "btn small", href: "/settings?tab=all" }, icon("sliders", 14), "All environment settings"))), { flush: true }));
 }
 
-/** Settings, Shortcuts (1.3.9): every keyboard shortcut in one place, always reachable, also from a phone or tablet. */
+/** Settings, Shortcuts (1.3.9): every keyboard shortcut in one place. Only offered on desktops and laptops. */
 export function renderShortcuts(el: HTMLElement): void {
-  const touch = matchMedia("(pointer: coarse)").matches;
   mount(el, card("keyboard", "Keyboard shortcuts", body(
-    lede(touch ? "These work when a keyboard is connected to this device. They are listed here so you can always find them." : "Press ? anywhere in the dashboard to open this list. Shortcuts are ignored while you are typing in a box."),
+    lede("Press ? anywhere in the dashboard to open this list. Shortcuts are ignored while you are typing in a box."),
     shortcutList(appContext()),
     h("p", { class: "muted small" }, "For the \"g then\" shortcuts, press g, release it, then press the second key within a second or so."),
   )));

@@ -63,6 +63,9 @@ let appCtx: AppContext | null = null;
 export function setAppContext(c: AppContext): void { appCtx = c; }
 export function appContext(): AppContext { if (!appCtx) throw new Error("The app is not ready yet."); return appCtx; }
 
+/** Phones and tablets have no keyboard to speak of, so shortcuts are only offered on desktops and laptops. */
+export const hasKeyboard = (): boolean => !matchMedia("(max-width: 719px), (pointer: coarse)").matches;
+
 export function installShortcuts(ctx: AppContext): () => void {
   let pendingG = 0;
   const onKey = (e: KeyboardEvent) => {
@@ -129,7 +132,7 @@ export function openPalette(ctx: AppContext): void {
     { group: "Appearance", label: "Theme: light", icon: "sun", run: () => ctx.setTheme("light"), keywords: "theme appearance" },
     { group: "Appearance", label: "Theme: dark", icon: "moon", run: () => ctx.setTheme("dark"), keywords: "theme appearance" },
     ...(getPWAState().entry ? [{ group: "Actions", label: getPWAState().label, icon: "download", run: () => installApp(), keywords: "install app pwa home screen dock add" } satisfies Item] : []),
-    { group: "Help", label: "Keyboard shortcuts", icon: "keyboard", run: () => openShortcuts(ctx), keywords: "keys help" },
+    ...(hasKeyboard() ? [{ group: "Help", label: "Keyboard shortcuts", icon: "keyboard", run: () => openShortcuts(ctx), keywords: "keys help" } satisfies Item] : []),
     { group: "Account", label: "Sign out", icon: "logout", run: () => ctx.signOut(), keywords: "logout" },
   ];
   // demo scenarios are loaded in the background and added when they arrive

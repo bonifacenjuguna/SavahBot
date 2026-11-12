@@ -10,6 +10,7 @@ import { renderOverview } from "./settings-overview.js";
 import { renderAppearance, renderDeveloper, renderDevice, renderPrivacy, renderShortcuts } from "./settings-panels.js";
 import type { Page } from "./types.js";
 import { navigate } from "../router.js";
+import { hasKeyboard } from "../ui.js";
 
 interface Setting {
   name: string; env: string; group: string; description: string; type: string; default: unknown; value: unknown;
@@ -24,7 +25,7 @@ export const settings: Page = {
   render(root, query) {
     // 1.2.0: Settings is a hub. The address says which view is open (?tab=), so links, search results and the back button all work.
     const TABS = [{ id: "overview", label: "Overview", icon: "desk" }, { id: "appearance", label: "Appearance", icon: "sparkle" }, { id: "privacy", label: "Privacy & data", icon: "database" },
-      { id: "device", label: "Device & app", icon: "smartphone" }, { id: "shortcuts", label: "Shortcuts", icon: "keyboard" }, { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Knowledge", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
+      { id: "device", label: "Device & app", icon: "smartphone" }, ...(hasKeyboard() ? [{ id: "shortcuts", label: "Shortcuts", icon: "keyboard" } as const] : []), { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Knowledge", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
     type Tab = (typeof TABS)[number]["id"];
     const tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? "overview") as Tab;
     const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "overview" ? "/settings" : `/settings?tab=${v}`); });
