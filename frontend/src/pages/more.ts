@@ -1,12 +1,11 @@
 import { get } from "../api.js";
 import { busy, h, mount } from "../dom.js";
-import { icon, logo } from "../icons.js";
+import { icon } from "../icons.js";
 import { onStatus, status, type Status } from "../state.js";
-import { THEME_ICON, appContext, openPalette, openShortcuts, themePref, type ThemePref } from "../ui.js";
+import { THEME_ICON, appContext, openShortcuts, themePref, type ThemePref } from "../ui.js";
 import { APP_VERSION } from "../version.js";
 import { installApp, onPWAState } from "../pwa.js";
 import { AREAS, tile } from "./kit.js";
-import { empty } from "./shared.js";
 import { setupSteps, type Setup } from "./setup.js";
 import type { Page } from "./types.js";
 
@@ -43,7 +42,10 @@ export const more: Page = {
     const setMeta = (id: string, text: string | null, tone = "") => { const el = metaFor(id); el.hidden = !text; el.textContent = text ?? ""; el.className = `tile-count ${tone}`; };
 
     // ------------------------------------------------------------ status card with the mode switch
-    const card = h("section", { class: "more-hero", "data-state": "standby" });
+    // Made of the app's own parts (panel, line, the same segmented control as the chat filters), no gradient or glow. On a phone it stacks;
+    // from 720px up it is one row: what the bot is doing, the switch, the counts.
+    const card = h("section", { class: "more-status", "data-state": "standby", "aria-label": "Bot status" });
+    const STATE_ICON = { live: "radio", demo: "flask", standby: "power" } as const;
     const drawHero = (s: Status | null) => {
       const t = hero(s);
       card.setAttribute("data-state", t.state);
@@ -54,31 +56,20 @@ export const more: Page = {
         return b;
       };
       mount(card,
-        h("div", { class: "mh-top" }, h("span", { class: "mh-logo" }, logo(34)),
-          h("div", { class: "grow" }, h("div", { class: "mh-title" }, h("strong", null, t.title), h("span", { class: "mh-dot", "aria-hidden": "true" })), h("div", { class: "mh-detail" }, t.detail))),
-        h("div", { class: "mc-switch wide", role: "group", "aria-label": "Bot mode" }, mk("demo", "flask", "Demo"), mk("live", "radio", "Live")),
-        s ? h("div", { class: "mh-stats" },
+        h("div", { class: "ms-main" }, h("span", { class: "ms-ico", "aria-hidden": "true" }, icon(STATE_ICON[t.state], 20)),
+          h("div", { class: "ms-text", role: "status" }, h("strong", { class: "ms-title" }, t.title), h("span", { class: "ms-detail" }, t.detail))),
+        h("div", { class: "seg-control ms-seg", role: "group", "aria-label": "Bot mode" }, mk("demo", "flask", "Demo"), mk("live", "radio", "Live")),
+        s ? h("div", { class: "ms-stats" },
           h("a", { href: "/moderation" }, h("b", null, String(s.pending)), h("span", null, "waiting")),
           h("a", { href: "/desk" }, h("b", null, String(s.hub.lines)), h("span", null, "chat lines")),
           h("a", { href: "/settings" }, h("b", null, s.hub.mod_mode), h("span", null, "moderation"))) : null);
     };
 
-    // ------------------------------------------------------------ searchable sections
-    const find = h("input", { type: "search", placeholder: "Search sections and actions", "aria-label": "Search sections", autocomplete: "off" });
+    // ------------------------------------------------------------ sections
     const sections = h("div", { class: "more-sections" });
-    const drawSections = () => {
-      const q = find.value.trim().toLowerCase();
-      const hit = (t: string, b: string) => !q || `${t} ${b}`.toLowerCase().includes(q);
-      const blocks = Object.entries(AREAS).map(([key, area]) => {
-        const items = area.items.filter((i) => hit(i.title, BLURB[i.id] ?? ""));
-        if (!items.length) return null;
-        return h("section", { class: "more-group" }, h("h2", { class: "mg-title" }, area.title),
-          h("div", { class: "tiles" }, items.map((i) => tile({ icon: i.icon, title: i.title, text: BLURB[i.id], href: `/${i.id}`, meta: metaFor(i.id) }))));
-      }).filter(Boolean);
-      mount(sections, blocks.length ? blocks : empty("search", "Nothing matches. Try the command palette for actions."));
-    };
-    find.addEventListener("input", drawSections);
-    drawSections();
+    mount(sections, Object.values(AREAS).map((area) =>
+      h("section", { class: "more-group" }, h("h2", { class: "mg-title" }, area.title),
+        h("div", { class: "tiles" }, area.items.map((i) => tile({ icon: i.icon, title: i.title, text: BLURB[i.id], href: `/${i.id}`, meta: metaFor(i.id) }))))));
 
     // ------------------------------------------------------------ appearance and account
     const themes: ThemePref[] = ["system", "light", "dark"];
@@ -88,7 +79,6 @@ export const more: Page = {
     const account = h("section", { class: "more-group" }, h("h2", { class: "mg-title" }, "Appearance and account"),
       h("div", { class: "more-card" },
         h("div", { class: "mc-row" }, h("span", null, h("strong", null, "Theme"), h("span", { class: "muted small" }, "Follows your device unless you choose")), themeSeg),
-        h("button", { class: "mc-link", type: "button", onclick: () => openPalette(ctx) }, icon("search", 18), h("span", { class: "grow" }, "Search pages and actions"), h("kbd", null, "Ctrl K")),
         h("button", { class: "mc-link", type: "button", onclick: () => openShortcuts(ctx) }, icon("keyboard", 18), h("span", { class: "grow" }, "Keyboard shortcuts"), icon("chevronRight", 16)),
         h("button", { class: "mc-link danger", type: "button", onclick: () => ctx.signOut() }, icon("logout", 18), h("span", { class: "grow" }, "Sign out"), icon("chevronRight", 16))),
       h("p", { class: "muted small centered" }, `SavahBot dashboard v${APP_VERSION}`));
@@ -101,8 +91,8 @@ export const more: Page = {
     });
 
     mount(root, h("div", { class: "more-page" },
-      h("div", { class: "more-head" }, h("h1", null, "More"), h("p", { class: "muted" }, "Everything beyond the daily desk, in one place.")),
-      card, installBox, h("div", { class: "input-icon more-find" }, icon("search", 16), find), sections, account));
+      h("h1", { class: "sr-only" }, "More"),
+      card, installBox, sections, account));
 
     // ------------------------------------------------------------ live bits: status, counts, setup progress
     drawHero(status);

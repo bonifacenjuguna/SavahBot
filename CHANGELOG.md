@@ -11,6 +11,8 @@ A tidier top of every page, a usable pinned message, and a calmer stream strip.
 - **The stream strip in the Chat card was redesigned.** The stream name is on top and may use two lines, with a Live / Demo / Off air tag and the time it has run underneath, so nothing is cut off. The glowing dot is gone. The stream-link button is there in every state (it used to be missing in demo and while streaming).
 - **On a phone the pause button sits on the same row** as the filter, history and date buttons.
 
+- **More page redesigned.** The "More" heading and its subtitle are gone, and so are both search boxes (the top bar already has search, on phones and on desktop). The old gradient "Demo mode" card, which did not match the rest of the app, is replaced by a plain card in the app's own panel colours, with the same Demo / Live switch used by the chat filters: stacked on a phone, one slim row on desktop. The count pills (notes, quotes, setup progress) now sit under each tile's description instead of squeezing the text, and show on phones too.
+
 ### Fixed
 - **Pinned messages had no options.** Each pin is now its own row: tap it (or long-press or right-click) for the same options sheet as any chat line, and the new cross unpins it at once. Every pin is reachable (the bar scrolls instead of hiding all but three), long-pressing a pin no longer starts a text selection, and the pin and selection bars stay above the chat in the expanded view. Pins now remember the details the sheet needs (older pins still open with the basic options).
 

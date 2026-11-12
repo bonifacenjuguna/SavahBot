@@ -117,7 +117,7 @@ export function areaNav(pageId: string): HTMLElement | null {
 
 // ------------------------------------------------------------------ small pieces
 export function tile(opts: { icon: string; title: string; text?: string; href?: string; onclick?: () => void; meta?: Child; tone?: string; current?: boolean }): HTMLElement {
-  const kids = [h("span", { class: "tile-ico" }, icon(opts.icon, 22)), h("span", { class: "tile-text" }, h("strong", null, opts.title), opts.text ? h("span", null, opts.text) : null), opts.meta ? h("span", { class: "tile-meta" }, opts.meta) : null, icon("chevronRight", 16, "tile-go")];
+  const kids = [h("span", { class: "tile-ico" }, icon(opts.icon, 22)), h("span", { class: "tile-text" }, h("strong", null, opts.title), opts.text ? h("span", null, opts.text) : null, opts.meta ? h("span", { class: "tile-meta" }, opts.meta) : null), icon("chevronRight", 16, "tile-go")];
   const cls = `tile${opts.tone ? " " + opts.tone : ""}`;
   return opts.href
     ? h("a", { class: cls, href: opts.href, "aria-current": opts.current ? "page" : undefined }, ...kids)
