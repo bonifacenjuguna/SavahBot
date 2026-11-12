@@ -18,7 +18,10 @@ export function liveCard(): { el: HTMLElement; stop: () => void } {
   const el = card("activity", "Live stats", body, { flush: true, actions: h("a", { class: "btn small ghost", href: "/stream-settings" }, icon("sliders", 14), "Set up") });
   let last: Live | null = null;
   const stat = (ic: string, label: string, value: string, sub = "") =>
-    h("div", { style: "min-width:96px;flex:1" }, h("div", { class: "muted small" }, icon(ic, 14), " ", label), h("div", { style: "font-size:1.5rem;font-weight:600" }, value), sub ? h("div", { class: "muted small" }, sub) : null);
+    h("div", { class: "ls-stat" },
+      h("div", { class: "ls-head" }, h("span", { class: "ls-ic", "aria-hidden": "true" }, icon(ic, 16)), h("span", { class: "ls-label" }, label)),
+      h("div", { class: "ls-value" }, value),
+      h("div", { class: "ls-sub" }, sub || "\u00a0"));
   const draw = () => {
     const d = last;
     if (!d) return;
@@ -27,7 +30,7 @@ export function liveCard(): { el: HTMLElement; stop: () => void } {
     const viewers = d.series.map((p) => p.viewers ?? 0);
     mount(body,
       d.sample ? h("div", { class: "banner demo" }, icon("flask", 16), h("span", null, "Sample data: Demo mode has no YouTube, so these numbers are made up.")) : null,
-      h("div", { class: "row wrap", style: "gap:12px" },
+      h("div", { class: "ls-grid" },
         stat("thumbsUp", "Likes", d.likes_hidden ? "hidden" : num(d.likes), d.likes_per_min !== null ? `${d.likes_per_min}/min` : ""),
         stat("eye", "Watching", num(d.viewers), `peak ${num(d.peak_viewers)}`),
         stat("users", "Subscribers", num(d.subscribers?.count))),

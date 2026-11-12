@@ -101,12 +101,7 @@ function present(message: string, kind: "ok" | "error", action?: { label: string
   const ms = action ? Math.max(actionMs ?? 7000, secs * 1000) : kind === "error" ? Math.max(6000, secs * 2000) : secs * 1000;     // errors stay twice as long as notices
   const key = action ? "" : `${kind}:${message}`;
   const prev = key ? byKey.get(key) : undefined;
-  if (prev && prev.isConnected && !prev.dataset.leaving) {          // the same message again: count it instead of adding a copy
-    const n = Number(prev.dataset.n || "1") + 1;
-    prev.dataset.n = String(n);
-    let badge = prev.querySelector(".toast-n");
-    if (!badge) { badge = h("span", { class: "toast-n" }); prev.appendChild(badge); }
-    badge.textContent = `×${n}`;
+  if (prev && prev.isConnected && !prev.dataset.leaving) {          // the same message again: keep the one on screen and give it a fresh timer (no counter, no copy)
     arm(prev, ms);
     return;
   }

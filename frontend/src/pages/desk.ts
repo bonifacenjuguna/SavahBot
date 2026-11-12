@@ -61,10 +61,21 @@ export const desk: Page = {
     const kpis = h("div", { class: "kpis swipe" });
     const savedMode = () => range.active || viewing !== null;
 
+    let lastH = 0;
     list.addEventListener("scroll", () => {
-      stick = list.scrollTop + list.clientHeight >= list.scrollHeight - 30;
+      const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 30;
+      // Lines arriving (or old ones trimmed off the top) move the scroll position without the reader doing anything. That is not
+      // "scrolled up": while following the chat, keep following, instead of showing "Latest" and leaving you behind.
+      if (!atBottom && stick && list.scrollHeight !== lastH && !userScrolling) { lastH = list.scrollHeight; list.scrollTop = list.scrollHeight; return; }
+      lastH = list.scrollHeight;
+      stick = atBottom;
       jump.hidden = stick || savedMode();
     });
+    let userScrolling = false, usTimer = 0;
+    const touched = () => { userScrolling = true; clearTimeout(usTimer); usTimer = window.setTimeout(() => { userScrolling = false; }, 250); };
+    ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"].forEach((t) => list.addEventListener(t, touched, { passive: true }));
+    // The chat is open (or the Chat tab was just shown, which gives the list its size for the first time): start at the newest line
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => { if (stick && !savedMode()) list.scrollTop = list.scrollHeight; }).observe(list);
 
     // ----- tapping a line: the action sheet, pins and multi-select
     const picked = new Set<Line>();

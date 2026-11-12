@@ -16,6 +16,7 @@ let items: Notice[] = [];
 let unread = 0;
 let loaded = false;
 const subs = new Set<() => void>();
+let lastSig = "", lastAt = 0;
 const conv = (r: Row): Notice => ({ id: r.id, ts: r.ts, kind: r.kind, icon: r.icon, title: r.title, text: r.body, href: r.route, read: r.read, count: r.count, category: r.category });
 const changed = (): void => subs.forEach((f) => f());
 
@@ -73,6 +74,10 @@ export function startNotifications(_getStatus: () => Status | null): () => void 
   offs.push(feed.on("notify", (e) => {
     const d = e.data as { id: number; title: string; body: string; route: string; kind: Kind; icon: string; category: string; folded?: boolean } | undefined;
     if (!d) return;
+    const sig = `${d.id}|${d.title}|${d.body}`;                 // the same notification arriving twice within moments is one notification
+    const at = Date.now();
+    if (sig === lastSig && at - lastAt < 4000) return;
+    lastSig = sig; lastAt = at;
     const prev = items.find((x) => x.id === d.id);
     if (prev) { prev.count += 1; prev.title = d.title; prev.text = d.body; prev.ts = Date.now() / 1000; if (prev.read) { prev.read = false; unread += 1; } items = [prev, ...items.filter((x) => x !== prev)]; }
     else { items = [{ id: d.id, ts: Date.now() / 1000, kind: d.kind, icon: d.icon, title: d.title, text: d.body, href: d.route, read: false, count: 1, category: d.category }, ...items].slice(0, MAX); unread += 1; }

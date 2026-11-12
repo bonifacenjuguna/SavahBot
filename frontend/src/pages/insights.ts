@@ -117,11 +117,11 @@ export const insights: Page = {
         const r = wrap.getBoundingClientRect();
         show(Math.max(0, Math.min(23, Math.floor(((ev.clientX - r.left) / r.width) * 24))));
       };
+      // The chosen bar stays lit when you let go. It only clears when you tap somewhere else, or when you leave or refresh the page.
       wrap.addEventListener("pointerdown", (ev) => { try { wrap.setPointerCapture(ev.pointerId); } catch { /* not every browser captures */ } at(ev); });
-      wrap.addEventListener("pointermove", (ev) => { if (ev.pointerType !== "mouse" || ev.buttons || wrap.matches(":hover")) at(ev); });
-      wrap.addEventListener("pointerup", () => { if (matchMedia("(pointer: coarse)").matches) setTimeout(clear, 1200); });
-      wrap.addEventListener("pointerleave", (ev) => { if (ev.pointerType === "mouse") clear(); });
-      wrap.addEventListener("pointercancel", clear);
+      wrap.addEventListener("pointermove", (ev) => { if (ev.pointerType !== "mouse" || ev.buttons) at(ev); });
+      const away = (ev: Event) => { if (!wrap.isConnected) { document.removeEventListener("pointerdown", away, true); return; } if (!wrap.contains(ev.target as Node)) clear(); };
+      document.addEventListener("pointerdown", away, true);
       return h("div", { class: "hour-strip", role: "img", "aria-label": `Messages by hour of day. The busiest hour is ${label(peakHour)}.` }, wrap,
         h("div", { class: "hs-axis" }, [0, 6, 12, 18].map((hr) => h("span", { style: `left:${(hr / 24) * 100}%` }, label(hr)))), note);
     };

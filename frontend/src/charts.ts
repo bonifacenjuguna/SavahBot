@@ -108,10 +108,12 @@ export interface Slice { name: string; value: number }
 /** Donut with a centre total and a legend. Tap a slice (or its legend row) and it grows outward and the centre shows its share; tap it again to put it back. */
 export function donut(slices: Slice[], opts: { center: string; sub: string; ariaLabel: string }): HTMLElement {
   const total = slices.reduce((a, b) => a + b.value, 0);
-  const size = 140, r = 52, c = 2 * Math.PI * r, W = 18, GROW = 7;
-  const svg = s("svg", { viewBox: `0 0 ${size} ${size}`, class: "donut-svg", role: "img", "aria-label": opts.ariaLabel });
+  const size = 140, r = 52, c = 2 * Math.PI * r, W = 18, GROW = 10, PUSH = 7;
+  const svg = s("svg", { viewBox: `-10 -10 ${size + 20} ${size + 20}`, class: "donut-svg", focusable: "false", role: "img", "aria-label": opts.ariaLabel });
   svg.appendChild(s("circle", { cx: 70, cy: 70, r, class: "donut-track", fill: "none", "stroke-width": W }));
   const segs: (SVGElement | null)[] = [];
+  const push: [number, number][] = [];                 // where each slice moves when picked: straight out from the centre
+  const many = slices.filter((x) => x.value > 0).length > 1;
   let offset = 0;
   slices.forEach((sl, i) => {
     if (!total || !sl.value) { segs.push(null); return; }
@@ -121,6 +123,8 @@ export function donut(slices: Slice[], opts: { center: string; sub: string; aria
     seg.addEventListener("click", () => pick(i));
     svg.appendChild(seg);
     segs.push(seg);
+    const mid = -Math.PI / 2 + ((offset + len / 2) / c) * 2 * Math.PI;
+    push[i] = [Math.cos(mid) * PUSH, Math.sin(mid) * PUSH];
     offset += len;
   });
   const num = s("text", { x: 70, y: 72, "text-anchor": "middle", class: "donut-num" }, opts.center);
@@ -139,6 +143,7 @@ export function donut(slices: Slice[], opts: { center: string; sub: string; aria
       const on = k === current;
       seg.setAttribute("r", String(on ? r + GROW / 2 : r));
       seg.setAttribute("stroke-width", String(on ? W + GROW : W));
+      seg.setAttribute("transform", on && many ? `translate(${push[k][0].toFixed(2)} ${push[k][1].toFixed(2)}) rotate(-90 70 70)` : "rotate(-90 70 70)");
       seg.classList.toggle("on", on);
       seg.classList.toggle("dim", current >= 0 && !on);
     });

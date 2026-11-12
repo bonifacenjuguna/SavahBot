@@ -99,8 +99,6 @@
    take over horizontal drags (touch-action: pan-y), and the empty space around the stack must not block taps on the page. */
 .toasts { pointer-events: none; }
 .toast { pointer-events: auto; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; animation: toast-in .18s ease-out; }
-.toast .toast-n { margin-left: auto; padding: 0 8px; border-radius: 999px; background: rgba(255,255,255,0.22); font-weight: 700; font-size: 0.8rem; line-height: 1.6; align-self: center; flex: none; }
-.toast.error .toast-n { background: rgba(0,0,0,0.22); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 html[data-toast-pos="top"] .toast { animation-name: toast-in-top; }
 @keyframes toast-in-top { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
@@ -149,3 +147,17 @@ a.set-tile { padding: 14px; }
 :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 16px; }
 :is(.stack, .k-stack, .cols, .masonry, .grid) > :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 0; }
 @media (min-width: 720px) { .page:has(> .block, > .sp-card) > :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 0; } }
+
+/* Live stats: three even tiles, each with a proper icon badge lined up with its label */
+.ls-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ls-stat { display: grid; grid-template-rows: auto auto auto; gap: 2px; min-width: 0; padding: 10px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.ls-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ls-ic { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.ls-ic svg { display: block; width: 16px; height: 16px; }
+.ls-label { font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ls-value { font-size: 1.35rem; font-weight: 650; line-height: 1.25; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ls-sub { font-size: .74rem; color: var(--muted); min-height: 1em; }
+@media (max-width: 380px) { .ls-label { font-size: .72rem; } .ls-value { font-size: 1.2rem; } }
+/* the label gets the whole tile width under its icon, so "Watching" and "Subscribers" are never cut short */
+.ls-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+.ls-label { font-size: .8rem; white-space: normal; max-width: 100%; }

@@ -463,9 +463,9 @@
 
 /* Busiest hours: hold and drag to light up a bar */
 .hs-bars { position: relative; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: crosshair; }
-.hs-bar i { transition: background .12s ease, transform .12s ease; transform-origin: bottom; }
-.hs-bar.hot i { background: var(--accent); transform: scaleX(1.25); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent); }
-.hs-bars:has(.hot) .hs-bar:not(.hot) i { opacity: .55; }
+.hs-bar i { transition: background-color .12s ease; }
+.hs-bar.hot i { background: var(--accent); }
+.hs-bars:has(.hot) .hs-bar:not(.hot) i { background: color-mix(in srgb, var(--accent) 28%, var(--panel)); }
 .hs-tip { position: absolute; bottom: calc(100% + 6px); z-index: 3; pointer-events: none; display: grid; gap: 1px; padding: 5px 9px; border-radius: 8px; background: var(--ink); color: var(--bg); font-size: .78rem; line-height: 1.25; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
 .hs-tip[hidden] { display: none; }
 .hs-tip strong { font-weight: 700; }

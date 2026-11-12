@@ -24,6 +24,14 @@ A tidier top of every page, a usable pinned message, and a calmer stream strip.
 - **Pie charts:** tap a slice (or its row) and it grows outward and the centre shows its share and name. Tap again to put it back.
 - **Progress line option** in Settings, Appearance: follows your scrolling (default), always full, or off.
 
+### Fixed (third batch)
+- **Notifications are no longer shown twice.** With the dashboard open, some phones reported it as "not focused" and showed the system alert on top of the in-app one; now an open, visible dashboard shows only the in-app one. The same notification arriving twice within moments is also treated as one.
+- **The "×2" / "×4" counter on pop-ups is gone.** A repeated message keeps the one pop-up and restarts its timer.
+- **Chat follows the newest line.** At the bottom it keeps following without scrolling up, even when old lines are trimmed off the top, and opens at the newest line. "Latest" appears only when you have scrolled up yourself, and after tapping it you stay following.
+- **Pie charts:** the tapped slice now pops outward, and no grey tap box appears around the circle.
+- **Busiest hours:** bars are sharp (no glow or stretching), and the bar you pick stays lit after you let go until you tap elsewhere or leave the page.
+- **Live stats:** three even tiles, each with an aligned icon badge above its label, on phone and desktop.
+
 ### Changed (second batch)
 - **Selecting several messages ends by itself.** After Copy or Delete (or Done) nothing stays ticked, and deleted messages leave the screen at once.
 - **Recently opened and the Settings tiles:** the tag sits on top of each card, so the title and text keep the full width.

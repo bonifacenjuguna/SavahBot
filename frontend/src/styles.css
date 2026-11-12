@@ -566,7 +566,8 @@ details.group[open] > summary { border-bottom: 1px solid var(--line); }
 .lc-code { letter-spacing: 0.25em; font-size: 1.2rem; text-align: center; }
 
 /* Donut: the tapped slice grows outward, the others step back */
-.donut .seg { cursor: pointer; transition: stroke-width .18s ease, r .18s ease, opacity .18s ease; }
+.donut svg, .donut svg * { -webkit-tap-highlight-color: transparent; outline: none; user-select: none; -webkit-user-select: none; }
+.donut .seg { cursor: pointer; transition: stroke-width .2s ease, r .2s ease, opacity .2s ease, transform .2s ease; }
 .donut .seg.dim { opacity: .45; }
 .donut .legend .lg-row { padding: 3px 6px; cursor: pointer; border-radius: 8px; transition: background .15s ease; }
 .donut .legend .lg-row.on { background: color-mix(in srgb, var(--ink) 8%, transparent); }
