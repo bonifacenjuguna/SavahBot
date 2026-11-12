@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.7
+
+A tidier top of every page, a usable pinned message, and a calmer stream strip.
+
+### Changed
+- **The connection pill at the top shows only the signal icon.** The glowing dot is gone; the colour and the icon still say live, reconnecting or offline.
+- **No page title block.** The big icon, page name and description above the cards are gone, so the cards start right under the top bar with a small margin. A page's own buttons (for example "Run a scenario" on the Desk) are still shown. The heading stays for screen readers and for "On this page".
+- **No breadcrumb row** ("More › Manage › Insights") under the top bar.
+- **The stream strip in the Chat card was redesigned.** The stream name is on top and may use two lines, with a Live / Demo / Off air tag and the time it has run underneath, so nothing is cut off. The glowing dot is gone. The stream-link button is there in every state (it used to be missing in demo and while streaming).
+- **On a phone the pause button sits on the same row** as the filter, history and date buttons.
+
+### Fixed
+- **Pinned messages had no options.** Each pin is now its own row: tap it (or long-press or right-click) for the same options sheet as any chat line, and the new cross unpins it at once. Every pin is reachable (the bar scrolls instead of hiding all but three), long-pressing a pin no longer starts a text selection, and the pin and selection bars stay above the chat in the expanded view. Pins now remember the details the sheet needs (older pins still open with the basic options).
+
+### Tests
+- `frontend/tests/pins.test.ts`. `npm test` runs 33 tests.
+
 ## 1.3.6
 
 Clean URLs. The dashboard no longer uses `/#/desk`; every page has a real address.

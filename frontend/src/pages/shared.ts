@@ -13,9 +13,10 @@ export function actionLabel(a: Action): string {
 }
 
 /** Standard page heading: icon tile, title, optional description and right-aligned actions. */
-export function pageHead(iconName: string, title: string, description?: string, actions?: Child): HTMLElement {
-  return h("div", { class: "page-head" },
-    h("div", { class: "ph-main" }, h("span", { class: "ph-icon" }, icon(iconName, 22)), h("div", null, h("h1", null, title), description ? h("p", null, description) : null)),
+/** The page's own heading is for screen readers and the "On this page" list only: the top bar and the menu already say where you are, so it takes no room. Only a page's action buttons are drawn. */
+export function pageHead(_iconName: string, title: string, _description?: string, actions?: Child): HTMLElement {
+  return h("div", { class: actions ? "page-head" : "page-head bare" },
+    h("h1", { class: "sr-only" }, title),
     actions ? h("div", { class: "ph-actions" }, actions) : null);
 }
 

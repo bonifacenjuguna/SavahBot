@@ -10,7 +10,7 @@ import { variableChips } from "./variables.js";
 import { liveCard } from "./live-card.js";
 import { dayLabel, openStreams, spanText, streamName, whenText, type Stream } from "./streams.js";
 import { openStreamLink } from "./stream-link.js";
-import { pins, wireLine, type ActionCtx } from "../chat-actions.js";
+import { openSheet, pinLine, pins, unpin, wireLine, type ActionCtx } from "../chat-actions.js";
 import { readerControl, readerItems } from "../reader-ui.js";
 import { reader } from "../reader.js";
 import type { Page } from "./types.js";
@@ -89,7 +89,17 @@ export const desk: Page = {
     const paintPins = () => {
       const all = pins();
       pinBar.hidden = !all.length;
-      mount(pinBar, icon("pin", 13), ...all.slice(0, 3).map((p) => h("span", { class: "pin-item wrap" }, h("strong", null, p.author_name), " ", p.text)), all.length > 3 ? h("span", { class: "muted small" }, `+${all.length - 3} more`) : null);
+      // every pin is a row of its own: tap it for the same sheet as any chat line, or use the cross to unpin it at once
+      mount(pinBar, ...all.map((p) => {
+        const open = () => openSheet(pinLine(p), actx, true);
+        const row = h("div", { class: "pin-item", role: "button", tabindex: 0, "aria-label": `Pinned message from ${p.author_name}. Open options` },
+          icon("pin", 14), h("span", { class: "pin-text" }, h("strong", null, p.author_name), " ", p.text),
+          h("button", { class: "pin-x", type: "button", "aria-label": `Unpin the message from ${p.author_name}`, title: "Unpin", onclick: (e: Event) => { e.stopPropagation(); unpin(p); paintPins(); } }, icon("x", 16)));
+        row.addEventListener("click", open);
+        row.addEventListener("contextmenu", (e) => { e.preventDefault(); open(); });
+        row.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === row) { e.preventDefault(); open(); } });
+        return row;
+      }));
     };
     paintPins();
     const actx: ActionCtx = {
@@ -238,14 +248,18 @@ export const desk: Page = {
     let startedAt = 0, streamTitle = "";
     const paintStrip = () => {
       const live = Boolean(sessionId);
-      strip.setAttribute("data-state", live ? "live" : "off");
+      const demo = status?.hub.mode === "demo";
+      strip.setAttribute("data-state", live ? (demo ? "demo" : "live") : "off");
       const yt = status?.youtube;
-      const link = h("button", { class: "btn small ghost", type: "button", title: "Paste or change the stream link", "aria-label": "Stream link", onclick: () => openStreamLink() }, icon("youtube", 15), h("span", { class: "hide-narrow" }, "Stream link"));
-      mount(strip, h("span", { class: "ss-dot", "aria-hidden": "true" }),
-        h("span", { class: "ss-text" }, live
-          ? [h("strong", null, streamTitle || (status?.hub.mode === "demo" ? "Demo stream" : "On air")), h("span", { class: "muted" }, ` · ${spanText(Date.now() / 1000 - startedAt)} · fresh chat for this stream`)]
-          : [h("strong", null, "No stream running"), h("span", { class: "muted" }, yt?.connected ? " · waiting for you to go live" : " · YouTube not connected")]),
-        status?.hub.mode === "demo" ? null : link);
+      // the stream link works in every state (a demo too), so it is always there, and a name or a time is never cut to make room for it
+      const link = h("button", { class: "btn small ghost ss-link", type: "button", title: "Paste or change the stream link", "aria-label": "Stream link", onclick: () => openStreamLink() }, icon("youtube", 16), h("span", { class: "hide-narrow" }, "Stream link"));
+      mount(strip,
+        h("div", { class: "ss-main" },
+          h("strong", { class: "ss-title" }, live ? (streamTitle || (demo ? "Demo stream" : "On air")) : "No stream running"),
+          h("div", { class: "ss-meta" },
+            h("span", { class: "ss-tag" }, live ? (demo ? "Demo" : "Live") : "Off air"),
+            h("span", null, live ? `${spanText(Date.now() / 1000 - startedAt)} · fresh chat for this stream` : yt?.connected ? "Waiting for you to go live" : "YouTube not connected"))),
+        link);
     };
     const waitingState = (): HTMLElement => {
       const el = empty(sessionId ? "message" : "radio", sessionId ? "A new stream, a fresh chat. Lines appear here as they arrive." : "No stream is running. Your next stream starts on a fresh, empty chat.");
@@ -445,7 +459,7 @@ export const desk: Page = {
       // the connection dropped and came back: fetch what was missed instead of making you refresh
       feed.onReconnect(() => { void loadRecent(true); void loadPending().catch(() => undefined); if (savedMode() && viewing?.live) reload(); }),
     ];
-    offs.push(onStatus(() => renderFacts()));
+    offs.push(onStatus(() => { renderFacts(); paintStrip(); }));
     const t = window.setInterval(() => { renderFacts(); if (sessionId) paintStrip(); }, 5000);
     return () => { offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },

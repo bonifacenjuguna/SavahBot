@@ -21,10 +21,15 @@ export const gesture = (): Gesture => { try { const v = localStorage.getItem(GES
 export const setGesture = (g: Gesture): void => { try { localStorage.setItem(GESTURE_KEY, g); } catch { /* private mode */ } };
 
 /** Pins live on this device only: YouTube has no pin for live chat, so this is the dashboard's own sticky list, never shown to viewers. */
-export interface Pin { author_name: string; text: string; ts: number }
+export interface Pin { author_name: string; text: string; ts: number; id?: number; author_id?: string; platform?: string; level?: string; verdict?: string | null; demo?: boolean }
 export const pins = (): Pin[] => { try { return JSON.parse(localStorage.getItem(PIN_KEY) || "[]") as Pin[]; } catch { return []; } };
 const savePins = (p: Pin[]) => { try { localStorage.setItem(PIN_KEY, JSON.stringify(p.slice(0, 20))); } catch { /* private mode */ } };
-const isPinned = (m: ChatLine) => pins().some((p) => p.ts === m.ts && p.author_name === m.author_name);
+const same = (a: { ts: number; author_name: string }, b: { ts: number; author_name: string }) => a.ts === b.ts && a.author_name === b.author_name;
+const isPinned = (m: ChatLine) => pins().some((p) => same(p, m));
+/** A pin keeps what the action sheet needs, so a pinned line offers the same choices as the line in the chat. Pins saved by older versions fall back to a plain viewer line. */
+export const pinLine = (p: Pin): ChatLine => ({ id: p.id, author_id: p.author_id, platform: p.platform, author_name: p.author_name, text: p.text, ts: p.ts, level: p.level ?? "viewer", verdict: p.verdict ?? null, demo: p.demo });
+export function unpin(p: { ts: number; author_name: string }): void { savePins(pins().filter((x) => !same(x, p))); }
+const togglePin = (m: ChatLine) => savePins(isPinned(m) ? pins().filter((p) => !same(p, m)) : [{ author_name: m.author_name, text: m.text, ts: m.ts, id: m.id, author_id: m.author_id, platform: m.platform, level: m.level, verdict: m.verdict, demo: m.demo }, ...pins()]);
 
 const buzz = (ms = 12) => { try { navigator.vibrate?.(ms); } catch { /* not supported */ } };
 const copy = async (text: string, what: string) => { try { await navigator.clipboard.writeText(text); toast(`${what} copied`); } catch { toast("Your browser blocked copying", "error"); } };
@@ -107,7 +112,8 @@ async function allowDomain(host: string): Promise<void> {
   } catch (e) { toast(e instanceof Error ? e.message : "Could not save", "error"); }
 }
 
-export function openSheet(m: ChatLine, ctx: ActionCtx): void {
+/** `fromPin`: the line was opened from the pinned list, so it is not one of the lines on screen and cannot be ticked for "select several". */
+export function openSheet(m: ChatLine, ctx: ActionCtx, fromPin = false): void {
   const it = (ic: string, label: string, run: () => void, tone = "") => {
     const b = h("button", { class: `sheet-item ${tone}`.trim(), type: "button", style: "display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:12px 4px;background:none;border:0;border-top:1px solid var(--line);color:inherit;font:inherit;cursor:pointer" }, icon(ic, 18), h("span", null, label));
     b.onclick = () => { box.close(); run(); };
@@ -121,8 +127,8 @@ export function openSheet(m: ChatLine, ctx: ActionCtx): void {
     h("div", { class: "wrap", style: "padding:4px 0 8px" }, h("strong", null, m.author_name), h("div", { class: "muted small wrap" }, m.text)),
     group("Copy", it("copy", "Copy text", () => void copy(m.text, "Text")), it("user", "Copy username", () => void copy(m.author_name, "Username")), it("message", "Copy as quote", () => void copy(`> ${m.author_name}: ${m.text}`, "Quote"))),
     group("Chat", it("send", `Reply as the bot to ${m.author_name}`, () => ctx.reply(m.author_name)),
-      it("pin", isPinned(m) ? "Unpin from my dashboard" : "Pin on my dashboard (only you see it)", () => { const all = pins(); savePins(isPinned(m) ? all.filter((p) => !(p.ts === m.ts && p.author_name === m.author_name)) : [{ author_name: m.author_name, text: m.text, ts: m.ts }, ...all]); ctx.pinsChanged(); }),
-      it("check", "Select several messages", () => ctx.select(m)), ...(ctx.extra?.(m, () => box.close()) ?? [])),
+      it("pin", isPinned(m) ? "Unpin from my dashboard" : "Pin on my dashboard (only you see it)", () => { togglePin(m); ctx.pinsChanged(); }),
+      fromPin ? null : it("check", "Select several messages", () => ctx.select(m)), ...(ctx.extra?.(m, () => box.close()) ?? [])),
     group("This person", it("user", `About ${m.author_name}`, () => void personCard(m)),
       it("edit", "Add a note to the Notebook", () => void post("/api/notes", { body: `@${m.author_name}: ${m.text}`.slice(0, 1000), tags: ["chat"], pinned: false }).then(() => toast("Added to the Notebook")).catch((e) => toast(e.message, "error")))),
     flagged ? group("Moderation", it("flag", "Why it was flagged", () => whySheet(m)),

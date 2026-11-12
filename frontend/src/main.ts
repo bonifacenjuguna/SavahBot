@@ -13,7 +13,7 @@ import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
 import { icon, logo } from "./icons.js";
 import { refreshStatus, onStatus, type Status } from "./state.js";
-import { AREAS, areaOf, resetClock } from "./pages/kit.js";
+import { resetClock } from "./pages/kit.js";
 
 let resetTimer = 0;
 import { installPageNav, trackRecent } from "./nav.js";
@@ -294,8 +294,7 @@ function showShell(): void {
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
   const skip = h("a", { class: "skip", href: "#content", onclick: (e: Event) => { e.preventDefault(); content.focus(); } }, "Skip to content");
-  const crumbs = h("nav", { class: "crumbs", "aria-label": "You are here", hidden: true });
-  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, crumbs, content)), tabbar);
+  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, content)), tabbar);
 
   // ----- sheets
   function modeCards(close: () => void): HTMLElement {
@@ -317,13 +316,6 @@ function showShell(): void {
   let cleanup: (() => void) | void;
   let cleanupNav: (() => void) | undefined;
   let lastId = "";
-  /** More > Manage > Notifications: where you are and a way back up, shown for pages that live behind More. */
-  const drawCrumbs = (pageId: string, title: string) => {
-    const key = areaOf(pageId);
-    crumbs.hidden = !key;
-    if (!key) return;
-    mount(crumbs, h("a", { href: "/more" }, "More"), icon("chevronRight", 12), h("span", null, AREAS[key].title), icon("chevronRight", 12), h("span", { "aria-current": "page" }, title));
-  };
   const render = () => {
     cleanup?.();
     const where = current();
@@ -336,7 +328,6 @@ function showShell(): void {
     document.title = `${page.title} · SavahBot`;
     clear(content);
     cleanupNav?.();
-    drawCrumbs(page.id, page.title);
     if (page !== NOT_FOUND) trackRecent(page.id);
     cleanup = page.render(content, query);
     cleanupNav = installPageNav(content);

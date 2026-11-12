@@ -386,11 +386,6 @@ body.zoom-open .tabbar { z-index: 10; }
 .an-fade.l { left: 0; background: linear-gradient(90deg, var(--panel), transparent); }
 .an-fade.r { background: linear-gradient(270deg, var(--panel), transparent); }
 .an-fade.on { opacity: 1; }
-.crumbs { display: flex; align-items: center; gap: 6px; padding: 8px clamp(14px, 3vw, 40px) 0; font-size: 0.82rem; color: var(--muted); flex-wrap: wrap; }
-.crumbs a { color: var(--muted); text-decoration: none; }
-.crumbs a:hover { color: var(--ink); text-decoration: underline; }
-.crumbs [aria-current] { color: var(--ink); font-weight: 600; }
-.crumbs[hidden] { display: none; }
 .pal-recent { opacity: 0.95; }
 @media (prefers-reduced-motion: reduce) { .an-fade { transition: none; } }
 
@@ -417,8 +412,14 @@ body.zoom-open .tabbar { z-index: 10; }
 /* chat: action sheet, pins and multi-select */
 .line.picked { background: color-mix(in srgb, var(--accent) 14%, transparent); outline: 1px solid var(--accent); border-radius: 8px; }
 .line { -webkit-touch-callout: none; }
-.pin-bar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--raised); font-size: .85rem; overflow: hidden; }
-.pin-bar .pin-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sel-bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--raised); }
+.pin-bar { display: grid; gap: 2px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line); background: var(--raised); font-size: .85rem; max-height: 9.5rem; overflow-y: auto; overscroll-behavior: contain; position: relative; z-index: 2; flex: none; }
+.pin-bar .pin-item { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 40px; cursor: pointer; border-radius: 8px; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.pin-bar .pin-item:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.pin-bar .pin-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pin-bar .pin-item > .ico { flex: none; color: var(--muted); }
+.pin-bar .pin-text { flex: 1; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pin-bar .pin-x { flex: none; display: grid; place-items: center; width: 40px; height: 40px; margin: 0; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
+.pin-bar .pin-x:hover, .pin-bar .pin-x:active { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.sel-bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--raised); position: relative; z-index: 2; flex: none; }
 .sel-bar[hidden], .pin-bar[hidden] { display: none; }
 .sel-bar strong { flex: 1; }

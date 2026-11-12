@@ -16,14 +16,16 @@
 .dr-custom input { min-width: 0; width: 100%; }
 @media (max-width: 719px) { .line { grid-template-columns: 1fr; } .day-sep { padding-left: 14px; padding-right: 14px; } }
 
-/* ---- the strip under the chat toolbar ---- */
-.stream-strip { display: flex; align-items: center; gap: 10px; padding: 7px 16px; border-bottom: 1px solid var(--line); font-size: 0.86rem; min-width: 0; }
-.stream-strip .ss-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stream-strip .ss-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: 0.55; }
-.stream-strip[data-state="live"] .ss-dot { background: var(--bad); opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent); animation: ss-pulse 2s infinite; }
-.stream-strip .btn { flex: none; }
-@keyframes ss-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
-@media (prefers-reduced-motion: reduce) { .stream-strip[data-state="live"] .ss-dot { animation: none; } }
+/* ---- the strip under the chat toolbar: the stream's name on top, its state and how long it has run underneath ---- */
+.stream-strip { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); min-width: 0; }
+.stream-strip .ss-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.stream-strip .ss-title { font-size: 0.95rem; line-height: 1.25; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.stream-strip .ss-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 0.82rem; color: var(--muted); line-height: 1.3; }
+.stream-strip .ss-tag { flex: none; padding: 1px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--raised); border: 1px solid var(--line); }
+.stream-strip[data-state="live"] .ss-tag { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+.stream-strip[data-state="demo"] .ss-tag { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.stream-strip .ss-link { flex: none; }
+@media (max-width: 719px) { .stream-strip { padding: 10px 14px; } .stream-strip .ss-link { width: 44px; padding: 0; justify-content: center; } }
 
 /* ---- the YouTube row in Bot status is a button now ---- */
 button.status-row { width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); color: inherit; font: inherit; cursor: pointer; transition: background 0.15s; }
@@ -67,7 +69,7 @@ button.status-row:focus-visible { outline: 2px solid var(--accent); outline-offs
 .st-top-list li .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 520px) { .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .st-row { padding: 10px; gap: 10px; } .st-ico { width: 32px; height: 32px; } }
 
-/* ---- the connection chip: a soft pill with a glowing status dot. Green = live, amber = reconnecting, red = no internet. ---- */
+/* ---- the connection chip: a soft pill with the signal icon. Green = live, amber = reconnecting, red = no internet. ---- */
 button.conn-chip, button.conn-chip.down {
   --cc: var(--ok);
   appearance: none; -webkit-appearance: none; position: relative; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px 0 10px; margin: 0;
@@ -77,10 +79,7 @@ button.conn-chip, button.conn-chip.down {
   box-shadow: 0 1px 0 color-mix(in srgb, #fff 8%, transparent) inset, 0 4px 14px -8px var(--cc);
   transition: color 0.3s, background 0.3s, border-color 0.3s, box-shadow 0.3s, transform 0.12s;
 }
-button.conn-chip::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cc); box-shadow: 0 0 0 0 color-mix(in srgb, var(--cc) 60%, transparent); }
-button.conn-chip[data-state="live"]::before { animation: cc-ping 2.4s ease-out infinite; }
 button.conn-chip[data-state="retry"] { --cc: var(--warn); }
-button.conn-chip[data-state="retry"]::before { animation: cc-blink 1s ease-in-out infinite; }
 button.conn-chip[data-state="retry"] .ico { animation: cc-breathe 1.4s ease-in-out infinite; }
 button.conn-chip[data-state="offline"] { --cc: var(--bad); }
 button.conn-chip:active { transform: scale(0.96); }
@@ -88,12 +87,10 @@ button.conn-chip:hover { box-shadow: 0 1px 0 color-mix(in srgb, #fff 8%, transpa
 button.conn-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button.conn-chip .ico { flex: none; }
 button.conn-chip .txt { display: inline; }
-/* on a phone it is only the dot and the signal icon (the colour and the blinking say the rest; tap or long-press for the words), so the top bar never gets crowded */
+/* on a phone it is only the signal icon (the colour and the breathing say the rest; tap or long-press for the words), so the top bar never gets crowded */
 @media (max-width: 719px) {
-  button.conn-chip { height: 32px; padding: 0 10px 0 9px; }
+  button.conn-chip { height: 32px; padding: 0 11px; }
   button.conn-chip .txt { display: none; }
 }
-@keyframes cc-ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cc) 60%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
-@keyframes cc-blink { 50% { opacity: 0.25; } }
 @keyframes cc-breathe { 50% { opacity: 0.45; transform: scale(0.88); } }
-@media (prefers-reduced-motion: reduce) { button.conn-chip::before, button.conn-chip .ico { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { button.conn-chip .ico { animation: none !important; } }
