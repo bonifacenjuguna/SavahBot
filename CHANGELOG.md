@@ -13,6 +13,10 @@ A tidier top of every page, a usable pinned message, and a calmer stream strip.
 
 - **More page redesigned.** The "More" heading and its subtitle are gone, and so are both search boxes (the top bar already has search, on phones and on desktop). The old gradient "Demo mode" card, which did not match the rest of the app, is replaced by a plain card in the app's own panel colours, with the same Demo / Live switch used by the chat filters: stacked on a phone, one slim row on desktop. The count pills (notes, quotes, setup progress) now sit under each tile's description instead of squeezing the text, and show on phones too.
 
+- **More, on desktop:** the status card is hidden (the sidebar already has the same status and Demo / Live switch). It stays on phones.
+- **More, on phones and tablets:** the "Keyboard shortcuts" row is hidden, since it needs a keyboard.
+- **Developer page status chips** ("ok", "connected", "available", "not set up") are small soft pills again. On a phone they were stretched full width with a heavy coloured outline.
+
 ### Fixed
 - **Pinned messages had no options.** Each pin is now its own row: tap it (or long-press or right-click) for the same options sheet as any chat line, and the new cross unpins it at once. Every pin is reachable (the bar scrolls instead of hiding all but three), long-pressing a pin no longer starts a text selection, and the pin and selection bars stay above the chat in the expanded view. Pins now remember the details the sheet needs (older pins still open with the basic options).
 

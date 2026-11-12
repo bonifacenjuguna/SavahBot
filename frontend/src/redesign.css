@@ -71,11 +71,10 @@
 .ms-stats a:hover { background: var(--hover); }
 .ms-stats b { font-size: 1.1rem; font-variant-numeric: tabular-nums; text-transform: capitalize; }
 .ms-stats span { font-size: 0.78rem; color: var(--muted); }
-@media (min-width: 720px) {
-  .more-status { grid-template-columns: minmax(0, 1fr) 232px auto; align-items: center; gap: 24px; padding: 14px 20px; }
-  .ms-stats { display: flex; gap: 4px; border-top: 0; padding-top: 0; }
-  .ms-stats a { justify-items: start; padding: 4px 14px; }
-  .ms-stats a + a { border-left: 0; }
+/* from 720px up the sidebar already has the same Demo / Live switch and status, so More does not repeat it */
+@media (min-width: 720px) { .more-status { display: none; } }
+/* a keyboard-shortcuts list is no use on a phone or tablet */
+@media (max-width: 719px), (pointer: coarse) { .mc-link.kb-only { display: none; } }
 }
 .more-sections { display: grid; gap: 18px; }
 .more-group { display: grid; gap: 10px; }

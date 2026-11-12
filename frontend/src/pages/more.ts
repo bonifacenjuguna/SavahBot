@@ -42,8 +42,8 @@ export const more: Page = {
     const setMeta = (id: string, text: string | null, tone = "") => { const el = metaFor(id); el.hidden = !text; el.textContent = text ?? ""; el.className = `tile-count ${tone}`; };
 
     // ------------------------------------------------------------ status card with the mode switch
-    // Made of the app's own parts (panel, line, the same segmented control as the chat filters), no gradient or glow. On a phone it stacks;
-    // from 720px up it is one row: what the bot is doing, the switch, the counts.
+    // Made of the app's own parts (panel, line, the same segmented control as the chat filters), no gradient or glow. Phones only: from 720px up
+    // the sidebar shows the same status and switch.
     const card = h("section", { class: "more-status", "data-state": "standby", "aria-label": "Bot status" });
     const STATE_ICON = { live: "radio", demo: "flask", standby: "power" } as const;
     const drawHero = (s: Status | null) => {
@@ -79,7 +79,7 @@ export const more: Page = {
     const account = h("section", { class: "more-group" }, h("h2", { class: "mg-title" }, "Appearance and account"),
       h("div", { class: "more-card" },
         h("div", { class: "mc-row" }, h("span", null, h("strong", null, "Theme"), h("span", { class: "muted small" }, "Follows your device unless you choose")), themeSeg),
-        h("button", { class: "mc-link", type: "button", onclick: () => openShortcuts(ctx) }, icon("keyboard", 18), h("span", { class: "grow" }, "Keyboard shortcuts"), icon("chevronRight", 16)),
+        h("button", { class: "mc-link kb-only", type: "button", onclick: () => openShortcuts(ctx) }, icon("keyboard", 18), h("span", { class: "grow" }, "Keyboard shortcuts"), icon("chevronRight", 16)),
         h("button", { class: "mc-link danger", type: "button", onclick: () => ctx.signOut() }, icon("logout", 18), h("span", { class: "grow" }, "Sign out"), icon("chevronRight", 16))),
       h("p", { class: "muted small centered" }, `SavahBot dashboard v${APP_VERSION}`));
 
