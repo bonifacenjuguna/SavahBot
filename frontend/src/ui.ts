@@ -85,11 +85,15 @@ export function installShortcuts(ctx: AppContext): () => void {
   return () => document.removeEventListener("keydown", onKey);
 }
 
-export function openShortcuts(ctx: AppContext): void {
+/** The full list of shortcuts as a grid of keys and what they do. Used by the pop-up sheet and by Settings, Shortcuts, so the two never differ. */
+export function shortcutList(ctx: AppContext): HTMLElement {
   const rows: [string, string][] = [["Ctrl / Cmd + K", "Search and jump anywhere"], ["/", "Open search"], ["?", "This list"]];
   const goRows = Object.entries(SHORTCUT_KEYS).map(([id, k]) => [`g then ${k}`, `Go to ${ctx.pages.find((p) => p.id === id)?.title ?? id}`] as [string, string]);
-  const body = h("div", { class: "keys" }, [...rows, ...goRows].flatMap(([k, d]) => [h("span", null, k.split(" ").map((p) => (p === "then" || p === "+" ? ` ${p} ` : h("kbd", null, p)))), h("span", { class: "muted" }, d)]));
-  openModal("Keyboard shortcuts", body);
+  return h("div", { class: "keys" }, [...rows, ...goRows].flatMap(([k, d]) => [h("span", null, k.split(" ").map((p) => (p === "then" || p === "+" ? ` ${p} ` : h("kbd", null, p)))), h("span", { class: "muted" }, d)]));
+}
+
+export function openShortcuts(ctx: AppContext): void {
+  openModal("Keyboard shortcuts", shortcutList(ctx));
 }
 
 function openModal(title: string, body: Node): void { sheet(title, body); }

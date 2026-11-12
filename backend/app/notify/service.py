@@ -80,6 +80,8 @@ class Notifier:
         self.db, self.cfg, self.settings, self.bus = db, cfg, settings, bus
         self._secret_fn = secret_fn or (lambda: "savahbot-test-secret")
         self.telegram = telegram            # async callable(text) -> None, the hub's _notify
+        self._drain_lock = asyncio.Lock()
+        self._drain_again = False
         self.fcm = Fcm(settings.firebase_project_id, settings.firebase_client_email, settings.firebase_private_key, settings.firebase_service_account_json)
         self.active: Any = None             # leader check; only the leader listens to events and sends
         self._prefs: dict[str, Any] | None = None
@@ -261,6 +263,7 @@ class Notifier:
             self._spawn(self._telegram(c, title, body))
         if eff["push"] and prefs["push"]:
             await self._queue_push(c, prefs, prio, nid, title, body, route, now)
+            self._spawn(self.drain())                    # send now instead of waiting for the next scheduler tick
         return nid
 
     def _spawn(self, coro: Any) -> None:
@@ -307,15 +310,7 @@ class Notifier:
             return
         await self._watch_status(now)
         await self._release_held(now)
-        due = await self.db.fetchall("SELECT * FROM notify_deliveries WHERE status = 'queued' AND next_try <= ? ORDER BY next_try LIMIT 40", (now,))
-        for row in due:
-            try:
-                await self._send_one(row, now)
-            except Exception as e:
-                logger.exception("Push delivery %s crashed", row["id"])
-                att = row["attempts"] + 1
-                st = "queued" if att < int(self.cfg.get("notify_max_attempts")) else "failed"
-                await self.db.execute("UPDATE notify_deliveries SET status = ?, attempts = ?, next_try = ?, error = ? WHERE id = ?", (st, att, now + BACKOFF[min(att - 1, len(BACKOFF) - 1)], f"internal error: {type(e).__name__}", row["id"]))
+        await self.drain(now)
         if now - self._last_purge >= 3600:
             self._last_purge = now
             await self.purge(now)
@@ -407,6 +402,33 @@ class Notifier:
         await self.db.execute("DELETE FROM notifications WHERE ts < ?", (cut,))
         await self.db.execute("DELETE FROM notify_deliveries WHERE created < ? AND status NOT IN ('queued', 'held')", (cut,))
         await self.db.execute("DELETE FROM notify_devices WHERE last_seen < ? AND (last_ok IS NULL OR last_ok < ?)", (now - 90 * 86400, now - 90 * 86400))
+
+    async def drain(self, now: float | None = None) -> None:
+        """Sends every queued push that is due, all devices at the same moment. Called right after a notification is queued (so a phone
+        is not left waiting for the next scheduler tick) and again by the scheduler for retries and released held messages."""
+        if self.active is not None and not self.active():
+            return
+        if self._drain_lock.locked():
+            self._drain_again = True                     # a send is running: it will look once more when it finishes
+            return
+        async with self._drain_lock:
+            while True:
+                self._drain_again = False
+                t = time.time() if now is None else now
+                due = await self.db.fetchall("SELECT * FROM notify_deliveries WHERE status = 'queued' AND next_try <= ? ORDER BY next_try LIMIT 40", (t,))
+                await asyncio.gather(*(self._send_safe(row, t) for row in due))
+                if not self._drain_again:
+                    break
+                now = None
+
+    async def _send_safe(self, row: dict[str, Any], now: float) -> None:
+        try:
+            await self._send_one(row, now)
+        except Exception as e:
+            logger.exception("Push delivery %s crashed", row["id"])
+            att = row["attempts"] + 1
+            st = "queued" if att < int(self.cfg.get("notify_max_attempts")) else "failed"
+            await self.db.execute("UPDATE notify_deliveries SET status = ?, attempts = ?, next_try = ?, error = ? WHERE id = ?", (st, att, now + BACKOFF[min(att - 1, len(BACKOFF) - 1)], f"internal error: {type(e).__name__}", row["id"]))
 
     # ------------------------------------------------------------------ listening to the rest of the bot
     def start(self) -> None:

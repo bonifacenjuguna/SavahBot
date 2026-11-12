@@ -129,11 +129,14 @@ class Fcm:
         """`payload` holds title, body, route, tag, priority and category; everything goes in `data` so our worker shows it."""
         if not self.configured:
             return SendResult(False, error="Firebase is not configured")
+        # Always "high": with "normal" urgency a phone in battery saving (Doze) may hold the message for a minute or more, while a computer
+        # gets it at once. Every SavahBot alert is something the owner wants to see now, and the server already limits how many are sent.
         message = {
             "token": token,
             "data": {k: str(v) for k, v in payload.items() if v is not None},
-            "webpush": {"headers": {"Urgency": "high" if payload.get("priority") in ("high", "critical") else "normal", "TTL": str(int(payload.get("ttl", 86400)))}},
-            "android": {"priority": "HIGH" if payload.get("priority") in ("high", "critical") else "NORMAL"},
+            "webpush": {"headers": {"Urgency": "high", "TTL": str(int(payload.get("ttl", 86400)))}},
+            "android": {"priority": "HIGH", "ttl": f"{int(payload.get('ttl', 86400))}s"},
+            "apns": {"headers": {"apns-priority": "10"}},
         }
         for attempt in (0, 1):
             try:

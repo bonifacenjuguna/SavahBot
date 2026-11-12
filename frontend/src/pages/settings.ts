@@ -7,7 +7,7 @@ import { renderKnowledge } from "./knowledge.js";
 import { empty, pageHead } from "./shared.js";
 import { seg } from "./widgets.js";
 import { renderOverview } from "./settings-overview.js";
-import { renderAppearance, renderDeveloper, renderDevice, renderPrivacy } from "./settings-panels.js";
+import { renderAppearance, renderDeveloper, renderDevice, renderPrivacy, renderShortcuts } from "./settings-panels.js";
 import type { Page } from "./types.js";
 import { navigate } from "../router.js";
 
@@ -24,7 +24,7 @@ export const settings: Page = {
   render(root, query) {
     // 1.2.0: Settings is a hub. The address says which view is open (?tab=), so links, search results and the back button all work.
     const TABS = [{ id: "overview", label: "Overview", icon: "desk" }, { id: "appearance", label: "Appearance", icon: "sparkle" }, { id: "privacy", label: "Privacy & data", icon: "database" },
-      { id: "device", label: "Device & app", icon: "smartphone" }, { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Knowledge", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
+      { id: "device", label: "Device & app", icon: "smartphone" }, { id: "shortcuts", label: "Shortcuts", icon: "keyboard" }, { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Knowledge", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
     type Tab = (typeof TABS)[number]["id"];
     const tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? "overview") as Tab;
     const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "overview" ? "/settings" : `/settings?tab=${v}`); });
@@ -39,6 +39,7 @@ export const settings: Page = {
     if (tab === "appearance") { shell("Appearance", "How the dashboard looks on this device."); renderAppearance(host); return undefined; }
     if (tab === "privacy") { shell("Privacy & data", "What is stored, for how long, and what you can clear."); void renderPrivacy(host).catch(fail); return undefined; }
     if (tab === "device") { shell("Device & app", "Install, offline use and this browser."); void renderDevice(host).catch(fail); return undefined; }
+    if (tab === "shortcuts") { shell("Keyboard shortcuts", "Every key that jumps somewhere or opens something."); renderShortcuts(host); return undefined; }
     if (tab === "developer") { shell("Developer & advanced", "Service health and configuration checks. Secrets are never shown."); void renderDeveloper(host).catch(fail); return undefined; }
     const box = h("div", { class: "block flush" });
     const search = h("input", { type: "search", placeholder: "Search settings", "aria-label": "Search settings" });

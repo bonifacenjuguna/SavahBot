@@ -3,7 +3,7 @@ import { get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { ACCENTS, TOAST_SECS, accentPref, densityPref, motionPref, progressPref, setAccent, setDensity, setMotion, setProgress, setText, setToastMode, setToastPos, setToastSecs, textPref, toastMode, toastPos, toastSecs, type Accent, type ToastMode, type ToastPos } from "../appearance.js";
-import { applyTheme, themePref, type ThemePref } from "../ui.js";
+import { appContext, applyTheme, shortcutList, themePref, type ThemePref } from "../ui.js";
 import { getPWAState, installApp, openInstallGuide } from "../pwa.js";
 import { card } from "./shared.js";
 import { figures, lede, seg } from "./widgets.js";
@@ -123,4 +123,14 @@ export async function renderDeveloper(el: HTMLElement): Promise<void> {
     card("lock", "Secrets (only whether they are set)", body(h("p", { class: "muted small" }, "Values are never shown anywhere in SavahBot."), ...Object.entries(x.secrets).map(([k, v]) => row(k.replace(/_/g, " "), null, h("span", { class: `chip ${v ? "ok" : ""}` }, v ? "set" : "not set")))), { flush: true }),
     card("cloud", "This deployment", body(row("Version", `${x.app.name} ${x.app.version} · ${x.app.env} · Python ${x.app.python}`, null), row("Running for", dur(x.app.uptime), null), row("Backend address", x.deployment.backend_host || "not set", null), row("Dashboard address", x.deployment.frontend_host || "not set", null),
       h("p", null, h("a", { class: "btn small", href: "/settings?tab=all" }, icon("sliders", 14), "All environment settings"))), { flush: true }));
+}
+
+/** Settings, Shortcuts (1.3.9): every keyboard shortcut in one place, always reachable, also from a phone or tablet. */
+export function renderShortcuts(el: HTMLElement): void {
+  const touch = matchMedia("(pointer: coarse)").matches;
+  mount(el, card("keyboard", "Keyboard shortcuts", body(
+    lede(touch ? "These work when a keyboard is connected to this device. They are listed here so you can always find them." : "Press ? anywhere in the dashboard to open this list. Shortcuts are ignored while you are typing in a box."),
+    shortcutList(appContext()),
+    h("p", { class: "muted small" }, "For the \"g then\" shortcuts, press g, release it, then press the second key within a second or so."),
+  )));
 }

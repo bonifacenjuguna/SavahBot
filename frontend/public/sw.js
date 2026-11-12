@@ -1,4 +1,4 @@
-/* SavahBot service worker (1.3.8).
+/* SavahBot service worker (1.3.9).
  *
  * Deliberately small. The dashboard is a live, signed-in tool, so there is nothing safe to keep for offline use. This worker exists for three reasons:
  *   1. a friendly "you are offline" page when the installed app is opened without a connection (instead of the browser's error page);
@@ -17,7 +17,7 @@
  */
 "use strict";
 
-const VERSION = "1.3.8";
+const VERSION = "1.3.9";
 const CACHE = `savahbot-offline-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.9
+
+Faster push on phones, and keyboard shortcuts you can always find.
+
+### Fixed
+- **Push notifications arrived 30 seconds to a minute late on phones** (on time on a computer). Messages were sent with "normal" urgency unless they were high priority, and a phone in battery saving holds those back. Every push is now sent with high urgency (web, Android and Apple).
+- **Push is sent the moment a notification is created.** It used to wait for the next scheduler tick (up to 3 seconds), and devices were sent to one after another. Delivery now starts at once and reaches all devices in parallel. Retries and held messages still go through the scheduler.
+- **Keyboard shortcuts are back.** The "Keyboard shortcuts" row on the More page was hidden on phones and tablets; it shows everywhere again.
+
+### Added
+- **Settings, Shortcuts tab:** the full list of keyboard shortcuts (`?`, `/`, Ctrl or Cmd + K, and every `g` then letter jump) in one place, on every device. The `?` pop-up and the command palette entry show the same list.
+
 ## 1.3.8
 
 A fix for notifications on phones, and the pie charts done properly.

@@ -73,8 +73,6 @@
 .ms-stats span { font-size: 0.78rem; color: var(--muted); }
 /* from 720px up the sidebar already has the same Demo / Live switch and status, so More does not repeat it */
 @media (min-width: 720px) { .more-status { display: none; } }
-/* a keyboard-shortcuts list is no use on a phone or tablet */
-@media (max-width: 719px), (pointer: coarse) { .mc-link.kb-only { display: none; } }
 }
 .more-sections { display: grid; gap: 18px; }
 .more-group { display: grid; gap: 10px; }
