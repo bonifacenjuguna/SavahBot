@@ -161,3 +161,14 @@ a.set-tile { padding: 14px; }
 /* the label gets the whole tile width under its icon, so "Watching" and "Subscribers" are never cut short */
 .ls-head { flex-direction: column; align-items: flex-start; gap: 6px; }
 .ls-label { font-size: .8rem; white-space: normal; max-width: 100%; }
+
+/* "Insert $(variable)" row under a text box: one tidy line of small chips that scrolls sideways instead of wrapping into a mess */
+.var-chips { display: flex; align-items: center; gap: 8px; flex: none; padding: 8px 14px 12px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.var-chips::-webkit-scrollbar { display: none; }
+.var-chips:empty { display: none; }
+.chat-main > .var-chips { border-top: 1px solid var(--line, rgba(255,255,255,.08)); }
+.vc-label { flex: none; font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.vc-chip { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 0; border-radius: 999px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s ease, transform .1s ease; }
+.vc-chip:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.vc-chip:active { transform: scale(.96); background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.vc-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

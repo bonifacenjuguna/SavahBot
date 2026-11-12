@@ -105,45 +105,51 @@ export function areaChart(points: Point[], opts: { labelA: string; labelB: strin
 
 export interface Slice { name: string; value: number }
 
-/** Donut with a centre total and a legend. Tap a slice (or its legend row) and it grows outward and the centre shows its share; tap it again to put it back. */
+/** Donut with a centre total and a legend. Tap a slice (or its legend row) and it moves straight out from the centre and the centre shows its share; tap it again to put it back.
+ *  Slices are real ring segments (not stroked circles), so a slice that moves keeps its exact shape and the ring never shows a gap or a shadow behind it. */
 export function donut(slices: Slice[], opts: { center: string; sub: string; ariaLabel: string }): HTMLElement {
   const total = slices.reduce((a, b) => a + b.value, 0);
-  const size = 140, r = 52, c = 2 * Math.PI * r, W = 18, GROW = 10, PUSH = 7;
-  const svg = s("svg", { viewBox: `-10 -10 ${size + 20} ${size + 20}`, class: "donut-svg", focusable: "false", role: "img", "aria-label": opts.ariaLabel });
-  svg.appendChild(s("circle", { cx: 70, cy: 70, r, class: "donut-track", fill: "none", "stroke-width": W }));
+  const CX = 70, CY = 70, R1 = 61, R0 = 43, PUSH = 7;
+  const svg = s("svg", { viewBox: `0 0 140 140`, class: "donut-svg", role: "img", "aria-label": opts.ariaLabel, focusable: "false" });
+  const pt = (rad: number, a: number): string => `${(CX + rad * Math.cos(a)).toFixed(3)} ${(CY + rad * Math.sin(a)).toFixed(3)}`;
+  /** One ring segment from angle a0 to a1 (radians, 0 = three o'clock). A full turn is drawn as a whole ring. */
+  const ring = (a0: number, a1: number): string => {
+    if (a1 - a0 >= Math.PI * 2 - 1e-4) return `M ${CX - R1} ${CY} A ${R1} ${R1} 0 1 1 ${CX + R1} ${CY} A ${R1} ${R1} 0 1 1 ${CX - R1} ${CY} Z M ${CX - R0} ${CY} A ${R0} ${R0} 0 1 0 ${CX + R0} ${CY} A ${R0} ${R0} 0 1 0 ${CX - R0} ${CY} Z`;
+    const big = a1 - a0 > Math.PI ? 1 : 0;
+    return `M ${pt(R1, a0)} A ${R1} ${R1} 0 ${big} 1 ${pt(R1, a1)} L ${pt(R0, a1)} A ${R0} ${R0} 0 ${big} 0 ${pt(R0, a0)} Z`;
+  };
+  const live = slices.filter((x) => x.value > 0).length;
+  if (!total) svg.appendChild(s("circle", { cx: CX, cy: CY, r: (R0 + R1) / 2, class: "donut-track", fill: "none", "stroke-width": R1 - R0 }));
   const segs: (SVGElement | null)[] = [];
-  const push: [number, number][] = [];                 // where each slice moves when picked: straight out from the centre
-  const many = slices.filter((x) => x.value > 0).length > 1;
-  let offset = 0;
+  const dir: [number, number][] = [];                       // the way each slice moves when picked: straight out from the centre
+  let from = -Math.PI / 2;
   slices.forEach((sl, i) => {
     if (!total || !sl.value) { segs.push(null); return; }
-    const len = (sl.value / total) * c;
-    const gap = slices.filter((x) => x.value).length > 1 ? 2 : 0;
-    const seg = s("circle", { cx: 70, cy: 70, r, fill: "none", "stroke-width": W, class: `seg ${SERIES[i % SERIES.length]}`, "stroke-dasharray": `${Math.max(0, len - gap)} ${c}`, "stroke-dashoffset": -offset, transform: "rotate(-90 70 70)" });
+    const span = (sl.value / total) * Math.PI * 2;
+    const gap = live > 1 ? Math.min(0.02, span / 4) : 0;       // a hair of space between slices, never more than a quarter of a thin slice
+    const seg = s("path", { d: ring(from + gap / 2, from + span - gap / 2), class: `seg ${SERIES[i % SERIES.length]}`, "fill-rule": "evenodd" });
     seg.addEventListener("click", () => pick(i));
     svg.appendChild(seg);
     segs.push(seg);
-    const mid = -Math.PI / 2 + ((offset + len / 2) / c) * 2 * Math.PI;
-    push[i] = [Math.cos(mid) * PUSH, Math.sin(mid) * PUSH];
-    offset += len;
+    const mid = from + span / 2;
+    dir[i] = [Math.cos(mid), Math.sin(mid)];
+    from += span;
   });
-  const num = s("text", { x: 70, y: 72, "text-anchor": "middle", class: "donut-num" }, opts.center);
-  const sub = s("text", { x: 70, y: 90, "text-anchor": "middle", class: "donut-sub" }, opts.sub);
+  const num = s("text", { x: CX, y: 72, "text-anchor": "middle", class: "donut-num" }, opts.center);
+  const sub = s("text", { x: CX, y: 90, "text-anchor": "middle", class: "donut-sub" }, opts.sub);
   svg.appendChild(num);
   svg.appendChild(sub);
   const rows = slices.map((sl, i) =>
-    h("li", { class: "lg-row", tabindex: "0", role: "button", "aria-pressed": "false", onclick: () => pick(i), onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(i); } } },
+    h("li", { class: `lg-row ${SERIES[i % SERIES.length]}`, tabindex: "0", role: "button", "aria-pressed": "false", onclick: () => pick(i), onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(i); } } },
       h("i", { class: `sw ${SERIES[i % SERIES.length]}` }), h("span", { class: "grow" }, sl.name), h("b", null, String(sl.value)), h("span", { class: "muted small pct" }, total ? `${Math.round((sl.value / total) * 100)}%` : "0%")));
   let current = -1;
-  /** The chosen slice keeps its inner edge and grows outward (a wider stroke on a larger radius), so the ring never overlaps the centre text. */
   function pick(i: number): void {
     current = current === i ? -1 : i;
     segs.forEach((seg, k) => {
       if (!seg) return;
       const on = k === current;
-      seg.setAttribute("r", String(on ? r + GROW / 2 : r));
-      seg.setAttribute("stroke-width", String(on ? W + GROW : W));
-      seg.setAttribute("transform", on && many ? `translate(${push[k][0].toFixed(2)} ${push[k][1].toFixed(2)}) rotate(-90 70 70)` : "rotate(-90 70 70)");
+      // all movement is a CSS transform, so it animates smoothly in both directions and the slice keeps its exact shape
+      (seg as SVGElement).style.transform = on ? (live > 1 ? `translate(${(dir[k][0] * PUSH).toFixed(2)}px, ${(dir[k][1] * PUSH).toFixed(2)}px) scale(1.04)` : "scale(1.04)") : "";
       seg.classList.toggle("on", on);
       seg.classList.toggle("dim", current >= 0 && !on);
     });

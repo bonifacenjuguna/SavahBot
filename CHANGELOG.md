@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.8
+
+A fix for notifications on phones, and the pie charts done properly.
+
+### Fixed
+- **Push and in-app notifications on phones.** 1.3.7 made the service worker hide the system alert whenever the dashboard was merely visible, and on some phones that hid it while the app was open in the background. The rule is back to "visible and focused", and the page's own pop-up now uses exactly the same test, so you get one alert: the pop-up when you are looking at the dashboard, the system push when you are not. A test pins this.
+- A repeat of an existing notification is always counted in the bell; only a brand-new notification delivered twice within two seconds is ignored.
+- **Pie charts rebuilt.** Slices are real ring segments that slide straight out from the centre and back with a smooth transition, with no gap, shadow or leftover ring behind them. The tapped legend row takes the colour of its slice.
+- **Insert variables row** under the chat box is one tidy line of small chips that scrolls sideways, instead of a wrapped, boxed row.
+
 ## 1.3.7
 
 A tidier top of every page, a usable pinned message, and a calmer stream strip.
@@ -25,7 +35,6 @@ A tidier top of every page, a usable pinned message, and a calmer stream strip.
 - **Progress line option** in Settings, Appearance: follows your scrolling (default), always full, or off.
 
 ### Fixed (third batch)
-- **Notifications are no longer shown twice.** With the dashboard open, some phones reported it as "not focused" and showed the system alert on top of the in-app one; now an open, visible dashboard shows only the in-app one. The same notification arriving twice within moments is also treated as one.
 - **The "×2" / "×4" counter on pop-ups is gone.** A repeated message keeps the one pop-up and restarts its timer.
 - **Chat follows the newest line.** At the bottom it keeps following without scrolling up, even when old lines are trimmed off the top, and opens at the newest line. "Latest" appears only when you have scrolled up yourself, and after tapping it you stay following.
 - **Pie charts:** the tapped slice now pops outward, and no grey tap box appears around the circle.

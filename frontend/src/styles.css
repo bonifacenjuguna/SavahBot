@@ -299,9 +299,9 @@ tbody tr:hover { background: var(--hover); }
 .legend-inline span { display: inline-flex; align-items: center; gap: 6px; }
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--c, var(--accent)); flex: none; }
 .donut { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; align-items: center; padding: 14px 16px; }
-.donut-svg { width: 140px; height: 140px; }
+.donut-svg { width: 140px; height: 140px; overflow: visible; }
 .donut-track { stroke: var(--line); }
-.donut .seg { stroke: var(--c); }
+.donut .seg { fill: var(--c); }
 .donut-num { font-size: 22px; font-weight: 600; fill: var(--ink); font-family: var(--font); }
 .donut-sub { font-size: 10.5px; fill: var(--muted); font-family: var(--font); }
 .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.88rem; }
@@ -567,9 +567,9 @@ details.group[open] > summary { border-bottom: 1px solid var(--line); }
 
 /* Donut: the tapped slice grows outward, the others step back */
 .donut svg, .donut svg * { -webkit-tap-highlight-color: transparent; outline: none; user-select: none; -webkit-user-select: none; }
-.donut .seg { cursor: pointer; transition: stroke-width .2s ease, r .2s ease, opacity .2s ease, transform .2s ease; }
+.donut .seg { cursor: pointer; transform-box: view-box; transform-origin: 70px 70px; transition: transform .28s cubic-bezier(.2,.8,.2,1), opacity .2s ease; }
 .donut .seg.dim { opacity: .45; }
-.donut .legend .lg-row { padding: 3px 6px; cursor: pointer; border-radius: 8px; transition: background .15s ease; }
-.donut .legend .lg-row.on { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.donut .legend .lg-row { padding: 3px 6px; cursor: pointer; border-radius: 8px; transition: background .2s ease, box-shadow .2s ease; }
+.donut .legend .lg-row.on { background: color-mix(in srgb, var(--c) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 50%, transparent); }
 .donut .legend .lg-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { .donut .seg, .donut .legend .lg-row { transition: none; } }

@@ -74,15 +74,16 @@ export function startNotifications(_getStatus: () => Status | null): () => void 
   offs.push(feed.on("notify", (e) => {
     const d = e.data as { id: number; title: string; body: string; route: string; kind: Kind; icon: string; category: string; folded?: boolean } | undefined;
     if (!d) return;
-    const sig = `${d.id}|${d.title}|${d.body}`;                 // the same notification arriving twice within moments is one notification
+    const sig = `${d.id}|${d.title}|${d.body}`;                 // the same new notification delivered twice within moments is one notification (a repeat of an existing one is counted instead)
     const at = Date.now();
-    if (sig === lastSig && at - lastAt < 4000) return;
+    if (!d.folded && sig === lastSig && at - lastAt < 2000) return;
     lastSig = sig; lastAt = at;
     const prev = items.find((x) => x.id === d.id);
     if (prev) { prev.count += 1; prev.title = d.title; prev.text = d.body; prev.ts = Date.now() / 1000; if (prev.read) { prev.read = false; unread += 1; } items = [prev, ...items.filter((x) => x !== prev)]; }
     else { items = [{ id: d.id, ts: Date.now() / 1000, kind: d.kind, icon: d.icon, title: d.title, text: d.body, href: d.route, read: false, count: 1, category: d.category }, ...items].slice(0, MAX); unread += 1; }
     changed();
-    if (document.visibilityState === "visible" && d.category !== "stream.mode") toast(d.title, d.kind === "bad" ? "error" : "ok");
+    // the page shows its own pop-up only when the service worker will NOT show a system alert (same test: visible and focused), so you get exactly one
+    if (document.visibilityState === "visible" && document.hasFocus() && d.category !== "stream.mode") toast(d.title, d.kind === "bad" ? "error" : "ok");
   }));
   offs.push(feed.onConnection((up) => { if (up) void refresh(); }));
   const vis = () => { if (document.visibilityState === "visible") void refresh(); };

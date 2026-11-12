@@ -68,10 +68,10 @@ export const variables: Page = {
 
 /** A row of tap-to-insert chips for the user's own variables, shown under any text box that is rendered by the bot. Hidden when there are none. */
 export function variableChips(input: HTMLInputElement | HTMLTextAreaElement): HTMLElement {
-  const box = h("div", { class: "row wrap", style: "gap:6px;margin-top:6px" });
+  const box = h("div", { class: "var-chips", role: "group", "aria-label": "Insert one of your variables" });
   void get<Listing>("/api/variables").then((d) => {
     if (!d.variables.length) return;
-    mount(box, h("span", { class: "muted small" }, "Insert:"), ...d.variables.map((v) => h("button", { class: "btn ghost small", type: "button", onclick: () => {
+    mount(box, h("span", { class: "vc-label" }, "Insert"), ...d.variables.map((v) => h("button", { class: "vc-chip", type: "button", title: `Insert $(${v.name})`, onclick: () => {
       const at = input.selectionStart ?? input.value.length, tok = `$(${v.name})`;
       input.value = input.value.slice(0, at) + tok + input.value.slice(input.selectionEnd ?? at);
       input.focus(); input.setSelectionRange(at + tok.length, at + tok.length); input.dispatchEvent(new Event("input", { bubbles: true }));

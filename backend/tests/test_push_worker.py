@@ -32,3 +32,11 @@ def test_status_bar_badge_is_a_transparent_white_silhouette_not_a_solid_square()
     px = list(im.getdata())
     assert 0.05 < sum(1 for p in px if p[3] > 0) / len(px) < 0.5          # a shape, not a filled square
     assert all(p[:3] == (255, 255, 255) for p in px if p[3] > 200)
+
+
+def test_system_alert_is_hidden_only_when_dashboard_is_visible_and_focused():
+    """1.3.7 loosened this to "visible" alone and phones stopped showing push. The page pops up its own toast only under the same test (visible and focused), so one of the two always fires."""
+    handler = SW[SW.index('addEventListener("push"'):SW.index('addEventListener("notificationclick"')]
+    assert 'c.visibilityState === "visible" && c.focused' in handler
+    notes = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "notifications.ts").read_text(encoding="utf8")
+    assert 'document.visibilityState === "visible" && document.hasFocus()' in notes

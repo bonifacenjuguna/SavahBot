@@ -1,4 +1,4 @@
-/* SavahBot service worker (1.3.7).
+/* SavahBot service worker (1.3.8).
  *
  * Deliberately small. The dashboard is a live, signed-in tool, so there is nothing safe to keep for offline use. This worker exists for three reasons:
  *   1. a friendly "you are offline" page when the installed app is opened without a connection (instead of the browser's error page);
@@ -17,7 +17,7 @@
  */
 "use strict";
 
-const VERSION = "1.3.7";
+const VERSION = "1.3.8";
 const CACHE = `savahbot-offline-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -83,8 +83,9 @@ self.addEventListener("push", (event) => {
   const p = readPayload(event) || { title: "SavahBot", body: "Something needs a look.", route: "#/notifications", tag: "savahbot-generic", priority: "normal", nid: "", category: "" };
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    // "visible" alone is enough: some browsers (Android Chrome) report a visible dashboard as not focused, which used to add a system alert on top of the in-app one
-    const watching = wins.some((c) => c.visibilityState === "visible");
+    // Exactly the same test the page uses before it shows its own pop-up (visible AND focused), so one of the two always fires and never both.
+    // Do not loosen this to "visible" alone: on a phone that hides the system alert while the dashboard is merely open in the background.
+    const watching = wins.some((c) => c.visibilityState === "visible" && c.focused);
     wins.forEach((c) => c.postMessage({ type: "notify-push", nid: p.nid, category: p.category }));
     // You are looking at the dashboard: the bell and a toast already show it, so no second alert on top.
     // EXCEPT the explicit test notification: its whole purpose is to prove that a system notification appears, so it must show even
