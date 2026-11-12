@@ -8,6 +8,8 @@ Faster push on phones, and a Shortcuts tab in Settings on desktops.
 - **Push notifications arrived 30 seconds to a minute late on phones** (on time on a computer). Messages were sent with "normal" urgency unless they were high priority, and a phone in battery saving holds those back. Every push is now sent with high urgency (web, Android and Apple).
 - **Push is sent the moment a notification is created.** It used to wait for the next scheduler tick (up to 3 seconds), and devices were sent to one after another. Delivery now starts at once and reaches all devices in parallel. Retries and held messages still go through the scheduler.
 
+- **Chrome's grey "SavahBot" notification** (Silent section, with "Open in browser" and "Share URL") is gone. Chrome posts it whenever a push arrives and the service worker shows nothing, which happened every time you had the dashboard open and focused. The worker now always shows a notification: in that case a silent one that is removed after a fraction of a second, so only the dashboard's own pop-up is seen.
+
 ### Added
 - **Settings, Shortcuts tab (desktops and laptops only):** the full list of keyboard shortcuts (`?`, `/`, Ctrl or Cmd + K, and every `g` then letter jump) in one place. The `?` pop-up shows the same list. Phones and tablets do not show shortcuts anywhere (More row, Settings tab and search entry are hidden).
 

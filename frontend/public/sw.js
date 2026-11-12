@@ -82,19 +82,35 @@ self.addEventListener("push", (event) => {
   // "SavahBot" notification (the stray one in the notification shade).
   const p = readPayload(event) || { title: "SavahBot", body: "Something needs a look.", route: "#/notifications", tag: "savahbot-generic", priority: "normal", nid: "", category: "" };
   event.waitUntil((async () => {
-    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    // Exactly the same test the page uses before it shows its own pop-up (visible AND focused), so one of the two always fires and never both.
-    // Do not loosen this to "visible" alone: on a phone that hides the system alert while the dashboard is merely open in the background.
-    const watching = wins.some((c) => c.visibilityState === "visible" && c.focused);
-    wins.forEach((c) => c.postMessage({ type: "notify-push", nid: p.nid, category: p.category }));
-    // You are looking at the dashboard: the bell and a toast already show it, so no second alert on top.
-    // EXCEPT the explicit test notification: its whole purpose is to prove that a system notification appears, so it must show even
-    // while the dashboard is open. (A tests/test_push_worker.py regression test pins this line. Do not drop the exception.)
-    if (watching && p.category !== "test.test") return;
-    await self.registration.showNotification(p.title, {
-      body: p.body, icon: "/icon-192.png", badge: "/badge-96.png", tag: p.tag || undefined, renotify: !!p.tag,
-      requireInteraction: p.priority === "critical", data: { route: p.route, nid: p.nid || "" }, timestamp: Date.now(),
-    });
+    // Chrome requires every push to end in a visible notification. If the worker shows nothing (or throws before it does), Chrome adds its
+    // own grey "SavahBot" notification in the Silent section, with "Open in browser" / "Share URL" buttons. So this block ALWAYS shows one.
+    let shown = false;
+    try {
+      const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Exactly the same test the page uses before it shows its own pop-up (visible AND focused), so one of the two always fires and never both.
+      // Do not loosen this to "visible" alone: on a phone that hides the system alert while the dashboard is merely open in the background.
+      const watching = wins.some((c) => c.visibilityState === "visible" && c.focused);
+      wins.forEach((c) => c.postMessage({ type: "notify-push", nid: p.nid, category: p.category }));
+      // You are looking at the dashboard: the bell and a toast already show it, so no second alert on top.
+      // EXCEPT the explicit test notification: its whole purpose is to prove that a system notification appears, so it must show even
+      // while the dashboard is open. (A tests/test_push_worker.py regression test pins this line. Do not drop the exception.)
+      if (watching && p.category !== "test.test") {
+        // 1.3.9: skipping the alert used to make Chrome post its own generic one. Show a silent placeholder and take it down at once
+        // instead: that satisfies Chrome, and you only see the dashboard's own pop-up.
+        await self.registration.showNotification(p.title, { body: "", tag: "savahbot-quiet", silent: true, icon: "/icon-192.png", badge: "/badge-96.png" });
+        shown = true;
+        await new Promise((r) => setTimeout(r, 50));
+        (await self.registration.getNotifications({ tag: "savahbot-quiet" })).forEach((n) => n.close());
+        return;
+      }
+      await self.registration.showNotification(p.title, {
+        body: p.body, icon: "/icon-192.png", badge: "/badge-96.png", tag: p.tag || undefined, renotify: !!p.tag,
+        requireInteraction: p.priority === "critical", data: { route: p.route, nid: p.nid || "" }, timestamp: Date.now(),
+      });
+      shown = true;
+    } finally {
+      if (!shown) await self.registration.showNotification(p.title, { body: p.body, icon: "/icon-192.png", badge: "/badge-96.png", data: { route: p.route, nid: p.nid || "" } });
+    }
   })());
 });
 
