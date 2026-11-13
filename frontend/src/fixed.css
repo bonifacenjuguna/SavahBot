@@ -1,4 +1,4 @@
-/* SavahBot 1.4.2 - the chat controls drawer, equal-height Waiting card, and cards that scroll inside themselves. Loaded last. */
+/* SavahBot 1.4.3 - the chat controls drawer, equal-height Waiting card, and cards that scroll inside themselves (taller, with pinned footers). Loaded last. */
 
 /* ------------------------------------------------------------------ one height for the chat card and the Waiting card
  * --desk-h is the height of the Chat card. The Waiting card uses the same number, so the two always match and a long list
@@ -40,17 +40,48 @@
   .mod-queue > header { flex: none; }
   .mod-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .ap-bulk { position: sticky; top: 0; z-index: 1; box-shadow: 0 1px 0 var(--line); }
-  .mod-history .table-wrap { max-height: min(70dvh, 640px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .mod-history .table-wrap { max-height: var(--fs-max); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 }
 
 /* ------------------------------------------------------------------ any other card that can grow without limit (class: fixed-scroll)
- * Up to about two thirds of the screen, then the card's body scrolls inside it. A short list takes only the room it needs. */
-.block.fixed-scroll:not([hidden]):not([data-hidden="true"]) { display: flex !important; flex-direction: column; max-height: min(70dvh, 640px); }
+ * 1.4.3: these cards were too short (about 70% of the screen, 640px at most) and their last lines sat hard against the bottom edge.
+ * Now a card may use nearly the whole visible height (--fs-max), a short list still takes only the room it needs, the body keeps its own scroll,
+ * and the last row has breathing room. A card with a footer keeps it pinned under the scrolling body so it is never cut off. */
+:root { --fs-max: clamp(420px, calc(100dvh - var(--topbar-h, 56px) - var(--tabbar-h, 0px) - 28px), 960px); }
+.block.fixed-scroll:not([hidden]):not([data-hidden="true"]) { display: flex !important; flex-direction: column; max-height: var(--fs-max); position: relative; }
 .block.fixed-scroll > header { flex: none; }
-.block.fixed-scroll > :not(header):not(.arr-handle) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-.sp-card.sp-scroll { display: flex; flex-direction: column; gap: 10px; max-height: min(70dvh, 640px); }
+.block.fixed-scroll > :not(header):not(footer):not(.arr-handle) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; scroll-padding-bottom: 12px; }
+.sp-card.sp-scroll { display: flex; flex-direction: column; gap: 10px; max-height: var(--fs-max); }
 .sp-card.sp-scroll > :first-child { flex: none; }
-.sp-card.sp-scroll > :not(:first-child) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.sp-card.sp-scroll > :not(:first-child) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; }
+
+/* a taller card for the lists people work in (Commands, Auto-replies, Timers): a comfortable minimum, the whole row on a computer */
+.block.tall:not([hidden]) { column-span: all !important; min-height: min(480px, var(--fs-max)); }
+.block.tall > .empty, .block.tall .empty { min-height: 200px; justify-content: center; }
+.block.tall .toolbar { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.block.tall .table-wrap { padding-bottom: 4px; }
+.block.tall .cards-grid { padding-bottom: 18px; align-items: start; }
+
+/* the pinned footer: a one-line summary on the left, a "scroll for more" hint on the right while there is more below */
+.block > .card-foot {
+  flex: none; position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 9px 16px; min-height: 40px; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 2.5%, var(--panel));
+}
+.card-foot .cf-more { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--accent); opacity: 0; transform: translateY(-2px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.block[data-more="true"] > .card-foot .cf-more { opacity: 1; transform: none; }
+.block[data-more="true"] > .card-foot .cf-more svg { animation: cf-bob 1.6s ease-in-out infinite; }
+@keyframes cf-bob { 50% { transform: translateY(3px); } }
+/* a soft fade over the bottom of the scrolling body while more is hidden below it; it never takes clicks */
+.block.fixed-scroll > .card-foot::before, .block.fixed-scroll:not(:has(> .card-foot))::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 30px; pointer-events: none; opacity: 0; transition: opacity .2s;
+  background: linear-gradient(to bottom, transparent, var(--panel));
+}
+.block.fixed-scroll > .card-foot::before { bottom: 100%; }
+.block.fixed-scroll:not(:has(> .card-foot))::after { bottom: 0; }
+.block.fixed-scroll[data-more="true"] > .card-foot::before, .block.fixed-scroll[data-more="true"]:not(:has(> .card-foot))::after { opacity: 1; }
+@media (max-width: 719px) { .block > .card-foot { padding: 8px 14px; } }
+@media (prefers-reduced-motion: reduce) { .card-foot .cf-more, .block.fixed-scroll > .card-foot::before { transition: none; } .block[data-more="true"] > .card-foot .cf-more svg { animation: none; } }
 
 /* ------------------------------------------------------------------ the chat controls drawer */
 .chat-handle {

@@ -273,16 +273,26 @@ export const commands: Page = {
         get<{ items: Trigger[]; enabled: boolean }>("/api/triggers"),
       ]);
       levels = c.levels; builtin = c.builtin; items = c.items; timers = tm.items; triggers = tr.items; triggersOn = tr.enabled;
-      drawList(); drawReplies(); drawTimers(); drawTabs();
+      drawList(); drawReplies(); drawTimers(); drawFeet(); drawTabs();
       foldChildren(replyBox.querySelector(".cards-grid"), "auto-replies", 8); foldChildren(timerBox.querySelector(".cards-grid"), "timers", 8);
     };
 
     const actions = h("div", { class: "row" });
     const tabsBox = h("div", { class: "scroll-x", style: "margin-bottom:16px" });
+    // 1.4.3: each card has a pinned footer (a one-line summary and a hint while there is more to scroll to) and is taller and full width
+    const footText = () => h("span", { class: "cf-text" });
+    const footMore = () => h("span", { class: "cf-more" }, icon("chevronDown", 14), "Scroll for more");
+    const cmdText = footText(), replyText = footText(), timerText = footText();
+    const cmdMore = footMore(), replyMore = footMore(), timerMore = footMore();
     const panes: Record<Tab, HTMLElement> = {
-      commands: card("terminal", "Commands", listBox, { flush: true, scroll: true }),
-      replies: card("reply", "Auto-replies", replyBox, { flush: true, scroll: true }),
-      timers: card("timer", "Timers", timerBox, { flush: true, scroll: true }),
+      commands: card("terminal", "Commands", listBox, { flush: true, scroll: true, cls: "tall", footer: [cmdText, cmdMore] }),
+      replies: card("reply", "Auto-replies", replyBox, { flush: true, scroll: true, cls: "tall", footer: [replyText, replyMore] }),
+      timers: card("timer", "Timers", timerBox, { flush: true, scroll: true, cls: "tall", footer: [timerText, timerMore] }),
+    };
+    const drawFeet = () => {
+      cmdText.textContent = `${plural(items.length, "custom command")} · ${builtin.length} built in`;
+      replyText.textContent = `${triggers.length} ${triggers.length === 1 ? "auto-reply" : "auto-replies"} · ${triggers.filter((t) => t.enabled).length} on`;
+      timerText.textContent = `${plural(timers.length, "timer")} · ${timers.filter((t) => t.enabled).length} on`;
     };
     const drawTabs = () => {
       const label: Record<Tab, string> = { commands: `Commands (${items.length})`, replies: `Auto-replies (${triggers.length})`, timers: `Timers (${timers.length})` };

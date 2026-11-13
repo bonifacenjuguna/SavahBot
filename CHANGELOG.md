@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.3
+
+Taller scrolling cards with footers that are never cut off.
+
+### Fixed
+- **Commands, Auto-replies and Timers** were short and their bottom edge looked cut off. They are now full-width cards that open at a comfortable height (at least about 480 px) and grow up to nearly the whole visible screen, then scroll inside themselves exactly as before. The search bar on Commands stays at the top while you scroll, and the last row has room to breathe.
+- **Every other card that scrolls inside itself** (Bans ledger, Activity log, Insights past streams, the long lists in Knowledge, and History on Moderation) uses the same, taller limit instead of about two thirds of the screen, with space under the last row.
+
+### Added
+- **Pinned footer** on Commands, Auto-replies and Timers: a one-line summary (for example "12 custom commands · 14 built in", or how many are switched on) that always stays in view under the list.
+- **"Scroll for more" hint:** a soft fade and a small bobbing arrow appear at the bottom of a scrolling card while there is more below, and go away at the end. Scrolling itself is unchanged.
+
 ## 1.4.2
 
 ### Added

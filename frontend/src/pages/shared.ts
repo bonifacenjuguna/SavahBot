@@ -23,10 +23,31 @@ export function pageHead(_iconName: string, title: string, _description?: string
 /** A short, stable id made from a title ("Waiting for you" becomes "waiting-for-you"). Cards use it so a saved layout can find them again. */
 export const cardSlug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30) || "card";
 
-/** A titled card. `body` goes under the header; use `flush` when the body supplies its own padding. */
-export function card(iconName: string | null, title: string, body: Child, opts: { flush?: boolean; actions?: Child; cls?: string; id?: string; scroll?: boolean } = {}): HTMLElement {
-  return h("section", { class: `block${opts.flush ? " flush" : ""}${opts.scroll ? " fixed-scroll" : ""}${opts.cls ? " " + opts.cls : ""}`, "data-card": opts.id ?? cardSlug(title) },
-    h("header", null, h("h2", null, iconName ? icon(iconName, 18) : null, title), opts.actions ?? null), body);
+/** Cards that scroll inside themselves show a soft fade at the bottom while there is more to see (1.4.3). Only a data mark is set here; the look is in fixed.css. */
+function watchMore(block: HTMLElement, scroller: HTMLElement): void {
+  let frame = 0;
+  const update = () => {
+    frame = 0;
+    block.dataset.more = String(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 6);
+  };
+  const soon = () => { if (!frame) frame = requestAnimationFrame(update); };
+  scroller.addEventListener("scroll", soon, { passive: true });
+  if (typeof MutationObserver !== "undefined") new MutationObserver(soon).observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(soon).observe(scroller);
+  soon();
+}
+
+/** A titled card. `body` goes under the header; use `flush` when the body supplies its own padding.
+ *  `scroll` makes the body scroll inside the card; `footer` is a strip that stays pinned under it and is never cut off (1.4.3). */
+export function card(iconName: string | null, title: string, body: Child, opts: { flush?: boolean; actions?: Child; cls?: string; id?: string; scroll?: boolean; footer?: Child } = {}): HTMLElement {
+  const el = h("section", { class: `block${opts.flush ? " flush" : ""}${opts.scroll ? " fixed-scroll" : ""}${opts.cls ? " " + opts.cls : ""}`, "data-card": opts.id ?? cardSlug(title) },
+    h("header", null, h("h2", null, iconName ? icon(iconName, 18) : null, title), opts.actions ?? null), body,
+    opts.footer ? h("footer", { class: "card-foot" }, opts.footer) : null);
+  if (opts.scroll) {
+    const scroller = el.querySelector<HTMLElement>(":scope > :not(header):not(footer)");
+    if (scroller) watchMore(el, scroller);
+  }
+  return el;
 }
 
 export function empty(iconName: string, text: string): HTMLElement {
