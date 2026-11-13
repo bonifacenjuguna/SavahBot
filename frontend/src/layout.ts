@@ -19,7 +19,7 @@ export type LayoutKind = "desktop" | "mobile";
 export type LayoutStore = Record<LayoutKind, Record<string, string[]>>;
 
 export const LAYOUT_PAGES: { id: string; title: string }[] = [
-  { id: "desk", title: "Desk" }, { id: "insights", title: "Insights" }, { id: "notifications", title: "Notifications" }, { id: "weather", title: "Weather" },
+  { id: "desk", title: "Desk" }, { id: "moderation", title: "Moderation" }, { id: "insights", title: "Insights" }, { id: "notifications", title: "Notifications" }, { id: "weather", title: "Weather" },
 ];
 
 // ------------------------------------------------------------------ the saved layouts (shared by every page)

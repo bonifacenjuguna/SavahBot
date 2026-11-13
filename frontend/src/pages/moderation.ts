@@ -1,4 +1,5 @@
 import { tabRail } from "../nav.js";
+import { pageLayout } from "../layout.js";
 import { get, patch, post } from "../api.js";
 import { busy, dateTime, debounce, downloadCsv, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
@@ -128,16 +129,21 @@ export const moderation: Page = {
     applyTabs();
     tabRail(tabs, "mod-tabs");
 
+    // 1.4.2: the cards can be dragged into the order you like (Edit layout, same as Desk and the other pages)
+    const lay = pageLayout("moderation");
+    const rules = h("div", { class: "mod-rules", "data-card": "rules", "data-label": "Rules and tools" }, lab.el, phrasesTool.el);
+    const grid = h("div", { class: "mod-grid" }, queueCard, rules, historyCard);
     mount(root,
-      pageHead("shield", "Moderation", "Decide what the bot does, review what it did, and tune what it looks for."),
+      pageHead("shield", "Moderation", "Decide what the bot does, review what it did, and tune what it looks for.", h("div", { class: "row" }, lay.button)),
       card("sliders", "Mode", h("div", { class: "body mod-mode" }, h("strong", { class: "mod-sub" }, "What should the bot do?"), modeBox, levelBox)),
       tabs,
-      h("div", { class: "mod-grid" }, queueCard, h("div", { class: "mod-rules" }, lab.el, phrasesTool.el), historyCard));
+      grid);
+    lay.arrange([grid, rules]);      // the queue, the rules column and History can swap places; the two rule tools can swap inside the rules column
 
     const all = () => Promise.all([loadPending(), loadHistory()]).catch((e) => toast(e.message, "error"));
     void all();
     void phrasesTool.load().catch((e) => toast(e.message, "error"));
     const offs = [feed.on("mod_pending", all), feed.on("mod_resolved", all), onStatus((st) => { if (st.hub.mod_mode !== mode) { mode = st.hub.mod_mode; drawMode(); } })];
-    return () => offs.forEach((f) => f());
+    return () => { lay.dispose(); offs.forEach((f) => f()); };
   },
 };

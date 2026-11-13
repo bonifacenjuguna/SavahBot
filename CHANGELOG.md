@@ -2,6 +2,9 @@
 
 ## 1.4.2
 
+### Added
+- **Moderation can be arranged** like Desk, Insights, Notifications and Weather: press the grid button at the top right (or search "Edit layout"), then drag the Waiting for you card, the rules column and History into the order you like, and the two rule tools inside the rules column. Desktop and Mobile layouts are kept separately and can be reset or exported under Settings, Appearance. The Mode card stays at the top.
+
 ### Fixed
 - **Desk, "Waiting for you"** is a fixed-height card the same size as the Chat card on a computer, and the list scrolls inside it (mouse wheel and touch). It no longer sticks.
 - **Moderation, History:** the old "Load more" button is gone. History loads up to 500 actions at once and scrolls inside its card.

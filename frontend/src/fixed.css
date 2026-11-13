@@ -85,3 +85,11 @@ html[data-motion="reduce"] .chat-drawer, html[data-motion="reduce"] .cd-inner, h
 
 /* ------------------------------------------------------------------ the page opens with the layout-button row tucked above the top: scroll up to see it */
 .main.peek { min-height: calc(100dvh + var(--peek, 0px)); }
+
+/* ------------------------------------------------------------------ Moderation: arranging (1.4.2)
+ * Below a computer-width screen the rules column has no box of its own (display: contents, each tool is a tab), so it cannot be dragged there:
+ * its grab bar and outline stay out of the way. The two tools inside it, and the queue and History, can still be arranged. */
+@media (max-width: 999px) {
+  .mod-rules.arr-item { outline: 0; }
+  .mod-rules > .arr-colbar { display: none; }
+}

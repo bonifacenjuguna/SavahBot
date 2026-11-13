@@ -36,7 +36,7 @@ export function renderAppearance(el: HTMLElement): void {
     toastCard(), layoutsCard());
 }
 
-/** 1.4.0: the arrangement of cards on Desk, Insights, Notifications and Weather. Reset only what you pick; export and import both layouts as a file. */
+/** 1.4.0: the arrangement of cards on Desk, Moderation, Insights, Notifications and Weather. Reset only what you pick; export and import both layouts as a file. */
 function layoutsCard(): HTMLElement {
   const host = h("div", { class: "k-stack", style: "padding:6px 14px 12px" }, h("p", { class: "muted small" }, "Loading…"));
   const pickedPages = new Set<string>(), pickedKinds = new Set<LayoutKind>(["desktop", "mobile"]);
@@ -91,7 +91,7 @@ function layoutsCard(): HTMLElement {
     };
     const imp = h("button", { class: "btn", type: "button", onclick: () => file.click() }, icon("upload", 15), "Import layouts");
     mount(host,
-      lede("Drag cards into the order you like with Edit layout at the top of Desk, Insights, Notifications and Weather. Phones and tablets keep their own arrangement, separate from your computer's. Layouts are saved on the server."),
+      lede("Drag cards into the order you like with Edit layout at the top of Desk, Moderation, Insights, Notifications and Weather. Phones and tablets keep their own arrangement, separate from your computer's. Layouts are saved on the server."),
       h("strong", { class: "small" }, "Pages"), h("div", null, pageRows),
       h("strong", { class: "small" }, "Which layout"), h("div", null, kindRows),
       h("p", { class: "muted small", role: "status" }, summary),

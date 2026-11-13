@@ -17,7 +17,7 @@ from starlette.requests import Request
 from .routes import ApiError, R, parse
 
 KEY = "ui_layouts"
-PAGES = ("desk", "insights", "notifications", "weather")
+PAGES = ("desk", "moderation", "insights", "notifications", "weather")
 KINDS = ("desktop", "mobile")
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,39}$")
 MAX_CARDS = 40
