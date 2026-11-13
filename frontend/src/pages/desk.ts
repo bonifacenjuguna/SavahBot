@@ -63,7 +63,7 @@ export const desk: Page = {
 
     const list = h("div", { class: "feed", tabindex: 0, "aria-label": "Live chat", role: "log" });
     const jump = h("button", { class: "jump", type: "button", hidden: true, onclick: () => { stick = true; list.scrollTop = list.scrollHeight; jump.hidden = true; } }, icon("arrowDown", 15), "Latest");
-    const pendingBox = h("div", { class: "mod-scroll" });
+    const pendingBox = h("div", { class: "q-scroll" });
     const health = h("div");
     const kpis = h("div", { class: "kpis swipe" });
     const savedMode = () => range.active || viewing !== null;
@@ -460,7 +460,7 @@ export const desk: Page = {
     };
     setSize(sizeIdx);
 
-    const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true, id: "queue", actions: queueCount, cls: "mod-queue desk-queue" });
+    const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true, id: "queue", actions: queueCount, cls: "desk-queue" });
     const statusPane = card("activity", "Bot status", health, { flush: true, id: "status" });
     const live = liveCard();
     live.el.dataset.card = "live";

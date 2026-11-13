@@ -1,4 +1,4 @@
-/* SavahBot 1.4.1 - the chat controls drawer, equal-height Waiting card, and cards that scroll inside themselves. Loaded last. */
+/* SavahBot 1.4.2 - the chat controls drawer, equal-height Waiting card, and cards that scroll inside themselves. Loaded last. */
 
 /* ------------------------------------------------------------------ one height for the chat card and the Waiting card
  * --desk-h is the height of the Chat card. The Waiting card uses the same number, so the two always match and a long list
@@ -18,13 +18,17 @@
   .cols > .chat-card:not(.zoomed) .say, .cols > .chat-card:not(.zoomed) .chips { flex: none; }
 }
 
-/* Waiting for you (Desk): built exactly like the Moderation card (.mod-queue + .mod-scroll): a fixed box the size of the chat card,
- * header stays put, the list scrolls inside with the mouse wheel or touch. */
-.block.desk-queue:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); min-height: 0; max-height: var(--desk-h); }
+/* Waiting for you (Desk card beside the chat): a fixed box the same size as the Chat card, the header stays put and the list scrolls inside it.
+ * The expanded chat (zoom) moves the same .q-scroll list into its own panel and is not touched by these rules. */
+.block.desk-queue:not([data-hidden="true"]) { display: flex !important; flex-direction: column; height: var(--desk-h) !important; min-height: 0; max-height: var(--desk-h); }
+@media (min-width: 1000px) {
+  /* the very same height the Chat card has on a computer (desktop.css), written out so nothing else can change it */
+  .block.desk-queue:not([data-hidden="true"]) { height: clamp(520px, calc(100dvh - var(--topbar-h) - 40px), 920px) !important; min-height: 520px; max-height: 920px; }
+}
 .desk-queue > header { flex: none; }
-.desk-queue > .mod-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: auto; scrollbar-width: thin; }
-.desk-queue .ap-bulk { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+.desk-queue > .q-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: auto; scrollbar-width: thin; }
 .desk-queue > header .chip[hidden] { display: none; }
+.q-scroll .ap-bulk { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
 
 /* Waiting for you (Moderation) and History below a computer-width screen (a computer already had this) */
 @media (max-width: 999px) {

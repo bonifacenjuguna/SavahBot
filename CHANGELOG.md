@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2
+
+### Fixed
+- **Desk, "Waiting for you"** is a fixed-height card the same size as the Chat card on a computer, and the list scrolls inside it (mouse wheel and touch). It no longer sticks.
+- **Expanded chat:** the waiting list beside the chat is exactly as it was in 1.4.1. The Moderation page is unchanged.
+
 ## 1.4.1
 
 A taller chat, a hidden edit button, and cards that scroll inside themselves. (Fixed before release: the Desk drew a blank page because the chat controls handle was read before it was set up.)
