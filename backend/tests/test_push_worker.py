@@ -7,7 +7,15 @@ BADGE = Path(__file__).resolve().parents[2] / "frontend" / "public" / "badge-96.
 
 
 def test_test_notification_shows_even_when_dashboard_is_focused():
-    assert 'if (watching && p.category !== "test.test") return;' in SW
+    assert 'if (watching && p.category !== "test.test") {' in SW
+
+
+def test_a_suppressed_push_still_shows_a_silent_placeholder_that_is_removed_at_once():
+    """Chrome adds its own grey "SavahBot" notification when a push shows nothing. So the suppressed branch shows a silent one and closes it."""
+    handler = SW[SW.index('addEventListener("push"'):SW.index('addEventListener("notificationclick"')]
+    quiet = handler[handler.index('if (watching'):handler.index("await self.registration.showNotification(p.title, {\n        body: p.body")]
+    assert "silent: true" in quiet and "showNotification" in quiet and ".close()" in quiet and "savahbot-quiet" in quiet
+    assert "finally" in handler                                                   # and a failure partway still ends in a visible notification
 
 
 def test_ordinary_foreground_push_is_still_suppressed_and_background_push_shows():

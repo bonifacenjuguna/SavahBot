@@ -81,7 +81,6 @@ class Notifier:
         self._secret_fn = secret_fn or (lambda: "savahbot-test-secret")
         self.telegram = telegram            # async callable(text) -> None, the hub's _notify
         self._drain_lock = asyncio.Lock()
-        self._drain_again = False
         self.fcm = Fcm(settings.firebase_project_id, settings.firebase_client_email, settings.firebase_private_key, settings.firebase_service_account_json)
         self.active: Any = None             # leader check; only the leader listens to events and sends
         self._prefs: dict[str, Any] | None = None
@@ -263,7 +262,7 @@ class Notifier:
             self._spawn(self._telegram(c, title, body))
         if eff["push"] and prefs["push"]:
             await self._queue_push(c, prefs, prio, nid, title, body, route, now)
-            self._spawn(self.drain())                    # send now instead of waiting for the next scheduler tick
+            self._spawn(self.drain(now))                 # send now instead of waiting for the next scheduler tick
         return nid
 
     def _spawn(self, coro: Any) -> None:
@@ -405,21 +404,14 @@ class Notifier:
 
     async def drain(self, now: float | None = None) -> None:
         """Sends every queued push that is due, all devices at the same moment. Called right after a notification is queued (so a phone
-        is not left waiting for the next scheduler tick) and again by the scheduler for retries and released held messages."""
+        is not left waiting for the next scheduler tick) and again by the scheduler for retries and released held messages. Passes never
+        overlap: a second caller waits its turn and then finds what the first one already sent marked as sent, so nothing goes out twice."""
         if self.active is not None and not self.active():
             return
-        if self._drain_lock.locked():
-            self._drain_again = True                     # a send is running: it will look once more when it finishes
-            return
         async with self._drain_lock:
-            while True:
-                self._drain_again = False
-                t = time.time() if now is None else now
-                due = await self.db.fetchall("SELECT * FROM notify_deliveries WHERE status = 'queued' AND next_try <= ? ORDER BY next_try LIMIT 40", (t,))
-                await asyncio.gather(*(self._send_safe(row, t) for row in due))
-                if not self._drain_again:
-                    break
-                now = None
+            t = time.time() if now is None else now
+            due = await self.db.fetchall("SELECT * FROM notify_deliveries WHERE status = 'queued' AND next_try <= ? ORDER BY next_try LIMIT 40", (t,))
+            await asyncio.gather(*(self._send_safe(row, t) for row in due))
 
     async def _send_safe(self, row: dict[str, Any], now: float) -> None:
         try:

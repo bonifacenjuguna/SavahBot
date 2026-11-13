@@ -166,6 +166,16 @@ Knowledge packs, detectors, learning, live lists.
 | POST | `/api/knowledge/suggestions/{sid:int}/dismiss` |  |
 | POST | `/api/knowledge/test` |  |
 
+## layouts
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/layouts` |  |
+| GET | `/api/layouts/export` |  |
+| POST | `/api/layouts/import` |  |
+| POST | `/api/layouts/reset` |  |
+| POST | `/api/layouts/save` |  |
+
 ## live
 
 | Method | Path | Notes |

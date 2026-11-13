@@ -20,9 +20,12 @@ export function pageHead(_iconName: string, title: string, _description?: string
     actions ? h("div", { class: "ph-actions" }, actions) : null);
 }
 
+/** A short, stable id made from a title ("Waiting for you" becomes "waiting-for-you"). Cards use it so a saved layout can find them again. */
+export const cardSlug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30) || "card";
+
 /** A titled card. `body` goes under the header; use `flush` when the body supplies its own padding. */
-export function card(iconName: string | null, title: string, body: Child, opts: { flush?: boolean; actions?: Child; cls?: string } = {}): HTMLElement {
-  return h("section", { class: `block${opts.flush ? " flush" : ""}${opts.cls ? " " + opts.cls : ""}` },
+export function card(iconName: string | null, title: string, body: Child, opts: { flush?: boolean; actions?: Child; cls?: string; id?: string } = {}): HTMLElement {
+  return h("section", { class: `block${opts.flush ? " flush" : ""}${opts.cls ? " " + opts.cls : ""}`, "data-card": opts.id ?? cardSlug(title) },
     h("header", null, h("h2", null, iconName ? icon(iconName, 18) : null, title), opts.actions ?? null), body);
 }
 

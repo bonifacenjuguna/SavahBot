@@ -1,4 +1,4 @@
-/* SavahBot service worker (1.3.9).
+/* SavahBot service worker (1.4.0).
  *
  * Deliberately small. The dashboard is a live, signed-in tool, so there is nothing safe to keep for offline use. This worker exists for three reasons:
  *   1. a friendly "you are offline" page when the installed app is opened without a connection (instead of the browser's error page);
@@ -17,7 +17,7 @@
  */
 "use strict";
 
-const VERSION = "1.3.9";
+const VERSION = "1.4.0";
 const CACHE = `savahbot-offline-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -95,7 +95,7 @@ self.addEventListener("push", (event) => {
       // EXCEPT the explicit test notification: its whole purpose is to prove that a system notification appears, so it must show even
       // while the dashboard is open. (A tests/test_push_worker.py regression test pins this line. Do not drop the exception.)
       if (watching && p.category !== "test.test") {
-        // 1.3.9: skipping the alert used to make Chrome post its own generic one. Show a silent placeholder and take it down at once
+        // 1.4.0: skipping the alert used to make Chrome post its own generic one. Show a silent placeholder and take it down at once
         // instead: that satisfies Chrome, and you only see the dashboard's own pop-up.
         await self.registration.showNotification(p.title, { body: "", tag: "savahbot-quiet", silent: true, icon: "/icon-192.png", badge: "/badge-96.png" });
         shown = true;

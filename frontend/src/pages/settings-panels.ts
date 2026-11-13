@@ -4,6 +4,7 @@ import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { ACCENTS, TOAST_SECS, accentPref, densityPref, motionPref, progressPref, setAccent, setDensity, setMotion, setProgress, setText, setToastMode, setToastPos, setToastSecs, textPref, toastMode, toastPos, toastSecs, type Accent, type ToastMode, type ToastPos } from "../appearance.js";
 import { appContext, applyTheme, shortcutList, themePref, type ThemePref } from "../ui.js";
+import { LAYOUT_PAGES, currentLayouts, loadLayouts, setLayouts, type LayoutKind } from "../layout.js";
 import { getPWAState, installApp, openInstallGuide } from "../pwa.js";
 import { card } from "./shared.js";
 import { figures, lede, seg } from "./widgets.js";
@@ -32,7 +33,73 @@ export function renderAppearance(el: HTMLElement): void {
     row("Density", "Compact fits more on screen.", density), row("Text size", "Makes everything bigger, not just the text.", text),
     row("Progress line", "The thin line along the top of the screen. It can follow how far you have scrolled, stay full with no movement, or be hidden.", progress),
     row("Reduce motion", "Also on automatically if your device asks for it.", motion)), ),
-    toastCard());
+    toastCard(), layoutsCard());
+}
+
+/** 1.4.0: the arrangement of cards on Desk, Insights, Notifications and Weather. Reset only what you pick; export and import both layouts as a file. */
+function layoutsCard(): HTMLElement {
+  const host = h("div", { class: "k-stack", style: "padding:6px 14px 12px" }, h("p", { class: "muted small" }, "Loading…"));
+  const pickedPages = new Set<string>(), pickedKinds = new Set<LayoutKind>(["desktop", "mobile"]);
+  const KIND_LABEL: Record<LayoutKind, string> = { desktop: "Desktop", mobile: "Mobile (phones and tablets)" };
+
+  const draw = (): void => {
+    const lay = currentLayouts();
+    const custom = (page: string, kind: LayoutKind) => (lay[kind][page]?.length ?? 0) > 0;
+    const pageRows = LAYOUT_PAGES.map((p) => {
+      const cb = h("input", { type: "checkbox", checked: pickedPages.has(p.id), "aria-label": `Reset ${p.title}`, onchange: (e: Event) => { (e.target as HTMLInputElement).checked ? pickedPages.add(p.id) : pickedPages.delete(p.id); draw(); } });
+      const chips = (["desktop", "mobile"] as const).map((k) => h("span", { class: `chip ${custom(p.id, k) ? "ok" : ""}` }, `${k === "desktop" ? "Desktop" : "Mobile"}: ${custom(p.id, k) ? "arranged" : "default"}`));
+      return h("label", { class: "n-row", style: "cursor:pointer" }, h("div", { class: "n-row-main" }, h("strong", null, p.title)), h("span", { class: "row wrap" }, chips), cb);
+    });
+    const kindRows = (["desktop", "mobile"] as const).map((k) => {
+      const cb = h("input", { type: "checkbox", checked: pickedKinds.has(k), "aria-label": `Include the ${k} layout`, onchange: (e: Event) => { (e.target as HTMLInputElement).checked ? pickedKinds.add(k) : pickedKinds.delete(k); draw(); } });
+      return h("label", { class: "n-row", style: "cursor:pointer" }, h("div", { class: "n-row-main" }, h("strong", null, KIND_LABEL[k])), cb);
+    });
+    const pages = LAYOUT_PAGES.filter((p) => pickedPages.has(p.id)), kinds = (["desktop", "mobile"] as const).filter((k) => pickedKinds.has(k));
+    const count = pages.reduce((n, p) => n + kinds.filter((k) => custom(p.id, k)).length, 0);
+    const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+    const summary = !pages.length ? "Tick the pages to reset." : !kinds.length ? "Tick Desktop, Mobile or both." :
+      `Will reset: ${list(pages.map((p) => p.title))}, ${kinds.length === 2 ? "both layouts" : kinds[0] === "desktop" ? "Desktop layout" : "Mobile layout"}. ${count ? `${count} arranged ${count === 1 ? "layout" : "layouts"} will go back to the default order.` : "Nothing there has been arranged, so nothing will change."}`;
+    const reset = h("button", { class: "btn", type: "button", disabled: !pages.length || !kinds.length || !count }, icon("undo", 15), "Reset selected") as HTMLButtonElement;
+    reset.onclick = () => {
+      if (!window.confirm(`${summary}\n\nThis cannot be undone. Export your layouts first if you might want them back.`)) return;
+      busy(reset, async () => {
+        const r = await post<{ layouts: unknown; reset: number }>("/api/layouts/reset", { pages: pages.map((p) => p.id), kinds });
+        setLayouts(r.layouts); pickedPages.clear(); draw();
+        toast(r.reset ? `Reset ${r.reset} ${r.reset === 1 ? "layout" : "layouts"}` : "Nothing to reset");
+      });
+    };
+    const exp = h("button", { class: "btn", type: "button" }, icon("download", 15), "Export layouts") as HTMLButtonElement;
+    exp.onclick = () => busy(exp, async () => {
+      const data = await get<unknown>("/api/layouts/export");
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+      const a = h("a", { href: url, download: `savahbot-layouts-${new Date().toISOString().slice(0, 10)}.json` });
+      document.body.appendChild(a); a.click(); a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+      toast("Layouts exported");
+    });
+    const file = h("input", { type: "file", accept: "application/json,.json", hidden: true, "aria-label": "Choose a layouts file" }) as HTMLInputElement;
+    file.onchange = async () => {
+      const f = file.files?.[0]; file.value = "";
+      if (!f) return;
+      if (f.size > 200_000) { fail(new Error("That file is too big to be a layouts file.")); return; }
+      try {
+        const data = JSON.parse(await f.text()) as unknown;
+        const r = await post<{ layouts: unknown; imported: number }>("/api/layouts/import", { data });
+        setLayouts(r.layouts); draw();
+        toast(`Imported ${r.imported} ${r.imported === 1 ? "layout" : "layouts"}`);
+      } catch (e) { fail(e instanceof SyntaxError ? new Error("That file is not valid JSON.") : e); }
+    };
+    const imp = h("button", { class: "btn", type: "button", onclick: () => file.click() }, icon("upload", 15), "Import layouts");
+    mount(host,
+      lede("Drag cards into the order you like with Edit layout at the top of Desk, Insights, Notifications and Weather. Phones and tablets keep their own arrangement, separate from your computer's. Layouts are saved on the server."),
+      h("strong", { class: "small" }, "Pages"), h("div", null, pageRows),
+      h("strong", { class: "small" }, "Which layout"), h("div", null, kindRows),
+      h("p", { class: "muted small", role: "status" }, summary),
+      h("div", { class: "row wrap" }, reset, exp, imp, file));
+  };
+  draw();
+  void loadLayouts(true).then(draw);
+  return card("grid", "Page layouts", host, { flush: true, id: "page-layouts" });
 }
 
 /** 1.3.3: the small pop-up messages ("Saved", "Copied", errors): on or off, top or bottom, and how long they stay. Swipe one sideways to dismiss it. */

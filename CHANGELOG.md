@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0
+
+Arrange your pages: drag cards into the order you like.
+
+### Added
+- **Drag and arrange cards** on Desk, Insights, Notifications and Weather. Press **Edit layout** at the top of the page (or press and hold a card's title on a touch screen), drag a card by its handle or title, and the others slide out of the way. Cards snap into place and never overlap. **Done** saves, **Cancel** puts everything back, **Reset** returns to the default order (kept when you press Done).
+  - **Desk:** the chat and the side column can swap sides, and the side cards (Waiting for you, Live stats, Bot status) can be reordered.
+  - **Insights:** the charts are now one grid, so any chart can go next to any other. Past streams is a card you can move too.
+  - **Keyboard:** focus a handle and use the arrow keys, Home or End. Escape cancels.
+  - **Touch:** dragging is on the handle and title only, so scrolling a page never moves a card.
+- **Two layouts per page, saved on the server:** Desktop (a keyboard and a wide screen) and Mobile (phones and tablets). Arranging one never changes the other, and both survive clearing the browser or signing in on a new device. A card that is new in a later version appears at the end; a saved layout can never hide a card.
+- **Settings, Appearance, Page layouts:** reset only what you pick (which pages, Desktop, Mobile or both) with a preview of what will change, **Export layouts** to a file with both layouts, and **Import layouts** to restore it.
+- New API: `GET /api/layouts`, `POST /api/layouts/save`, `POST /api/layouts/reset`, `GET /api/layouts/export`, `POST /api/layouts/import`. Only card ids and their order are stored.
+
+### Changed
+- Insights keeps its numbers as they are while you are arranging, and refreshes when you finish.
+
 ## 1.3.9
 
 Faster push on phones, and a Shortcuts tab in Settings on desktops.

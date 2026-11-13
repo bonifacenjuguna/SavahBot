@@ -60,6 +60,8 @@
 
   /* ------------------------------------------------------------------ Desk: chat fills the screen, side cards scroll with the page */
   .cols:has(> .chat-card) { grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr); gap: var(--gap); }
+  /* 1.4.0: when the side column has been dragged to the left of the chat, the wide column follows the chat */
+  .cols:has(> .chat-card):has(> .stack:first-child) { grid-template-columns: minmax(340px, 1fr) minmax(0, 1.7fr); }
   .cols > .chat-card:not(.zoomed) {
     position: sticky; top: calc(var(--topbar-h) + 16px);
     display: flex; flex-direction: column;

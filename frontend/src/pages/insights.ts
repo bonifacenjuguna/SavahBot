@@ -1,3 +1,4 @@
+import { pageLayout } from "../layout.js";
 import { get } from "../api.js";
 import { downloadCsv, h, mount, sheet, toast } from "../dom.js";
 import { icon } from "../icons.js";
@@ -53,6 +54,8 @@ export const insights: Page = {
   blurb: "Charts of chat and moderation",
   render(root) {
     const body = h("div", { class: "stack ins" });
+    const lay = pageLayout("insights");
+    let heldLoad = false, heldStreams = false;     // a refresh that came in while you were arranging, done when you finish
     let hours = 24;
     let last: Summary | null = null;
     let seq = 0;
@@ -164,6 +167,7 @@ export const insights: Page = {
       const wideHours = Math.min(hours * 2, 24 * 14);
       const [s, wide] = await Promise.all([get<Summary>(`/api/analytics?hours=${hours}`), get<Summary>(`/api/analytics?hours=${wideHours}`).catch(() => null)]);
       if (mine !== seq) return;   // a newer range was chosen while this one loaded
+      if (lay.editing) { heldLoad = true; return; }     // do not rebuild the cards under your hand
       last = s;
       const t = s.totals;
       const msgs = t.messages ?? 0, flagged = t.flagged_messages ?? 0;
@@ -181,30 +185,36 @@ export const insights: Page = {
       const anyData = msgs > 0 || (t.actions ?? 0) > 0;
       const people = (s.levels.bot ?? 0) ? msgs - (s.levels.bot ?? 0) : msgs;
 
-      mount(body,
-        h("div", { class: "kpis", style: "margin-bottom:0" },
+      const kpiRow = h("div", { class: "kpis", style: "margin-bottom:0" },
           kpi("", "message", "Messages", n0(msgs), `${avg < 10 ? avg.toFixed(1) : Math.round(avg)} per minute on average`, sparkline(s.timeline.map((b) => b.messages)), dMsg && { ...dMsg, good: dMsg.dir === "flat" ? null : dMsg.dir === "up" }, ["messages", "chatters"]),
           kpi("", "users", "Chatters", n0(t.chatters ?? 0), "Distinct people"),
           kpi(flagged ? "warn" : "", "flag", "Flagged", n0(flagged), `${flagRate}% of messages`, sparkline(s.timeline.map((b) => b.flagged), "s2"), dFlag && { ...dFlag, good: dFlag.dir === "flat" ? null : dFlag.dir === "down" }, ["flagged", "deleted"]),
           kpi("", "shield", "Actions", n0(t.actions ?? 0), "Deletes, timeouts, bans"),
           kpi(t.pending ? "warn" : "", "inbox", "Waiting", n0(t.pending ?? 0), t.pending ? "Needs a decision" : "All clear"),
-          kpi("", "trending", "Peak rate", `${peak < 10 ? peak.toFixed(1) : Math.round(peak)}/min`, "Busiest moment in range")),
-        card("sparkle", "What stood out", highlights(s, { peak, peakAt: peakBucket?.t ?? 0, fmt, flagRate }), { flush: true }),
-        expandable(card("activity", "Chat activity", h("div", null,
+          kpi("", "trending", "Peak rate", `${peak < 10 ? peak.toFixed(1) : Math.round(peak)}/min`, "Busiest moment in range"));
+      const span2 = (el: HTMLElement): HTMLElement => { el.dataset.span = "2"; return el; };
+      const gridEl = h("div", { class: "ins-grid" },
+        span2(card("sparkle", "What stood out", highlights(s, { peak, peakAt: peakBucket?.t ?? 0, fmt, flagRate }), { flush: true, id: "stood-out" })),
+        span2(expandable(card("activity", "Chat activity", h("div", null,
           anyData ? areaChart(s.timeline.map((b) => ({ t: b.t, a: b.messages, b: b.flagged })), { labelA: "Messages", labelB: "Flagged", fmt, ariaLabel: `Messages over the ${RANGES.find((r) => r[0] === hours)?.[2].toLowerCase() ?? "selected range"}` }) : empty("chart", "No chat in this range yet. Try Demo mode to see charts fill in."),
           h("div", { class: "legend-inline" }, h("span", null, h("i", { class: "sw s1" }), "Messages"), h("span", null, h("i", { class: "sw s2" }), "Flagged"))),
-          { flush: true, actions: h("span", { class: "muted small" }, `One point every ${s.bucket_seconds >= 3600 ? "hour" : `${Math.round(s.bucket_seconds / 60)} min`}`) }), () => openChartDetail("Chat activity", ["messages", "flagged"], hours > 48 ? "30d" : "7d")),
-        s.hours >= 24 && msgs > 0 ? card("clock", "Busiest hours", hourStrip(s), { flush: true }) : null,
-        h("div", { class: "cols even" },
-          card("users", "Who is chatting", levelSlices.length ? donut(levelSlices, { center: n0(msgs), sub: "messages", ariaLabel: "Messages by chatter level" }) : empty("users", "Nothing to show yet."), { flush: true }),
-          expandable(card("shield", "What the bot did", outcomeSlices.length ? donut(outcomeSlices, { center: n0(t.actions ?? 0), sub: "actions", ariaLabel: "Moderation actions by outcome" }) : empty("shield", "No moderation actions in this range."), { flush: true }), () => openChartDetail("What the bot did", ["deleted", "timeouts", "bans"], "30d"))),
-        h("div", { class: "cols even" },
-          card("user", "Most active chatters", rank(s.top_chatters, people), { flush: true }),
-          h("div", { class: "stack" },
-            card("flag", "What triggered moderation", hbars(s.signals.map((x) => ({ name: nice(SIGNAL, String(x.name)), count: x.count })), "s2"), { flush: true }),
-            card("ban", "Actions by type", hbars(Object.entries(s.actions_by_type).map(([name, count]) => ({ name: nice(ACTION, name), count })), "s4"), { flush: true }))));
+          { flush: true, id: "activity", actions: h("span", { class: "muted small" }, `One point every ${s.bucket_seconds >= 3600 ? "hour" : `${Math.round(s.bucket_seconds / 60)} min`}`) }), () => openChartDetail("Chat activity", ["messages", "flagged"], hours > 48 ? "30d" : "7d"))),
+        s.hours >= 24 && msgs > 0 ? span2(card("clock", "Busiest hours", hourStrip(s), { flush: true, id: "busiest-hours" })) : null,
+          card("users", "Who is chatting", levelSlices.length ? donut(levelSlices, { center: n0(msgs), sub: "messages", ariaLabel: "Messages by chatter level" }) : empty("users", "Nothing to show yet."), { flush: true, id: "who-is-chatting" }),
+          expandable(card("shield", "What the bot did", outcomeSlices.length ? donut(outcomeSlices, { center: n0(t.actions ?? 0), sub: "actions", ariaLabel: "Moderation actions by outcome" }) : empty("shield", "No moderation actions in this range."), { flush: true, id: "what-the-bot-did" }), () => openChartDetail("What the bot did", ["deleted", "timeouts", "bans"], "30d")),
+          card("user", "Most active chatters", rank(s.top_chatters, people), { flush: true, id: "top-chatters" }),
+          card("flag", "What triggered moderation", hbars(s.signals.map((x) => ({ name: nice(SIGNAL, String(x.name)), count: x.count })), "s2"), { flush: true, id: "triggers" }),
+          span2(card("ban", "Actions by type", hbars(Object.entries(s.actions_by_type).map(([name, count]) => ({ name: nice(ACTION, name), count })), "s4"), { flush: true, id: "actions-by-type" })),
+          streams);
+      mount(body, kpiRow, gridEl);
+      lay.arrange([gridEl]);
     };
-    const streams = h("div", { class: "ins-streams" });
+    const pastCard = (inner: HTMLElement | string): HTMLElement => {
+      const c = card("activity", "Past streams", typeof inner === "string" ? h("p", { class: "muted small", style: "padding:14px" }, inner) : inner, { flush: true, id: "past-streams" });
+      c.dataset.span = "2";
+      return c;
+    };
+    let streams = pastCard("Loading…");
     const openStream = async (id: string, when: string) => {
       const d = await get<{ sample: boolean; series: { ts: number; likes: number | null; viewers: number | null }[] }>(`/api/live/streams/${encodeURIComponent(id)}`);
       const v = d.series.map((p) => p.viewers ?? 0), l = d.series.filter((p) => p.likes !== null).map((p) => p.likes as number);
@@ -216,16 +226,24 @@ export const insights: Page = {
     const loadStreams = async () => {
       const r = await get<{ sample?: boolean; items: { video_id: string; started: number; ended: number; peak_viewers: number | null; likes: number | null; samples: number }[] }>("/api/live/streams");
       const fmt = (t: number) => new Date(t * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-      mount(streams, card("activity", "Past streams", r.items.length
+      if (lay.editing) { heldStreams = true; return; }
+      const fresh = pastCard(r.items.length
         ? h("div", { class: "table-wrap" }, r.sample ? h("p", { class: "muted small", style: "padding:8px 14px 0" }, "Sample data: Demo mode has no real streams. Click a row to see its graph.") : null, h("table", { class: "cards" }, h("thead", null, h("tr", null, ["Started", "Length", "Peak watching", "Likes"].map((c) => h("th", null, c)))),
           h("tbody", null, r.items.map((x) => h("tr", { style: "cursor:pointer", tabindex: "0", role: "button", "aria-label": "Show the graph for this stream", onclick: () => void openStream(x.video_id, fmt(x.started)), onkeydown: (e: KeyboardEvent) => { if (e.key === "Enter") void openStream(x.video_id, fmt(x.started)); } }, h("td", { "data-label": "Started" }, fmt(x.started)), h("td", { "data-label": "Length" }, `${Math.max(1, Math.round((x.ended - x.started) / 60))} min`),
             h("td", { "data-label": "Peak watching" }, x.peak_viewers === null ? "n/a" : x.peak_viewers.toLocaleString()), h("td", { "data-label": "Likes" }, x.likes === null ? "hidden" : x.likes.toLocaleString()))))))
-        : empty("activity", "Likes and viewers are recorded while you are live. Streams show up here afterwards."), { flush: true }));
+        : empty("activity", "Likes and viewers are recorded while you are live. Streams show up here afterwards."));
+      streams.replaceWith(fresh);
+      streams = fresh;
     };
-    mount(root, pageHead("chart", "Insights", "How busy chat is, who is talking, and what the bot reacted to.", h("div", { class: "row" }, range, refreshBtn, exportBtn)), areaNav("insights"), body, streams);
+    mount(root, pageHead("chart", "Insights", "How busy chat is, who is talking, and what the bot reacted to.", h("div", { class: "row" }, range, refreshBtn, exportBtn, lay.button)), areaNav("insights"), body);
+    mount(body, h("div", { class: "ins-grid" }, streams));      // shown at once, before the numbers arrive
+    lay.onExit(() => {
+      if (heldLoad) { heldLoad = false; void load().catch(() => undefined); }
+      if (heldStreams) { heldStreams = false; void loadStreams().catch(() => undefined); }
+    });
     void loadStreams().catch(() => undefined);
     void load().catch((e) => toast(e.message, "error"));
     const t = window.setInterval(() => void load().catch(() => undefined), 30000);
-    return () => window.clearInterval(t);
+    return () => { window.clearInterval(t); lay.dispose(); };
   },
 };

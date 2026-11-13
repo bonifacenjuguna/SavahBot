@@ -5,6 +5,7 @@ import "./knowledge.css";
 import "./appearance.css";
 import "./polish.css";
 import "./desktop.css";
+import "./layout.css";
 import "./moderation.css";
 import "./chat-zoom.css";
 import "./streams.css";
@@ -35,6 +36,7 @@ import { activity } from "./pages/activity.js";
 import { streamSettings } from "./pages/stream-settings.js";
 import { readerSettings } from "./pages/reader-settings.js";
 import { listenForTaps, resumePush } from "./push.js";
+import { loadLayouts } from "./layout.js";
 import { moderation } from "./pages/moderation.js";
 import { commands } from "./pages/commands.js";
 import { notebook } from "./pages/notebook.js";
@@ -422,6 +424,7 @@ function showShell(): void {
   offs.push(startNotifications(() => lastStatus));
   offs.push(listenForTaps((route) => { navigate(route); }, () => void refreshBell(), () => void resumePush()));
   void resumePush();
+  void loadLayouts();                    // so a page can show your arrangement the moment it opens
   offs.push(installShortcuts(ctx));
 
   render();

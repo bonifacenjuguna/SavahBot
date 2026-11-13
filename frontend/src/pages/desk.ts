@@ -1,3 +1,4 @@
+import { pageLayout } from "../layout.js";
 import { get, post } from "../api.js";
 import { ago, busy, clock, dateTime, debounce, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
@@ -380,8 +381,9 @@ export const desk: Page = {
       return row("zap", "Redis", `${r.leader ? "Leader" : "Standby"}, ${saved}`, ["ok", r.leader ? "Leader" : "Standby"]);
     };
 
+    const lay = pageLayout("desk");
     mount(root,
-      pageHead("desk", "Desk", "Live chat, moderation requests that need your decision, and the state of the bot.", status?.hub.mode === "demo" ? h("a", { class: "btn ghost", href: "/demo" }, icon("flask", 16), "Run a scenario") : null),
+      pageHead("desk", "Desk", "Live chat, moderation requests that need your decision, and the state of the bot.", h("div", { class: "row" }, status?.hub.mode === "demo" ? h("a", { class: "btn ghost", href: "/demo" }, icon("flask", 16), "Run a scenario") : null, lay.button)),
       status?.hub.mode === "demo" ? h("div", { class: "banner demo" }, icon("flask", 18), h("span", null, "Demo mode: this chat is simulated. Open Demo to run a scenario.")) : null,
       kpis,
       tabs);
@@ -403,7 +405,7 @@ export const desk: Page = {
       expandBtn.title = open ? "Shrink chat (Esc)" : "Expand chat (F)";
     };
     paintExpand(false);
-    const chatPane = card("message", "Chat", h("div", { class: "chat-body" }, main, side), { flush: true, cls: "chat-card",
+    const chatPane = card("message", "Chat", h("div", { class: "chat-body" }, main, side), { flush: true, cls: "chat-card", id: "chat",
       actions: h("div", { class: "row nowrap chat-actions" }, h("div", { class: "row nowrap chat-tools" }, ratePill, sizeDown, sizeUp, sideToggle, readerUi.button), expandBtn) });
     const setSize = (i: number) => {
       sizeIdx = Math.max(0, Math.min(SIZES.length - 1, i));
@@ -413,10 +415,11 @@ export const desk: Page = {
     };
     setSize(sizeIdx);
 
-    const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true });
-    const statusPane = card("activity", "Bot status", health, { flush: true });
+    const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true, id: "queue" });
+    const statusPane = card("activity", "Bot status", health, { flush: true, id: "status" });
     const live = liveCard();
-    const sideStack = h("div", { class: "stack" }, queuePane, live.el, statusPane);
+    live.el.dataset.card = "live";
+    const sideStack = h("div", { class: "stack", "data-card": "side", "data-label": "Side column" }, queuePane, live.el, statusPane);
 
     const zoom = zoomToFill(chatPane, {
       onOpen: () => {
@@ -443,9 +446,11 @@ export const desk: Page = {
     for (const b of Array.from(tabs.children)) b.addEventListener("click", () => apply(b.getAttribute("data-id") ?? "chat"));
     for (const el of Object.values(panes)) el.classList.add("pane");
     apply("chat");
+    lay.arrange([cols, sideStack]);      // 1.4.0: the chat and the side column can swap places, and the side cards can be reordered
 
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      if (document.body.classList.contains("arranging")) return;
       if (e.key.toLowerCase() !== "f" || e.ctrlKey || e.metaKey || e.altKey) return;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (document.querySelector(".sheet, .palette")) return;
@@ -483,6 +488,6 @@ export const desk: Page = {
     ];
     offs.push(onStatus(() => { renderFacts(); paintStrip(); }));
     const t = window.setInterval(() => { renderFacts(); if (sessionId) paintStrip(); }, 5000);
-    return () => { offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
+    return () => { lay.dispose(); offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },
 };

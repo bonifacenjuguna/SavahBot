@@ -1,4 +1,5 @@
 /** Weather dashboard: current conditions, the next hours, the coming days. Data comes from SavahBot's backend (Open-Meteo), never straight from the browser. */
+import { type PageLayout, pageLayout } from "../layout.js";
 import { get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
@@ -88,7 +89,7 @@ function tempLine(hours: Hour[]): HTMLElement | null {
   return h("div", { class: "wx-line-wrap" }, svg) as HTMLElement;
 }
 
-function render(root: HTMLElement, o: Overview, pick: (id: number) => void, reload: (force: boolean) => void, places: Place[]): void {
+function render(root: HTMLElement, o: Overview, pick: (id: number) => void, reload: (force: boolean) => void, places: Place[], lay: PageLayout): void {
   const loc = o.location!, p = o.prefs, u = o.units, tz = o.timezone, h24 = p.clock === "24", c = o.current;
   const select = h("select", { "aria-label": "Location", onchange: (e: Event) => pick(Number((e.target as HTMLSelectElement).value)) }, places.map((x) => h("option", { value: x.id, selected: x.id === loc.id }, x.name)));
   const refresh = h("button", { class: "btn small", type: "button", "aria-label": "Refresh weather" }, icon("refresh", 15), "Refresh") as HTMLButtonElement;
@@ -104,23 +105,26 @@ function render(root: HTMLElement, o: Overview, pick: (id: number) => void, relo
   if (p.show.sun && d0) details.push(stat("sunrise", "Sunrise", clock(d0.sunrise, tz, h24)), stat("sunset", "Sunset", clock(d0.sunset, tz, h24)));
   const now = p.show.current ? card("mapPin", loc.label || loc.name, h("div", { class: "wx-now" },
     h("div", { class: "wx-big" }, icon(c.cond.icon, 56), h("div", null, h("div", { class: "wx-temp" }, `${n(c.temp)}${u.temp}`), h("div", { class: "wx-cond" }, c.cond.label), c.feels !== null ? h("div", { class: "muted small" }, `Feels like ${n(c.feels)}${u.temp}`) : null)),
-    d0 ? h("p", { class: "muted" }, `Today ${n(d0.tmin)} to ${n(d0.tmax)}${u.temp}`) : null, h("div", { class: "wx-grid" }, details)), { actions: h("div", { class: "row" }, select, refresh) }) : null;
+    d0 ? h("p", { class: "muted" }, `Today ${n(d0.tmin)} to ${n(d0.tmax)}${u.temp}`) : null, h("div", { class: "wx-grid" }, details)), { id: "now", actions: h("div", { class: "row" }, select, refresh) }) : null;
   const hourly = p.show.hourly ? card("clock", `Next ${o.hourly.length} hours`, h("div", { class: "wx-hourly-wrap" }, tempLine(o.hourly), h("div", { class: "wx-hourly", role: "list" }, o.hourly.map((x) =>
-    h("div", { class: "wx-hour", role: "listitem" }, h("span", { class: "muted small" }, clock(x.ts, tz, h24)), icon(x.cond.icon, 22), h("b", null, `${n(x.temp)}°`), h("span", { class: "small wx-pop", title: "Chance of rain" }, x.pop ? `${n(x.pop)}%` : ""))))), { flush: true }) : null;
+    h("div", { class: "wx-hour", role: "listitem" }, h("span", { class: "muted small" }, clock(x.ts, tz, h24)), icon(x.cond.icon, 22), h("b", null, `${n(x.temp)}°`), h("span", { class: "small wx-pop", title: "Chance of rain" }, x.pop ? `${n(x.pop)}%` : ""))))), { flush: true, id: "hourly" }) : null;
   const lo = Math.min(...o.daily.map((d) => d.tmin ?? 99)), hi = Math.max(...o.daily.map((d) => d.tmax ?? -99)), span = hi - lo || 1;
   const daily = p.show.daily ? card("chart", `${o.daily.length}-day forecast`, h("div", { class: "wx-days" }, o.daily.map((d, i) => h("div", { class: "wx-day" },
     h("span", { class: "wx-dn" }, dayName(d.date, i)), icon(d.cond.icon, 20), h("span", { class: "wx-pop small" }, d.pop ? `${n(d.pop)}%` : ""),
     h("span", { class: "wx-lo" }, `${n(d.tmin)}°`),
     h("span", { class: "wx-range", "aria-hidden": "true" }, h("i", { style: `left:${(((d.tmin ?? lo) - lo) / span) * 100}%;right:${100 - (((d.tmax ?? hi) - lo) / span) * 100}%` })),
-    h("span", { class: "wx-hi" }, `${n(d.tmax)}°`), h("span", { class: "wx-dc muted small" }, d.cond.label)))), { flush: true }) : null;
-  mount(root, h("div", { class: "page" }, areaNav("weather"),
-    pageHead("cloudSun", "Weather", "Conditions and forecast for your saved places.", h("a", { class: "btn small", href: "/weather-settings" }, icon("sliders", 15), "Weather settings")),
-    status, now, hourly, daily, attribution(o)));
+    h("span", { class: "wx-hi" }, `${n(d.tmax)}°`), h("span", { class: "wx-dc muted small" }, d.cond.label)))), { flush: true, id: "daily" }) : null;
+  const page = h("div", { class: "page" }, areaNav("weather"),
+    pageHead("cloudSun", "Weather", "Conditions and forecast for your saved places.", h("div", { class: "row" }, lay.button, h("a", { class: "btn small", href: "/weather-settings" }, icon("sliders", 15), "Weather settings"))),
+    status, now, hourly, daily, attribution(o));
+  mount(root, page);
+  lay.arrange([page]);
 }
 
 export const weather: Page = {
   id: "weather", title: "Weather", icon: "cloudSun", blurb: "Current weather, hourly and daily forecast",
   render(root) {
+    const lay = pageLayout("weather");
     let locId: number | null = null;
     const load = async (force: boolean): Promise<void> => {
       try {
@@ -133,7 +137,7 @@ export const weather: Page = {
           return;
         }
         locId = o.location.id;
-        render(root, o, (id) => { locId = id; void load(false); }, (f) => void load(f), places.locations);
+        render(root, o, (id) => { locId = id; void load(false); }, (f) => void load(f), places.locations, lay);
       } catch (e) {
         mount(root, h("div", { class: "page" }, areaNav("weather"), pageHead("cloudSun", "Weather"), empty("cloud", e instanceof Error ? e.message : "Weather could not load."),
           h("div", { class: "row" }, h("button", { class: "btn", type: "button", onclick: () => void load(false) }, icon("refresh", 15), "Try again"))));
@@ -141,5 +145,6 @@ export const weather: Page = {
     };
     mount(root, h("div", { class: "page" }, areaNav("weather"), pageHead("cloudSun", "Weather"), h("p", { class: "muted" }, "Loading…")));
     void load(false);
+    return () => lay.dispose();
   },
 };

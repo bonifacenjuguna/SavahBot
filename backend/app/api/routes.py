@@ -1044,6 +1044,7 @@ from . import stream_routes  # noqa: E402,F401  (stream history: one session per
 from . import access_routes  # noqa: E402,F401  (sign-in and Security & Access Centre)
 from . import backup_routes  # noqa: E402,F401  (encrypted backup and restore)
 from . import notify_routes  # noqa: E402,F401  (Notification Centre)
+from . import layout_routes  # noqa: E402,F401  (page layouts)
 from . import weather_routes  # noqa: E402,F401  (Weather)
 from . import system_routes  # noqa: E402,F401  (Settings hub, system health, data)
 from . import telegram_routes  # noqa: E402,F401  (Telegram control)

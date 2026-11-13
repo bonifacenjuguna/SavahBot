@@ -1,4 +1,5 @@
 /** Notification Centre: what reaches you, where, and when. Push (Firebase), the in-app bell and Telegram share these settings. */
+import { pageLayout } from "../layout.js";
 import { folded } from "../nav.js";
 import { del, get, patch, post } from "../api.js";
 import { busy, dateTime, h, mount, toast } from "../dom.js";
@@ -196,16 +197,20 @@ export const notifications: Page = {
   render(root, query) {
     let tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? (query.get("open") ? "history" : "overview")) as Tab;
     const body = h("div", { class: "k-stack" });
+    const lay = pageLayout("notifications");
     const tabs = seg<Tab>("Notification sections", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { tab = v; show(); });
+    let seq = 0;
     const show = () => {
+      const mine = ++seq;
       const run: Record<Tab, (el: HTMLElement) => Promise<void> | void> = { overview, categories, delivery, schedule, stats: (e) => stats(e), history, devices };
       mount(body, h("p", { class: "muted" }, "Loading…"));
       const inner = h("div", { class: "k-stack" });
-      Promise.resolve(run[tab](inner)).then(() => mount(body, inner)).catch((e) => { fail(e); mount(body, empty("alert", "This section could not load.")); });
+      Promise.resolve(run[tab](inner)).then(() => { if (mine !== seq) return; mount(body, inner); lay.arrange([inner], { prefix: `${tab}_` }); }).catch((e) => { if (mine !== seq) return; fail(e); mount(body, empty("alert", "This section could not load.")); });
     };
-    mount(root, h("div", { class: "page" }, areaNav("notifications"), pageHead("bell", "Notifications", "Choose what reaches you, where, and when."), h("div", { class: "tab-row" }, tabs.el), body));
+    mount(root, h("div", { class: "page" }, areaNav("notifications"), pageHead("bell", "Notifications", "Choose what reaches you, where, and when.", lay.button), h("div", { class: "tab-row" }, tabs.el), body));
     show();
     const wanted = Number(query.get("open"));
     if (Number.isInteger(wanted) && wanted > 0) void openNotification(wanted);     // a tap on a notification lands here and shows that notification
+    return () => lay.dispose();
   },
 };
