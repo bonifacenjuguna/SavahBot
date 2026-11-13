@@ -5,6 +5,8 @@
 Taller scrolling cards with footers that are never cut off.
 
 ### Fixed
+- **Backup import ("Add from this backup" / "Replace") failed with "Something went wrong"** on Postgres (a Railway deployment). After writing the rows, the restore moves each table's id counter forward, and it did that for tables whose id is text (Knowledge packs and feeds, Insights stream sessions), which Postgres refuses. Any restore that included Knowledge or History therefore failed, and the automatic roll-back failed the same way. Counters are now only touched for tables that have one. SQLite was never affected.
+- **Clearer backup errors:** if a restore step does fail, the message now names the cause instead of a bare server error, a failed roll-back says so and points to "Undo the last restore", and a problem writing the log entry or alert after a successful restore no longer makes the restore look failed.
 - **Activity log:** on a computer the log list spilled out of its card and was drawn over the "Keeping and alerts" card below it. The log is now a full-width card that clips and scrolls its own list, with the settings card cleanly underneath.
 - **Commands, Auto-replies and Timers** were short and their bottom edge looked cut off. They are now full-width cards that open at a comfortable height (at least about 480 px) and grow up to nearly the whole visible screen, then scroll inside themselves exactly as before. The search bar on Commands stays at the top while you scroll, and the last row has room to breathe.
 - **Every other card that scrolls inside itself** (Bans ledger, Activity log, Insights past streams, the long lists in Knowledge, and History on Moderation) uses the same, taller limit instead of about two thirds of the screen, with space under the last row.

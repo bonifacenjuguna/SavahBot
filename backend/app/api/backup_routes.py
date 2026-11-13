@@ -1,13 +1,17 @@
 """Backup & Recovery API: encrypted export, verify, import, undo, and the guarded first-run restore."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.requests import Request
 
+from ..access.service import AccessError
 from ..backup.container import BackupError
 from .routes import ApiError, R, client_ip, parse
+
+logger = logging.getLogger("savahbot.backup")
 
 
 class _In(BaseModel):
@@ -37,6 +41,11 @@ def _guard(fn):
             return await fn(request, c)
         except BackupError as exc:
             raise ApiError(str(exc), 400) from exc
+        except (ApiError, AccessError, ValidationError, ValueError, KeyError, PermissionError):     # the shared handler already words these
+            raise
+        except Exception as exc:     # 1.4.3: a bare "Something went wrong" told you nothing; name the step that failed (details are in the server log)
+            logger.exception("Backup step failed")
+            raise ApiError(f"The backup step failed: {type(exc).__name__}: {str(exc)[:200]}", 500) from exc
     return inner
 
 

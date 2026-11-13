@@ -158,11 +158,18 @@ async def restore_snapshot(c: Any, snap: dict[str, Any]) -> None:
 
 
 async def _fix_sequences(c: Any, tables: list[str]) -> None:
+    """After rows are written with their own ids (Postgres only), move each table's counter past the highest id so new rows do not collide.
+    1.4.3: tables whose id is text (knowledge_packs, knowledge_feeds, intel_packs, stream_sessions) have no counter. The old code asked for MAX(id) of
+    those and Postgres refused, which failed every restore that included Knowledge or History, and the rollback then failed the same way."""
     if c.db.backend == "sqlite":
         return
     for t in tables:
-        if "id" in await _columns(c.db, t):
-            await c.db.execute(f"SELECT setval(pg_get_serial_sequence('{t}', 'id'), COALESCE((SELECT MAX(id) FROM {t}), 1))")
+        if "id" not in await _columns(c.db, t):
+            continue
+        seq = await c.db.fetchone("SELECT pg_get_serial_sequence(?, 'id') AS seq", (t,))
+        if not seq or not seq["seq"]:
+            continue
+        await c.db.execute(f"SELECT setval(?::text::regclass, COALESCE((SELECT MAX(id) FROM {t}), 1))", (seq["seq"],))
 
 
 async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str) -> dict[str, Any]:

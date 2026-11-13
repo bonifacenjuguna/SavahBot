@@ -96,8 +96,12 @@ class BackupService:
         kv = [k for s in chosen for k in archive.SCOPES[s]["kv"]]
         if "credentials" in chosen:
             tables.append("settings")
-        snap = await archive.snapshot_tables(self.c, tables, kv)
-        await self._keep_undo(snap)
+        try:
+            snap = await archive.snapshot_tables(self.c, tables, kv)
+            await self._keep_undo(snap)
+        except Exception as exc:     # nothing has been changed yet
+            logger.exception("Could not make the safety copy before restoring")
+            raise BackupError(f"Nothing was changed: the safety copy could not be made. ({exc})") from exc
         try:
             results = {s: await archive.apply_scope(self.c, s, parts[s], mode) for s in chosen}
             if mode == "replace":                       # verify: after a replace, the table sizes must be exactly the backup's
@@ -115,14 +119,21 @@ class BackupService:
             await self._reload(chosen)
         except Exception as exc:
             logger.exception("Import failed; rolling back")
-            await archive.restore_snapshot(self.c, snap)
+            try:
+                await archive.restore_snapshot(self.c, snap)
+            except Exception as back:     # 1.4.3: say so plainly instead of a bare server error (the safety copy is still kept for Undo)
+                logger.exception("Rolling back after a failed import also failed")
+                raise BackupError(f"The import failed ({exc}) and putting things back also failed ({back}). Press Undo the last restore to try again; a safety copy was kept.") from exc
             await self._reload(chosen)
             raise BackupError(f"The import failed and everything was put back as it was. ({exc})") from exc
         report["applied"] = results
         report["can_undo"] = True
-        await self.c.access.audit("backup_imported", None, "", f"{mode}: {', '.join(chosen)}")
-        await self.c.access._alert(f"♻️ A backup was restored ({mode}: {', '.join(chosen)}).")
-        self.c.bus.publish("backup", {"title": "Backup restored", "text": f"{mode}: {', '.join(chosen)}"})
+        try:      # the data is already restored: a problem writing the log or sending the alert must not make the restore look like it failed
+            await self.c.access.audit("backup_imported", None, "", f"{mode}: {', '.join(chosen)}")
+            await self.c.access._alert(f"♻️ A backup was restored ({mode}: {', '.join(chosen)}).")
+            self.c.bus.publish("backup", {"title": "Backup restored", "text": f"{mode}: {', '.join(chosen)}"})
+        except Exception:
+            logger.exception("Restored, but the log entry or alert could not be written")
         return report
 
     async def _keep_undo(self, snap: dict[str, Any]) -> None:

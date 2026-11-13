@@ -239,3 +239,36 @@ async def test_demo_rows_are_never_exported_or_imported(api):
     assert st == 200 and done["applied"]["chat"]["demo_skipped"] == 1 and done["applied"]["chat"]["added"] == 1
     left = {r["msg_id"]: r["demo"] for r in await db.fetchall("SELECT msg_id, demo FROM chat_messages")}
     assert left == {"r2": 0, "d1": 1}      # replace swapped the real rows only; the existing demo row was left alone; nothing demo came in
+
+
+# ------------------------------------------------------------------ 1.4.3: restoring on Postgres
+class _FakePg:
+    """Stands in for Postgres: tables with a text id (knowledge_packs) have no counter, and asking for MAX(id) of one is an error, as on the real thing."""
+    backend = "postgres"
+
+    def __init__(self):
+        self.ran = []
+
+    async def fetchall(self, sql, params=()):
+        table = params[0] if params else ""
+        return [{"column_name": "id"}] if table in ("knowledge_packs", "commands") else []
+
+    async def fetchone(self, sql, params=()):
+        return {"seq": "commands_id_seq" if params[0] == "commands" else None}
+
+    async def execute(self, sql, params=()):
+        if "knowledge_packs" in sql:
+            raise AssertionError("must not ask for MAX(id) of a table with a text id")
+        self.ran.append((sql, params))
+        return 0
+
+
+class _FakeCtx:
+    def __init__(self):
+        self.db = _FakePg()
+
+
+async def test_sequence_repair_skips_tables_with_text_ids_on_postgres():
+    c = _FakeCtx()
+    await archive._fix_sequences(c, ["knowledge_packs", "commands", "quotes"])
+    assert len(c.db.ran) == 1 and c.db.ran[0][1] == ("commands_id_seq",)
