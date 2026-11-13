@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import json
 import re
 import time
@@ -13,6 +14,8 @@ import zipfile
 from typing import Any
 
 from .container import BackupError
+
+logger = logging.getLogger("savahbot.backup")
 
 SCOPES: dict[str, dict[str, Any]] = {
     "settings": {"label": "Settings you changed in the dashboard", "default": True, "tables": ["settings"], "kv": []},
@@ -209,7 +212,7 @@ async def write_rows(db: Any, table: str, cols: list[str], rows: list[list[Any]]
                     await db.execute(sql, prep(r))
                 except Exception as exc:
                     out["failed"] += 1
-                    out["error"] = out["error"] or f"{table}: {str(exc)[:160]}"
+                    out["error"] = out["error"] or f"{table}: {type(exc).__name__}: {str(exc)[:300]}"
         if tick:
             tick(len(chunk))
     out["added"] = max(0, await _count(db, table) - before)
@@ -254,10 +257,61 @@ async def _fix_sequences(c: Any, tables: list[str]) -> None:
         await c.db.execute(f"SELECT setval(?::text::regclass, COALESCE((SELECT MAX(id) FROM {t}), 1))", (seq["seq"],))
 
 
+async def _apply_table(c: Any, scope: str, t: str, d: dict[str, Any], mode: str, report: dict[str, Any], step: Any, cancel: Any) -> None:
+    db = c.db
+    target = "settings" if t == "settings_secret" else t
+    if not await _exists(db, target):
+        step(len(d["rows"]))
+        return
+    have = set(await _columns(db, target))
+    cols = [k for k in d["columns"] if k in have]
+    idx = [d["columns"].index(k) for k in cols]
+    rows = [[r[i] for i in idx] for r in d["rows"]]
+    demo_table = "demo" in have
+    if demo_table and "demo" in d["columns"]:     # an older backup may hold Demo-mode sample rows: they are left out, never imported
+        di = cols.index("demo")
+        kept = [r for r in rows if not int(r[di] or 0)]
+        report["demo_skipped"] += len(rows) - len(kept)
+        rows = kept
+    if scope == "credentials" and t == "access_totp":
+        from ..access import totp
+        si = cols.index("secret")
+        rows = [[*r[:si], totp.seal(c.access._secret, r[si]), *r[si + 1:]] for r in rows]
+    if mode == "replace":
+        if target == "settings":     # settings and secret overrides share a table but belong to different scopes
+            for r in await db.fetchall("SELECT key FROM settings"):
+                if bool(SECRETISH.search(r["key"])) == (t == "settings_secret"):
+                    await db.execute("DELETE FROM settings WHERE key = ?", (r["key"],))
+        elif demo_table:             # replace only swaps the real rows; the Demo sample rows are not part of any backup
+            await db.execute(f"DELETE FROM {target} WHERE demo = 0")
+        else:
+            await db.execute(f"DELETE FROM {target}")
+    if mode == "merge" or t == "settings_secret":
+        noid = [k for k in cols if k != "id"]
+        existing = {tuple(str(r[k]) for k in noid) for r in await db.fetchall(f"SELECT {', '.join(noid)} FROM {target}")} if noid else set()
+        if existing:
+            fresh = [r for r in rows if tuple(str(v) for k, v in zip(cols, r) if k != "id") not in existing]
+            report["skipped"] += len(rows) - len(fresh)
+            step(len(rows) - len(fresh))
+            rows = fresh
+    got = await write_rows(db, target, cols, rows, keep_id=(mode == "replace"), strict=(mode == "replace"), tick=step, cancel=cancel)
+    report["added"] += got["added"]
+    report["failed"] += got["failed"]
+    report["skipped"] += max(0, len(rows) - got["added"] - got["failed"])    # a unique name that already exists (for example a command): the existing one wins in merge mode
+    report["error"] = report["error"] or got["error"]
+    try:
+        await _fix_sequences(c, [target])
+    except Exception as exc:         # only tidies the id counter: it must never fail a restore whose rows are already in
+        logger.warning("Could not reset the id counter of %s: %s", target, exc)
+        report["warnings"].append(f"{t}: could not reset its id counter ({str(exc)[:120]})")
+
+
 async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str, tick: Any = None, cancel: Any = None) -> dict[str, Any]:
     """Apply one scope. replace = the backup's rows become the only rows. merge = add what is missing, keep everything else.
-    `tick(n)` is told how many of the backup's rows have been dealt with, so the screen can show real progress; `cancel()` says whether to stop."""
-    db, report = c.db, {"added": 0, "skipped": 0, "demo_skipped": 0, "failed": 0, "error": ""}
+    `tick(n)` is told how many of the backup's rows have been dealt with, so the screen can show real progress; `cancel()` says whether to stop.
+    Merge never gives up on a whole restore because of one table: a table that fails is reported (its name and the database's own words) and the
+    others carry on. Replace is all or nothing: the first problem stops it and everything is put back."""
+    report: dict[str, Any] = {"added": 0, "skipped": 0, "demo_skipped": 0, "failed": 0, "error": "", "warnings": []}
     for t, d in data["tables"].items():
         raw = len(d["rows"])
         dealt = 0
@@ -267,50 +321,19 @@ async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str, tick:
             dealt += n
             if tick:
                 tick(n)
-        target = "settings" if t == "settings_secret" else t
-        if not await _exists(db, target):
-            step(raw)
-            continue
-        have = set(await _columns(db, target))
-        cols = [k for k in d["columns"] if k in have]
-        idx = [d["columns"].index(k) for k in cols]
-        rows = [[r[i] for i in idx] for r in d["rows"]]
-        demo_table = "demo" in have
-        if demo_table and "demo" in d["columns"]:     # an older backup may hold Demo-mode sample rows: they are left out, never imported
-            di = cols.index("demo")
-            kept = [r for r in rows if not int(r[di] or 0)]
-            report["demo_skipped"] += len(rows) - len(kept)
-            rows = kept
-        if scope == "credentials" and t == "access_totp":
-            from ..access import totp
-            si = cols.index("secret")
-            rows = [[*r[:si], totp.seal(c.access._secret, r[si]), *r[si + 1:]] for r in rows]
-        if mode == "replace":
-            if target == "settings":     # settings and secret overrides share a table but belong to different scopes
-                for r in await db.fetchall("SELECT key FROM settings"):
-                    if bool(SECRETISH.search(r["key"])) == (t == "settings_secret"):
-                        await db.execute("DELETE FROM settings WHERE key = ?", (r["key"],))
-            elif demo_table:             # replace only swaps the real rows; the Demo sample rows are not part of any backup
-                await db.execute(f"DELETE FROM {target} WHERE demo = 0")
-            else:
-                await db.execute(f"DELETE FROM {target}")
-        if mode == "merge" or t == "settings_secret":
-            noid = [k for k in cols if k != "id"]
-            existing = {tuple(str(r[k]) for k in noid) for r in await db.fetchall(f"SELECT {', '.join(noid)} FROM {target}")} if noid else set()
-            if existing:
-                fresh = [r for r in rows if tuple(str(v) for k, v in zip(cols, r) if k != "id") not in existing]
-                report["skipped"] += len(rows) - len(fresh)
-                step(len(rows) - len(fresh))
-                rows = fresh
-        got = await write_rows(db, target, cols, rows, keep_id=(mode == "replace"), strict=(mode == "replace"), tick=step, cancel=cancel)
-        report["added"] += got["added"]
-        report["failed"] += got["failed"]
-        report["skipped"] += max(0, len(rows) - got["added"] - got["failed"])    # a unique name that already exists (for example a command): the existing one wins in merge mode
-        report["error"] = report["error"] or got["error"]
-        await _fix_sequences(c, [target])
+        try:
+            await _apply_table(c, scope, t, d, mode, report, step, cancel)
+        except BackupError:
+            raise
+        except Exception as exc:
+            if mode == "replace":
+                raise BackupError(f"{t}: {type(exc).__name__}: {str(exc)[:300]}") from exc
+            logger.exception("Merge could not finish table %s", t)
+            report["failed"] += max(0, raw - dealt)
+            report["error"] = report["error"] or f"{t}: {type(exc).__name__}: {str(exc)[:300]}"
         if tick and dealt < raw:
             tick(raw - dealt)
     for k, v in data["kv"].items():
-        if mode == "replace" or not await db.kv_get(k):
-            await db.kv_set(k, str(v))
+        if mode == "replace" or not await c.db.kv_get(k):
+            await c.db.kv_set(k, str(v))
     return report

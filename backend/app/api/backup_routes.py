@@ -82,24 +82,25 @@ async def import_(request: Request, c: Any) -> dict:
     return await c.backup.import_(b.data, b.key, b.passphrase, b.mode, b.scopes, b.dry_run)
 
 
-async def _allowed(request: Request, c: Any) -> None:
-    """Progress and cancel are open on a fresh install (the first-run restore happens before anyone can sign in) and need a sign-in everywhere else."""
+async def _allowed(request: Request, c: Any) -> bool:
+    """Progress and cancel are open on a fresh install (the first-run restore happens before anyone can sign in) and need a sign-in everywhere else.
+    1.4.3: they answer "not allowed" in the body and never with a 401, because the dashboard treats any 401 as "your session ended" and would sign you
+    out in the middle of a restore."""
     if await c.backup.fresh():
-        return
-    if await c.access.authenticate(request.headers.get("authorization", ""), allow_limited=False) is None:
-        raise ApiError("Sign in to continue.", 401)
+        return True
+    return await c.access.authenticate(request.headers.get("authorization", ""), allow_limited=False) is not None
 
 
 @R.add("/backup/progress", ["GET"], public=True)
 async def progress(request: Request, c: Any) -> dict:
-    await _allowed(request, c)
+    if not await _allowed(request, c):
+        return {"state": "idle", "auth": False}
     return c.backup.progress_info()
 
 
 @R.add("/backup/cancel", ["POST"], public=True)
 async def cancel(request: Request, c: Any) -> dict:
-    await _allowed(request, c)
-    return {"ok": c.backup.request_cancel()}
+    return {"ok": c.backup.request_cancel() if await _allowed(request, c) else False}
 
 
 @R.add("/backup/undo", ["POST"])

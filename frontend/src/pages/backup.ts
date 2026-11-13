@@ -10,10 +10,11 @@ import { lede, seg } from "./widgets.js";
 interface Info { scopes: { id: string; label: string; default: boolean; rows: number }[]; undo_available: boolean; last_export: number | null }
 interface Exported { filename: string; key: string; fingerprint: string; size: number; data: string; passphrase: boolean }
 interface Summary { fingerprint: string; created: number; app_version: string; passphrase: boolean; scopes: { id: string; label: string; rows: number }[]; plan?: Record<string, Record<string, number>>; applied?: Record<string, { added: number; skipped: number; failed?: number; error?: string }> }
-interface Prog { state: "idle" | "running" | "done" | "failed"; id?: string; stage?: string; pct?: number; elapsed?: number; cancellable?: boolean; error?: string;
+interface Prog { state: "idle" | "running" | "done" | "failed"; id?: string; stage?: string; pct?: number; elapsed?: number; cancellable?: boolean; error?: string; where?: string; kind?: string;
   result?: { added: number; skipped: number; failed: number; error: string; fingerprint: string; mode: string } | null;
   scopes?: { id: string; label: string; state: "wait" | "run" | "done"; done: number; total: number }[] }
 
+import { APP_VERSION } from "../version.js";
 const fail = (e: unknown) => toast(e instanceof Error ? e.message : String(e), "error");
 const mb = (n: number) => (n > 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
 
@@ -156,12 +157,22 @@ export function restoreForm(opts: { firstRun?: boolean; onDone?: () => void }): 
       done.onclick = () => { if (opts.firstRun) out.closest(".sheet")?.querySelector<HTMLButtonElement>("[aria-label=\"Close\"]")?.click(); mount(out); opts.onDone?.(); };
       panel.append(h("div", { class: "row rs-actions" }, ...(kind === "done" ? [done] : [again, back])));
     };
-    const summary = (res: { added: number; skipped: number; failed: number; error: string; fingerprint: string }): HTMLElement[] => [
+    const summary = (res: { added: number; skipped: number; failed: number; error: string; fingerprint: string; warnings?: string[] }): HTMLElement[] => [
       h("span", null, `${num(res.added)} rows added`), res.skipped ? h("span", null, `, ${num(res.skipped)} were already here`) : null,
       res.failed ? h("div", { class: "rs-warn" }, icon("alert", 14), ` ${num(res.failed)} rows could not be added${res.error ? ` (${res.error})` : ""}.`) : null,
+      ...(res.warnings ?? []).map((w) => h("div", { class: "rs-warn" }, icon("alert", 14), ` ${w}`)),
       h("div", { class: "muted small" }, `Fingerprint ${res.fingerprint}.${opts.firstRun ? " You can sign in now." : " If settings or sign-in methods were included, reload the page."}`),
     ].filter(Boolean) as HTMLElement[];
-    const failed = (msg: string) => finish("failed", [h("span", null, msg)]);
+    const failed = (msg: string) => {
+      finish("failed", [h("span", null, msg)]);
+      // technical details, one tap to copy, so a problem can be pinned down without guessing (1.4.3)
+      void get<Prog>("/api/backup/progress").catch(() => ({ state: "idle" }) as Prog).then((p) => {
+        const text = [`SavahBot ${APP_VERSION} backup restore`, `Mode: ${mode}`, `Parts: ${[...picked].join(", ")}`, `Failed during: ${p.id !== prev && p.where ? p.where : "unknown"}`,
+          `Server said: ${msg}`, p.kind && p.id !== prev ? `Error type: ${p.kind}` : "", `Time: ${new Date().toISOString()}`].filter(Boolean).join("\n");
+        const copy = h("button", { class: "btn small", type: "button", onclick: () => { void navigator.clipboard?.writeText(text).then(() => toast("Details copied", "ok")); } }, icon("copy", 14), "Copy details");
+        panel.querySelector(".rs-actions")?.before(h("details", { class: "rs-details" }, h("summary", null, "Technical details"), h("pre", null, text), copy));
+      });
+    };
 
     try {
       const body = { ...base(), mode, scopes: [...picked], dry_run: false };

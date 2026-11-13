@@ -327,3 +327,29 @@ async def test_import_reports_progress_and_can_be_cancelled_and_rolled_back():
     await task
     assert svc.progress_info()["state"] == "failed"
     assert (await c.db.fetchone("SELECT COUNT(*) AS n FROM quotes"))["n"] == 1200                   # everything was put back
+
+
+async def test_merge_carries_on_when_one_table_fails_and_replace_does_not():
+    c = await _mem_service()
+    data = {"tables": {"quotes": {"columns": ["id", "body", "author", "created"], "rows": [[1, "a", "x", 1.0], [2, "b", "x", 1.0]]},
+                       "notes": {"columns": ["id", "body", "tags", "pinned", "created", "updated"], "rows": [[1, "n", "", 0, 1.0, 1.0]]}}, "kv": {}}
+    real = archive._apply_table
+
+    async def broken(c, scope, t, d, mode, report, step, cancel):
+        if t == "quotes":
+            raise RuntimeError("database said no")
+        return await real(c, scope, t, d, mode, report, step, cancel)
+    archive._apply_table = broken
+    try:
+        r = await archive.apply_scope(c, "community", data, "merge")
+        assert r["failed"] == 2 and "quotes: RuntimeError: database said no" in r["error"]       # named, with the database's words
+        assert (await c.db.fetchone("SELECT COUNT(*) AS n FROM notes"))["n"] == 1                # the next table was still restored
+        with pytest.raises(BackupError, match="quotes"):
+            await archive.apply_scope(c, "community", data, "replace")
+    finally:
+        archive._apply_table = real
+
+
+async def test_progress_and_cancel_never_answer_401(api):
+    st, body = await api.call("GET", "/api/backup/progress")
+    assert st == 200 and body["state"] in ("idle", "done", "failed", "running")

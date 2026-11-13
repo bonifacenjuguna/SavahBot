@@ -141,7 +141,8 @@ class BackupService:
         try:
             await self._do_import(run, parts, chosen, mode, report)
         except Exception as exc:
-            run.update(state="failed", error=str(exc), stage="Failed", finished=time.time(), cancellable=False)
+            where = next((x["label"] for x in run["scopes"] if x["state"] == "run"), run["stage"])
+            run.update(state="failed", error=str(exc), where=where, kind=type(exc).__name__, stage="Failed", finished=time.time(), cancellable=False)
             raise
         return report
 
@@ -203,7 +204,7 @@ class BackupService:
         added = sum(r["added"] for r in results.values())
         run.update(state="done", stage="Finished", pct=100, finished=time.time(), cancellable=False,
                    result={"added": added, "skipped": sum(r["skipped"] for r in results.values()), "failed": sum(r["failed"] for r in results.values()),
-                           "error": next((r["error"] for r in results.values() if r["error"]), ""), "fingerprint": report["fingerprint"], "mode": mode})
+                           "error": next((r["error"] for r in results.values() if r["error"]), ""), "warnings": [w for r in results.values() for w in r.get("warnings", [])], "fingerprint": report["fingerprint"], "mode": mode})
         try:      # the data is already restored: a problem writing the log or sending the alert must not make the restore look like it failed
             await self.c.access.audit("backup_imported", None, "", f"{mode}: {', '.join(chosen)}")
             await self.c.access._alert(f"♻️ A backup was restored ({mode}: {', '.join(chosen)}).")

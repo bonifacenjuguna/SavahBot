@@ -177,3 +177,7 @@ html[data-motion="reduce"] .chat-drawer, html[data-motion="reduce"] .cd-inner, h
 .rs-actions { gap: 8px; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .rs-panel, .rs-ring, .rs-fill, .rs-spin, .rs-item.done .rs-mark, .rs-panel .rs-ring > svg { animation: none !important; } .rs-fill, .rs-mini > span { transition: none; } }
 html[data-motion="reduce"] .rs-panel, html[data-motion="reduce"] .rs-ring, html[data-motion="reduce"] .rs-fill, html[data-motion="reduce"] .rs-spin { animation: none !important; }
+.rs-details { font-size: .82rem; }
+.rs-details summary { cursor: pointer; color: var(--muted); }
+.rs-details pre { margin: 8px 0; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 6%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+.rs-warn + .rs-warn { margin-top: 2px; }
