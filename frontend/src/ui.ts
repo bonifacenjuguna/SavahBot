@@ -7,7 +7,7 @@ import type { Page } from "./pages/types.js";
 import { installApp, getPWAState } from "./pwa.js";
 import { refreshStatus, status } from "./state.js";
 import { navigate } from "./router.js";
-import { canEditLayout, editLayout } from "./layout.js";
+import { canEditLayout, doneLayout, editLayout } from "./layout.js";
 
 // ------------------------------------------------------------------ theme
 export type ThemePref = "system" | "light" | "dark";
@@ -86,12 +86,21 @@ export function installShortcuts(ctx: AppContext): () => void {
     }
   };
   document.addEventListener("keydown", onKey);
-  return () => document.removeEventListener("keydown", onKey);
+  // 1.4.3: Shift + E starts Edit layout on a page that can be arranged, and saves (Done) when pressed again while arranging.
+  // Its own listener (capture phase, matched by physical key) so it works whatever the page or keyboard layout does with a plain "e";
+  // Ctrl + E is left alone because the browser uses it for the address bar.
+  const onLayoutKey = (e: KeyboardEvent) => {
+    if (e.code !== "KeyE" || !e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.repeat || typing(e.target)) return;
+    if (document.querySelector(".sheet, .palette, .popover, .overlay")) return;
+    if (editLayout() || doneLayout()) { e.preventDefault(); e.stopPropagation(); }
+  };
+  document.addEventListener("keydown", onLayoutKey, true);
+  return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("keydown", onLayoutKey, true); };
 }
 
 /** The full list of shortcuts as a grid of keys and what they do. Used by the pop-up sheet and by Settings, Shortcuts, so the two never differ. */
 export function shortcutList(ctx: AppContext): HTMLElement {
-  const rows: [string, string][] = [["Ctrl / Cmd + K", "Search and jump anywhere"], ["/", "Open search"], ["?", "This list"]];
+  const rows: [string, string][] = [["Ctrl / Cmd + K", "Search and jump anywhere"], ["/", "Open search"], ["?", "This list"], ["Shift + E", "Edit layout (press again to save, Esc cancels)"]];
   const goRows = Object.entries(SHORTCUT_KEYS).map(([id, k]) => [`g then ${k}`, `Go to ${ctx.pages.find((p) => p.id === id)?.title ?? id}`] as [string, string]);
   return h("div", { class: "keys" }, [...rows, ...goRows].flatMap(([k, d]) => [h("span", null, k.split(" ").map((p) => (p === "then" || p === "+" ? ` ${p} ` : h("kbd", null, p)))), h("span", { class: "muted" }, d)]));
 }

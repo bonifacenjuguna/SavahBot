@@ -51,7 +51,9 @@
 .block.fixed-scroll:not([hidden]):not([data-hidden="true"]) { display: flex !important; flex-direction: column; max-height: var(--fs-max); position: relative; }
 .block.fixed-scroll > header { flex: none; }
 .block.fixed-scroll > :not(header):not(footer):not(.arr-handle) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; scroll-padding-bottom: 12px; }
-.sp-card.sp-scroll { display: flex; flex-direction: column; gap: 10px; max-height: var(--fs-max); }
+/* 1.4.3 Activity log: on a computer the column layout (desktop.css) forced these cards to display: block, so the list spilled out of the card and
+ * drew over the "Keeping and alerts" card below it. display: flex is now forced, the card clips what is inside it, and it takes the whole row. */
+.sp-card.sp-scroll { display: flex !important; flex-direction: column; gap: 10px; max-height: var(--fs-max); min-height: min(420px, var(--fs-max)); overflow: hidden; column-span: all !important; break-inside: avoid; }
 .sp-card.sp-scroll > :first-child { flex: none; }
 .sp-card.sp-scroll > :not(:first-child) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; }
 

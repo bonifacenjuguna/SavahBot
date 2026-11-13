@@ -435,12 +435,15 @@ export function pageLayout(page: string): PageLayout {
     groups = [];
   }
 
-  const api: ActiveLayout = { start: () => { if (!editing && groups.some((g) => g.isConnected) && allIds().length >= 2) { enter(); return true; } return false; }, can: () => !editing && groups.some((g) => g.isConnected) && allIds().length >= 2 };
+  const api: ActiveLayout = { done: () => { if (!editing) return false; finish(true); return true; }, start: () => { if (!editing && groups.some((g) => g.isConnected) && allIds().length >= 2) { enter(); return true; } return false; }, can: () => !editing && groups.some((g) => g.isConnected) && allIds().length >= 2 };
   return { button, arrange, get editing() { return editing; }, onExit: (fn) => { exitFn = fn; }, dispose: () => { if (active === api) active = null; dispose(); } };
 }
 
 /** The page on screen that can be arranged, so the search palette can offer "Edit layout" without knowing which page it is. */
-interface ActiveLayout { start(): boolean; can(): boolean }
+interface ActiveLayout { start(): boolean; can(): boolean; done(): boolean }
 let active: ActiveLayout | null = null;
 export const canEditLayout = (): boolean => !!active?.can();
 export const editLayout = (): boolean => !!active?.start();
+
+/** The "e" shortcut (1.4.3): saves and leaves arranging, when the page is being arranged. */
+export const doneLayout = (): boolean => !!active?.done();
