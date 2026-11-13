@@ -145,16 +145,18 @@ export function zoomToFill(card: HTMLElement, hooks: { onOpen?: () => void; onCl
   let scrim: HTMLElement | null = null;
   let timer = 0;
   const px = (n: number) => `${Math.round(n)}px`;
-  /** Where the card goes: the area right of the sidebar and under the top bar; the whole screen on a phone. */
+  /** Where the card goes. On a phone: the whole screen. On a computer: the whole window with an even margin all round, centred, so it is as big as it
+   *  can be and sits in the middle of what you are looking at (the old version measured the area beside the side menu and drifted left of centre). */
   const place = () => {
     const phone = matchMedia("(max-width: 719px)").matches;
     if (phone) { card.style.left = "0"; card.style.top = "0"; card.style.width = "100%"; card.style.height = "100%"; return; }
-    const stage = document.querySelector(".stage") as HTMLElement | null;
-    const top = (document.querySelector(".topbar") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 0;
-    const r = stage?.getBoundingClientRect() ?? { left: 0, width: window.innerWidth } as DOMRect;
-    const gap = 10;
-    card.style.left = px(r.left + gap); card.style.top = px(top + gap);
-    card.style.width = px(r.width - gap * 2); card.style.height = px(window.innerHeight - top - gap * 2);
+    const vw = document.documentElement.clientWidth || window.innerWidth;      // clientWidth leaves out a scrollbar, innerWidth does not
+    const margin = Math.max(12, Math.min(28, Math.round(vw * 0.016)));
+    const width = Math.min(vw - margin * 2, 2000);
+    card.style.left = px((vw - width) / 2);
+    card.style.top = px(margin);
+    card.style.width = px(width);
+    card.style.height = px(window.innerHeight - margin * 2);
   };
   const onResize = () => { if (open) place(); };
   const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && open && !document.querySelector(".sheet, .popover, .palette")) { e.stopPropagation(); api.close(); } };
@@ -182,8 +184,8 @@ export function zoomToFill(card: HTMLElement, hooks: { onOpen?: () => void; onCl
       scrim.addEventListener("click", () => api.close());
       document.body.appendChild(scrim);
       card.classList.add("zoomed", "zoom-in");
+      document.body.classList.add("no-scroll", "zoom-open");      // the page scrollbar goes away here, so measure after it
       place();
-      document.body.classList.add("no-scroll", "zoom-open");
       window.addEventListener("resize", onResize);
       document.addEventListener("keydown", onKey, true);
       try { hooks.onOpen?.(); } catch (err) { console.error(err); }

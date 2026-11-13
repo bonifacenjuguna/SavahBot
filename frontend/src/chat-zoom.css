@@ -14,3 +14,18 @@
 .chat-card.zoomed .zs-head { flex: none; }
 /* the waiting list keeps its own approve-all row in view while it scrolls */
 .chat-card.zoomed .zs-body .ap-bulk { top: -10px; margin: -10px -10px 0; padding-top: 10px; }
+
+/* 1.4.0: the expanded chat on a computer. The chat and the waiting list are two separate panels with space between them and around them,
+ * the waiting list is wider so a request is readable without opening it, and the messages are a little larger. */
+@media (min-width: 1000px) {
+  .chat-card.zoomed .chat-body {
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 30%, 480px);
+    gap: 16px; padding: 16px;
+    background: color-mix(in srgb, var(--bg) 70%, var(--panel));
+  }
+  .chat-card.zoomed .chat-main,
+  .chat-card.zoomed .zoom-side { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: none; }
+  .chat-card.zoomed .zs-head { padding: 14px 16px; }
+  .chat-card.zoomed .zs-body { padding: 12px; }
+}
+@media (min-width: 720px) { .chat-card.zoomed .feed { font-size: calc(1.06rem * var(--chat-scale, 1)); } }

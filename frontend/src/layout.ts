@@ -14,7 +14,6 @@
 import { get, post } from "./api.js";
 import { h, toast } from "./dom.js";
 import { icon } from "./icons.js";
-import { hasKeyboard } from "./ui.js";
 
 export type LayoutKind = "desktop" | "mobile";
 export type LayoutStore = Record<LayoutKind, Record<string, string[]>>;
@@ -30,7 +29,7 @@ let loaded = false;
 let inflight: Promise<void> | null = null;
 
 /** Phones and tablets share the "mobile" layout. The same test the keyboard shortcuts use. */
-export const layoutKind = (): LayoutKind => (hasKeyboard() ? "desktop" : "mobile");
+export const layoutKind = (): LayoutKind => (matchMedia("(max-width: 719px), (pointer: coarse)").matches ? "mobile" : "desktop");
 
 function clean(raw: unknown): LayoutStore {
   const out = blank();
@@ -105,8 +104,16 @@ export function pageLayout(page: string): PageLayout {
   let mo: MutationObserver | null = null;
   const offs: (() => void)[] = [];
 
-  const button = h("button", { class: "btn small layout-btn", type: "button", "aria-pressed": "false", hidden: true, title: "Drag the cards on this page into the order you like" },
-    icon("grid", 15), h("span", null, "Edit layout")) as HTMLButtonElement;
+  // Icon only: it takes almost no room. The label is for screen readers and the tooltip.
+  const button = h("button", { class: "btn small layout-btn", type: "button", "aria-pressed": "false", hidden: true }) as HTMLButtonElement;
+  const paintButton = (): void => {
+    const label = editing ? "Done arranging" : "Edit layout";
+    button.title = editing ? "Done arranging (saves)" : "Edit layout: drag the cards on this page into the order you like";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", String(editing));
+    button.replaceChildren(icon(editing ? "check" : "grid", 18));
+  };
+  paintButton();
   button.addEventListener("click", () => (editing ? finish(true) : enter()));
 
   const idOf = (el: HTMLElement): string => ids.get(el) ?? "";
@@ -144,6 +151,7 @@ export function pageLayout(page: string): PageLayout {
     defaults = new Map(groups.map((g) => [g, itemsOf(g)]));
     applySaved();
     button.hidden = allIds().length < 2;
+    active = api;
     watchChildren();
     if (!loaded) void loadLayouts().then(() => { if (!editing && groups === next) applySaved(); });
     mq?.removeEventListener("change", onMedia);
@@ -181,7 +189,7 @@ export function pageLayout(page: string): PageLayout {
     editing = true;
     snapshot = new Map(groups.map((g) => [g, orderOf(g)]));
     document.body.classList.add("arranging");
-    button.setAttribute("aria-pressed", "true");
+    paintButton();
     for (const g of groups) {
       g.classList.add("arr-group");
       for (const el of orderOf(g)) decorate(el);
@@ -204,7 +212,6 @@ export function pageLayout(page: string): PageLayout {
     offs.push(() => document.removeEventListener("keydown", esc));
     // if the page is left while editing (the address changed), clean up
     watch = window.setInterval(() => { if (!groups.some((g) => g.isConnected)) finish(false, true); }, 500);
-    button.querySelector("span")!.textContent = "Done";
     announce("Layout editing is on.");
   }
 
@@ -236,8 +243,7 @@ export function pageLayout(page: string): PageLayout {
     undecorate();
     bar?.remove(); bar = say = hint = null;
     document.body.classList.remove("arranging");
-    button.setAttribute("aria-pressed", "false");
-    const label = button.querySelector("span"); if (label) label.textContent = "Edit layout";
+    paintButton();
   }
 
   /** `save` keeps the arrangement; otherwise everything goes back to how it was when editing began. `quiet` skips the exit callback (a re-arrange is under way). */
@@ -429,5 +435,12 @@ export function pageLayout(page: string): PageLayout {
     groups = [];
   }
 
-  return { button, arrange, get editing() { return editing; }, onExit: (fn) => { exitFn = fn; }, dispose };
+  const api: ActiveLayout = { start: () => { if (!editing && groups.some((g) => g.isConnected) && allIds().length >= 2) { enter(); return true; } return false; }, can: () => !editing && groups.some((g) => g.isConnected) && allIds().length >= 2 };
+  return { button, arrange, get editing() { return editing; }, onExit: (fn) => { exitFn = fn; }, dispose: () => { if (active === api) active = null; dispose(); } };
 }
+
+/** The page on screen that can be arranged, so the search palette can offer "Edit layout" without knowing which page it is. */
+interface ActiveLayout { start(): boolean; can(): boolean }
+let active: ActiveLayout | null = null;
+export const canEditLayout = (): boolean => !!active?.can();
+export const editLayout = (): boolean => !!active?.start();

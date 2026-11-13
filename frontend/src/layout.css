@@ -1,6 +1,9 @@
 /* Drag and arrange (1.4.0). Only does anything while the page is in "Edit layout" mode (body.arranging). */
 
-.layout-btn { gap: 6px; }
+/* icon only, and always at the far right of the title row (the phone rules that stretch header buttons must not widen it) */
+.layout-btn, .ph-actions .layout-btn { flex: 0 0 auto; width: 38px; height: 38px; padding: 0; justify-content: center; margin-left: auto; }
+.layout-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ph-actions > .row:has(> .layout-btn) { justify-content: flex-end; flex: 1 1 auto; }
 
 /* the Insights cards live in one grid so any card can be moved next to any other */
 .ins-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap, 16px); align-items: stretch; }

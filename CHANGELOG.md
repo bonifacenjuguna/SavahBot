@@ -5,7 +5,7 @@
 Arrange your pages: drag cards into the order you like.
 
 ### Added
-- **Drag and arrange cards** on Desk, Insights, Notifications and Weather. Press **Edit layout** at the top of the page (or press and hold a card's title on a touch screen), drag a card by its handle or title, and the others slide out of the way. Cards snap into place and never overlap. **Done** saves, **Cancel** puts everything back, **Reset** returns to the default order (kept when you press Done).
+- **Drag and arrange cards** on Desk, Insights, Notifications and Weather. Press the small grid button at the far right of the page's title row (or search "Edit layout" with Ctrl or Cmd + K, or press and hold a card's title on a touch screen), drag a card by its handle or title, and the others slide out of the way. Cards snap into place and never overlap. **Done** saves, **Cancel** puts everything back, **Reset** returns to the default order (kept when you press Done).
   - **Desk:** the chat and the side column can swap sides, and the side cards (Waiting for you, Live stats, Bot status) can be reordered.
   - **Insights:** the charts are now one grid, so any chart can go next to any other. Past streams is a card you can move too.
   - **Keyboard:** focus a handle and use the arrow keys, Home or End. Escape cancels.
@@ -15,6 +15,7 @@ Arrange your pages: drag cards into the order you like.
 - New API: `GET /api/layouts`, `POST /api/layouts/save`, `POST /api/layouts/reset`, `GET /api/layouts/export`, `POST /api/layouts/import`. Only card ids and their order are stored.
 
 ### Changed
+- **Expanded chat on a computer (Desk):** it now fills the whole window with an equal margin on every side, so it is bigger and sits in the centre (before, it was sized from the area beside the side menu and drifted to the left, partly because the page scrollbar disappeared after it was measured). The chat and "Waiting for you" are two separate panels with a gap between them, the waiting list is wider (about 30% of the width, 340 to 480 px) so a request can be read without opening it, and messages are slightly larger. Phones are unchanged.
 - Insights keeps its numbers as they are while you are arranging, and refreshes when you finish.
 
 ## 1.3.9
