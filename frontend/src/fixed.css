@@ -18,11 +18,13 @@
   .cols > .chat-card:not(.zoomed) .say, .cols > .chat-card:not(.zoomed) .chips { flex: none; }
 }
 
-/* Waiting for you (Desk): same height as the chat, the list scrolls inside */
-.block.q-fixed:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); }
-.q-fixed > header { flex: none; }
-.q-fixed > .q-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-.q-scroll .ap-bulk { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+/* Waiting for you (Desk): built exactly like the Moderation card (.mod-queue + .mod-scroll): a fixed box the size of the chat card,
+ * header stays put, the list scrolls inside with the mouse wheel or touch. */
+.block.desk-queue:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); min-height: 0; max-height: var(--desk-h); }
+.desk-queue > header { flex: none; }
+.desk-queue > .mod-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: auto; scrollbar-width: thin; }
+.desk-queue .ap-bulk { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+.desk-queue > header .chip[hidden] { display: none; }
 
 /* Waiting for you (Moderation) and History below a computer-width screen (a computer already had this) */
 @media (max-width: 999px) {
