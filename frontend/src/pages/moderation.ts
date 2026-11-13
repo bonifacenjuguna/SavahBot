@@ -57,7 +57,7 @@ export const moderation: Page = {
     let hNeedle = "";
     let hRange: RangeValue = { label: "", active: false };
     let hMore = false;
-    const PAGE = 60;
+    const PAGE = 500;   // the most the server sends in one go; History scrolls inside its card, so there is no Load more button
     const loadPending = async () => {
       const items = (await get<{ items: Action[] }>("/api/moderation/pending")).items;
       queueCount.hidden = !items.length;
@@ -82,9 +82,8 @@ export const moderation: Page = {
       : empty("history", hRange.active || hNeedle || hFilter !== "all" ? `No actions match${hRange.active ? ` for ${hRange.label.toLowerCase()}` : ""}.` : "No moderation actions yet.");
     const historyBody = h("div");
     const summary = h("div", { class: "muted small hist-summary" });
-    const moreBtn = h("button", { class: "btn small ghost", type: "button", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await fetchHistory(historyItems.length); }) }, icon("arrowDown", 15), "Load more");
     const drawHistory = () => {
-      mount(historyBody, historyTable(historyItems), hMore ? h("div", { class: "body" }, moreBtn) : null);
+      mount(historyBody, historyTable(historyItems));
       summary.textContent = historyItems.length ? `${historyItems.length} action${historyItems.length === 1 ? "" : "s"}${hRange.active ? ` · ${hRange.label}` : ""}${hMore ? " (more available)" : ""}` : "";
     };
     const STATUSES = ["all", "pending", "executed", "simulated", "approved", "rejected", "failed", "expired"];

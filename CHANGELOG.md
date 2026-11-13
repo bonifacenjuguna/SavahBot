@@ -4,6 +4,8 @@
 
 ### Fixed
 - **Desk, "Waiting for you"** is a fixed-height card the same size as the Chat card on a computer, and the list scrolls inside it (mouse wheel and touch). It no longer sticks.
+- **Moderation, History:** the old "Load more" button is gone. History loads up to 500 actions at once and scrolls inside its card.
+- **Edit layout button** is now hidden completely when a page opens (no white sliver under the top bar); scroll up a little and it appears as before.
 - **Expanded chat:** the waiting list beside the chat is exactly as it was in 1.4.1. The Moderation page is unchanged.
 
 ## 1.4.1

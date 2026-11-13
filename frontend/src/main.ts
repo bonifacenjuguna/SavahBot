@@ -326,7 +326,9 @@ function showShell(): void {
       if (head && btn && !btn.hidden) {
         const next = head.nextElementSibling as HTMLElement | null;
         if (next && window.scrollY < 2 && !document.body.classList.contains("arranging")) {
-          const p = Math.round(next.getBoundingClientRect().top - head.getBoundingClientRect().top - 6);
+          // scroll until the whole button row is behind the top bar (nothing of the button peeks out), then the cards start right under it
+          const bar = document.querySelector<HTMLElement>(".topbar")?.getBoundingClientRect().bottom ?? 0;
+          const p = Math.ceil(head.getBoundingClientRect().bottom - bar);
           if (p > 0) { el.style.setProperty("--peek", `${p}px`); el.classList.add("peek"); window.scrollTo(0, p); }
         }
         return;
