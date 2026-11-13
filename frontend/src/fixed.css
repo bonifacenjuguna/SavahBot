@@ -19,11 +19,15 @@
 }
 
 /* Waiting for you (Desk card beside the chat): a fixed box the same size as the Chat card, the header stays put and the list scrolls inside it.
- * The expanded chat (zoom) moves the same .q-scroll list into its own panel and is not touched by these rules. */
-.block.desk-queue:not([data-hidden="true"]) { display: flex !important; flex-direction: column; height: var(--desk-h) !important; min-height: 0; max-height: var(--desk-h); }
+ * The expanded chat (zoom) moves the same .q-scroll list into its own panel and is not touched by these rules.
+ * Note: the page marks every card that is not the open tab with data-hidden="true", but that mark only hides a card below 1000px (styles.css),
+ * so on a computer the rules must not skip a card because of it (that was why this card grew without end). */
+@media (max-width: 999px) {
+  .block.desk-queue:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); max-height: var(--desk-h); min-height: 0; }
+}
 @media (min-width: 1000px) {
-  /* the very same height the Chat card has on a computer (desktop.css), written out so nothing else can change it */
-  .block.desk-queue:not([data-hidden="true"]) { height: clamp(520px, calc(100dvh - var(--topbar-h) - 40px), 920px) !important; min-height: 520px; max-height: 920px; }
+  /* the very same height the Chat card has on a computer (desktop.css) */
+  .block.desk-queue { display: flex !important; flex-direction: column; height: clamp(520px, calc(100dvh - var(--topbar-h) - 40px), 920px) !important; min-height: 520px; max-height: 920px; }
 }
 .desk-queue > header { flex: none; }
 .desk-queue > .q-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: auto; scrollbar-width: thin; }
