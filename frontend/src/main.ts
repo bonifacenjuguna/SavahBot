@@ -9,6 +9,7 @@ import "./layout.css";
 import "./moderation.css";
 import "./chat-zoom.css";
 import "./streams.css";
+import "./fixed.css";
 import { ApiError, apiBase, endSession, get, hasToken, loggedOut, post, setApiBase, setToken } from "./api.js";
 import { busy, clear, h, mount, sheet, toast } from "./dom.js";
 import * as feed from "./events.js";
@@ -314,6 +315,26 @@ function showShell(): void {
     const t = tallyState(lastStatus);
     holder.close = sheet("Bot mode", h("div", { class: "stack" }, h("div", { class: "banner" }, icon("info", 18), h("span", null, `${t.title}: ${t.detail}`)), modeCards(() => holder.close()))).close;
   }
+  /** A page that has the Edit layout button opens scrolled just past its button row, so the cards start right under the top bar. Scroll up to reach the button. */
+  function tuckHead(el: HTMLElement): void {
+    el.classList.remove("peek");
+    let tries = 0;
+    const attempt = (): void => {
+      if (!el.isConnected) return;
+      const head = el.querySelector<HTMLElement>(".page-head:not(.bare)");
+      const btn = head?.querySelector<HTMLElement>(".layout-btn") ?? null;
+      if (head && btn && !btn.hidden) {
+        const next = head.nextElementSibling as HTMLElement | null;
+        if (next && window.scrollY < 2 && !document.body.classList.contains("arranging")) {
+          const p = Math.round(next.getBoundingClientRect().top - head.getBoundingClientRect().top - 6);
+          if (p > 0) { el.style.setProperty("--peek", `${p}px`); el.classList.add("peek"); window.scrollTo(0, p); }
+        }
+        return;
+      }
+      if (++tries < 12) window.setTimeout(attempt, 150);
+    };
+    window.requestAnimationFrame(attempt);
+  }
   // ----- routing
   let cleanup: (() => void) | void;
   let cleanupNav: (() => void) | undefined;
@@ -335,6 +356,7 @@ function showShell(): void {
     cleanupNav = installPageNav(content);
     if (lastId && lastId !== page.id) window.scrollTo(0, 0);
     lastId = page.id;
+    tuckHead(content);
   };
   offs.push(onRoute(render));
 

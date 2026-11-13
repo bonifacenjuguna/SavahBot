@@ -280,9 +280,9 @@ export const commands: Page = {
     const actions = h("div", { class: "row" });
     const tabsBox = h("div", { class: "scroll-x", style: "margin-bottom:16px" });
     const panes: Record<Tab, HTMLElement> = {
-      commands: card("terminal", "Commands", listBox, { flush: true }),
-      replies: card("reply", "Auto-replies", replyBox, { flush: true }),
-      timers: card("timer", "Timers", timerBox, { flush: true }),
+      commands: card("terminal", "Commands", listBox, { flush: true, scroll: true }),
+      replies: card("reply", "Auto-replies", replyBox, { flush: true, scroll: true }),
+      timers: card("timer", "Timers", timerBox, { flush: true, scroll: true }),
     };
     const drawTabs = () => {
       const label: Record<Tab, string> = { commands: `Commands (${items.length})`, replies: `Auto-replies (${triggers.length})`, timers: `Timers (${timers.length})` };

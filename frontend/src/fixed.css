@@ -1,0 +1,77 @@
+/* SavahBot 1.4.1 - the chat controls drawer, equal-height Waiting card, and cards that scroll inside themselves. Loaded last. */
+
+/* ------------------------------------------------------------------ one height for the chat card and the Waiting card
+ * --desk-h is the height of the Chat card. The Waiting card uses the same number, so the two always match and a long list
+ * scrolls inside its card instead of stretching the page. */
+:root { --desk-h: max(420px, calc(100dvh - var(--topbar-h) - var(--tabbar-h) - 120px)); }
+@media (min-width: 720px) { :root { --desk-h: max(500px, calc(100dvh - var(--topbar-h) - 120px)); } }
+@media (min-width: 1000px) { :root { --desk-h: clamp(520px, calc(100dvh - var(--topbar-h) - 40px), 920px); } }
+
+/* phones and tablets: the chat card is a fixed box too (on a computer desktop.css already does this with the same height) */
+@media (max-width: 999px) {
+  .cols > .chat-card:not(.zoomed):not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); }
+  .cols > .chat-card:not(.zoomed) > header { flex: none; }
+  .cols > .chat-card:not(.zoomed) .chat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .chat-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .feed-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .feed { height: auto; flex: 1; min-height: 0; }
+  .cols > .chat-card:not(.zoomed) .say, .cols > .chat-card:not(.zoomed) .chips { flex: none; }
+}
+
+/* Waiting for you (Desk): same height as the chat, the list scrolls inside */
+.block.q-fixed:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); }
+.q-fixed > header { flex: none; }
+.q-fixed > .q-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.q-scroll .ap-bulk { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+
+/* Waiting for you (Moderation) and History below a computer-width screen (a computer already had this) */
+@media (max-width: 999px) {
+  .mod-grid > .mod-queue:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); }
+  .mod-queue > header { flex: none; }
+  .mod-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .ap-bulk { position: sticky; top: 0; z-index: 1; box-shadow: 0 1px 0 var(--line); }
+  .mod-history .table-wrap { max-height: min(70dvh, 640px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+}
+
+/* ------------------------------------------------------------------ any other card that can grow without limit (class: fixed-scroll)
+ * Up to about two thirds of the screen, then the card's body scrolls inside it. A short list takes only the room it needs. */
+.block.fixed-scroll:not([hidden]):not([data-hidden="true"]) { display: flex !important; flex-direction: column; max-height: min(70dvh, 640px); }
+.block.fixed-scroll > header { flex: none; }
+.block.fixed-scroll > :not(header):not(.arr-handle) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.sp-card.sp-scroll { display: flex; flex-direction: column; gap: 10px; max-height: min(70dvh, 640px); }
+.sp-card.sp-scroll > :first-child { flex: none; }
+.sp-card.sp-scroll > :not(:first-child) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+
+/* ------------------------------------------------------------------ the chat controls drawer */
+.chat-handle {
+  position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 10px 14px 6px;
+  background: color-mix(in srgb, var(--raised, var(--panel)) 55%, transparent); color: var(--ink); font: inherit; text-align: left;
+  border: 0; border-bottom: 1px solid var(--line); cursor: pointer; flex: none; -webkit-tap-highlight-color: transparent;
+}
+.chat-handle:hover { background: color-mix(in srgb, var(--raised, var(--panel)) 90%, transparent); }
+.chat-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cd-grip { position: absolute; top: 4px; left: 50%; width: 34px; height: 4px; border-radius: 4px; transform: translateX(-50%);
+  background: color-mix(in srgb, var(--ink) 24%, transparent); transition: width .28s cubic-bezier(.2, .8, .2, 1), background .2s; }
+.chat-handle:hover .cd-grip, .chat-handle[aria-expanded="true"] .cd-grip { width: 54px; background: var(--accent); }
+.cd-tag { flex: none; padding: 1px 8px; border-radius: 999px; font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.chat-handle[data-state="live"] .cd-tag { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
+.chat-handle[data-state="demo"] .cd-tag, .chat-handle[data-state="past"] .cd-tag { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.cd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: .9rem; }
+.cd-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); animation: cd-pulse 2s ease-out infinite; }
+@keyframes cd-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.cd-chev { flex: none; display: inline-flex; color: var(--muted); transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+.chat-handle[aria-expanded="true"] .cd-chev { transform: rotate(180deg); color: var(--accent); }
+
+/* the drawer slides open by animating its row from 0 to its natural height, so nothing is measured in script */
+.chat-drawer { display: grid; grid-template-rows: 0fr; opacity: 0; flex: none; transition: grid-template-rows .34s cubic-bezier(.2, .8, .2, 1), opacity .22s ease; }
+.chat-drawer[data-open="true"] { grid-template-rows: 1fr; opacity: 1; border-bottom: 1px solid var(--line); }
+.cd-inner { min-height: 0; overflow: hidden; transform: translateY(-10px); transition: transform .34s cubic-bezier(.2, .8, .2, 1); }
+.chat-drawer[data-open="true"] .cd-inner { transform: none; }
+.chat-drawer .toolbar { border-bottom: 1px solid var(--line); }
+.chat-drawer .stream-strip { border-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .chat-drawer, .cd-inner, .cd-chev, .cd-grip { transition: none; } .cd-dot { animation: none; } }
+html[data-motion="reduce"] .chat-drawer, html[data-motion="reduce"] .cd-inner, html[data-motion="reduce"] .cd-chev { transition: none; }
+
+/* ------------------------------------------------------------------ the page opens with the layout-button row tucked above the top: scroll up to see it */
+.main.peek { min-height: calc(100dvh + var(--peek, 0px)); }

@@ -210,7 +210,7 @@ export const insights: Page = {
       lay.arrange([gridEl]);
     };
     const pastCard = (inner: HTMLElement | string): HTMLElement => {
-      const c = card("activity", "Past streams", typeof inner === "string" ? h("p", { class: "muted small", style: "padding:14px" }, inner) : inner, { flush: true, id: "past-streams" });
+      const c = card("activity", "Past streams", typeof inner === "string" ? h("p", { class: "muted small", style: "padding:14px" }, inner) : inner, { flush: true, id: "past-streams", scroll: true });
       c.dataset.span = "2";
       return c;
     };

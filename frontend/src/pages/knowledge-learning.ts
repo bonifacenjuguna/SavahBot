@@ -92,11 +92,11 @@ async function review(host: HTMLElement): Promise<void> {
   mount(host,
     kcard("trending", "What it does with that", h("div", { class: "k-stack" }, mode.el, h("p", { class: "k-note" }, LEARN_HELP[st.mode] ?? ""))),
     kcard("sparkle", "Suggestions", h("div", null, bar, d.suggestions.length ? d.suggestions.map(sugRow) : h("div", { class: "k-sug" }, empty("check", "No suggestions waiting.")),
-      h("div", { class: "k-sug" }, h("div", { class: "row between" }, h("span", { class: "muted small" }, `Last looked ${ago(st.last_refresh)}`), refresh))), { flush: true }),
+      h("div", { class: "k-sug" }, h("div", { class: "row between" }, h("span", { class: "muted small" }, `Last looked ${ago(st.last_refresh)}`), refresh))), { flush: true, scroll: true }),
     kcard("inbox", "Help it where it is unsure", h("div", null,
       !q.ready ? h("div", { class: "k-sug" }, empty("clock", "The bot needs a few lessons before it can tell what it is unsure about.")) :
         q.items.length ? [h("p", { class: "k-note k-pad" }, "Recent real messages the bot cannot call either way. Labelling these teaches it the most."), ...q.items.map(queueRow)]
-          : h("div", { class: "k-sug" }, empty("check", "Nothing is borderline right now. New uncertain messages show up here as people chat."))), { flush: true }));
+          : h("div", { class: "k-sug" }, empty("check", "Nothing is borderline right now. New uncertain messages show up here as people chat."))), { flush: true, scroll: true }));
 }
 
 // ------------------------------------------------------------------------------------------------ lessons
@@ -150,7 +150,7 @@ async function lessons(host: HTMLElement): Promise<void> {
       h("div", { class: "k-sug k-filters" }, search,
         filt("Label", [["", "Spam and fine"], ["spam", "Spam"], ["ham", "Fine"]], (v) => { label = v; }),
         filt("Source", [["", "Any source"], ...Object.entries(SOURCE)], (v) => { source = v; })),
-      list), { flush: true, actions: h("div", { class: "row" }, exportBtn, h("button", { class: "btn small ghost", type: "button", onclick: () => file.click() }, icon("upload", 14), "Import"), file) }));
+      list), { flush: true, scroll: true, actions: h("div", { class: "row" }, exportBtn, h("button", { class: "btn small ghost", type: "button", onclick: () => file.click() }, icon("upload", 14), "Import"), file) }));
   await Promise.all([loadList(), loadCounts()]);
 }
 
@@ -193,7 +193,7 @@ async function history(host: HTMLElement): Promise<void> {
     kcard("history", "Changes it made", d.log.length ? h("div", { class: "k-stack" }, d.log.map((l) => h("div", { class: `k-log${l.undone ? " undone" : ""}` },
       h("span", { class: "txt" }, h("span", { class: "muted small" }, `${ago(l.ts)} · `), l.summary),
       l.undone ? h("span", { class: "chip" }, "undone") : h("button", { class: "btn small ghost", type: "button", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post(`/api/knowledge/log/${l.id}/undo`); again(); }, "Undone") }, icon("undo", 14), "Undo"))))
-      : h("p", { class: "k-note" }, "Nothing has been changed yet. Accepted suggestions and automatic changes are listed here, each with an Undo.")),
+      : h("p", { class: "k-note" }, "Nothing has been changed yet. Accepted suggestions and automatic changes are listed here, each with an Undo."), { scroll: true }),
     kcard("save", "Snapshots of what it has learned", h("div", { class: "k-stack" },
       h("p", { class: "k-note" }, "A snapshot is a saved copy of all lessons. Restore one to go back to how the bot was. Restoring and resetting save a snapshot first, so they can be undone too."),
       h("div", { class: "row" }, name, h("button", { class: "btn small primary", type: "button", onclick: (e: Event) => busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/knowledge/snapshots", { name: name.value || "Snapshot" }); toast("Snapshot saved"); again(); }) }, icon("plus", 14), "Save snapshot")),

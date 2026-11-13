@@ -85,7 +85,7 @@ export const bans: Page = {
     mount(root, h("div", { class: "page" }, areaNav("bans"),
       pageHead("ban", "Bans", "Everyone the bot has timed out or banned, and the rules that keep it fair."),
       top,
-      h("section", { class: "block" }, h("header", null, h("h2", null, icon("list", 18), "Ledger")),
+      h("section", { class: "block fixed-scroll" }, h("header", null, h("h2", null, icon("list", 18), "Ledger")),
         h("div", { class: "k-stack", style: "padding:12px 14px" }, h("div", { class: "row wrap", style: "gap:10px" }, views.el, search), list,
           h("p", { class: "muted small" }, "Only bans made by SavahBot from version 1.2.0 on can be lifted here. Older bans, and bans made in YouTube Studio, must be lifted in YouTube Studio: YouTube gives no way to list them."))),
       h("section", { class: "block" }, h("header", null, h("h2", null, icon("sliders", 18), "Be gentler")), h("div", { style: "padding:12px 14px" }, rulesBox))));

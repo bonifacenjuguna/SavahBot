@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.1
+
+A taller chat, a hidden edit button, and cards that scroll inside themselves.
+
+### Changed
+- **The Edit layout button is tucked away.** Desk, Insights, Notifications and Weather now open scrolled just past the row that holds the button, so the cards start right under the top bar. Scroll up a little to reach the button (or use search, "Edit layout").
+- **Chat controls live in a drawer (phone, tablet and computer).** The filters (All, Flagged, Blocked), the search box, Streams, Dates and Pause, and the stream strip (name, Live / Demo / Off air, stream link) are folded away. One slim handle above the chat shows the stream name and state; tap it and the controls slide down, tap again to put them away. The handle shows a pulsing dot while a filter, search, date range or pause is on, and remembers whether it was open. The chat itself is now taller and shows many more lines at once.
+- **"Waiting for you" on the Desk has a fixed height, equal to the Chat card.** Approvals scroll inside the card, and "Approve all / Reject all" stays at the top while you scroll. On phones and tablets the Chat card is a fixed box of the same height too.
+- **Moderation, "Waiting for you"** is a fixed-height card on phones and tablets as well (a computer already had it), and **History** scrolls inside its card on phones and tablets.
+- **Other cards that could grow without limit now scroll inside themselves** after about two thirds of the screen: Commands, Auto-replies, Timers, Bans (Ledger), Activity log, Insights (Past streams) and the long lists in Knowledge (Entries, Suggestions, Help it where it is unsure, Everything it has learned, Changes it made). A short list takes only the room it needs.
+
 ## 1.4.0
 
 Arrange your pages: drag cards into the order you like.

@@ -156,7 +156,7 @@ function renderPack(host: HTMLElement, id: string): void {
           pack.kind === "corpus" ? null : h("div", { class: "k-slider" }, h("span", { class: "muted small" }, "Strength"), slider, out)) : null,
         pack.needs_target ? h("p", { class: "k-note" }, "Scored higher when the message talks to someone ('you', 'u', 'wewe') and lower when it does not.") : null,
         pack.signal ? h("p", { class: "k-note" }, `A match counts as “${signalName(pack.signal)}” and the matching detector's mode also applies (see Detectors). Entries default to a weight of ${pack.weight}.`) : null)),
-      pack.editable ? [add(), kcard("list", "Entries", h("div", { class: "k-stack" }, h("div", { class: "input-icon" }, icon("search", 16), search), h("div", { class: "row between" }, filter.el, count), list, h("div", { class: "row" }, moreBtn, exportBtn)))] : payload(p));
+      pack.editable ? [add(), kcard("list", "Entries", h("div", { class: "k-stack" }, h("div", { class: "input-icon" }, icon("search", 16), search), h("div", { class: "row between" }, filter.el, count), list, h("div", { class: "row" }, moreBtn, exportBtn)), { scroll: true })] : payload(p));
     paint();
   };
   void get<PackPage>(url(0)).then((r) => { items = r.items; total = r.total; draw(r); }).catch((e) => { toast((e as Error).message, "error"); mount(host, invite("alert", "Could not open this pack", (e as Error).message, h("button", { class: "btn", type: "button", onclick: () => goKnowledge("packs") }, "Back"))); });

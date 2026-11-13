@@ -57,7 +57,7 @@ export const desk: Page = {
 
     const list = h("div", { class: "feed", tabindex: 0, "aria-label": "Live chat", role: "log" });
     const jump = h("button", { class: "jump", type: "button", hidden: true, onclick: () => { stick = true; list.scrollTop = list.scrollHeight; jump.hidden = true; } }, icon("arrowDown", 15), "Latest");
-    const pendingBox = h("div");
+    const pendingBox = h("div", { class: "q-scroll" });
     const health = h("div");
     const kpis = h("div", { class: "kpis swipe" });
     const savedMode = () => range.active || viewing !== null;
@@ -244,7 +244,7 @@ export const desk: Page = {
 
     // ----- toolbar: filters, search, pause
     const count = (f: Filter) => (savedMode() ? saved : lines).filter((m) => (f === "flagged" ? kindOf(m) !== "ok" : kindOf(m) === "blocked")).length;
-    const updateCounts = () => (["flagged", "blocked"] as Filter[]).forEach((f) => { const n = filterBtns[f === "flagged" ? 1 : 2].querySelector(".n") as HTMLElement; const v = count(f); n.hidden = v === 0; n.textContent = String(v); });
+    const updateCounts = () => { paintHandle(); (["flagged", "blocked"] as Filter[]).forEach((f) => { const n = filterBtns[f === "flagged" ? 1 : 2].querySelector(".n") as HTMLElement; const v = count(f); n.hidden = v === 0; n.textContent = String(v); }); };
     const filterBtns = (["all", "flagged", "blocked"] as Filter[]).map((f) =>
       h("button", { type: "button", "aria-pressed": String(f === filter), onclick: () => { filter = f; filterBtns.forEach((b, i) => b.setAttribute("aria-pressed", String((["all", "flagged", "blocked"] as Filter[])[i] === f))); if (savedMode()) reload(); else redraw(); } }, f[0].toUpperCase() + f.slice(1), h("span", { class: "n", hidden: true }, "")));
     const search = h("input", { type: "search", placeholder: "Filter chat", "aria-label": "Filter chat", maxLength: 80 });
@@ -260,6 +260,7 @@ export const desk: Page = {
       mount(pauseBtn, icon(paused ? "play" : "pause", 15), h("span", { class: "hide-narrow" }, paused ? `Resume${queue.length ? ` (${queue.length})` : ""}` : "Pause"));
       pauseBtn.setAttribute("aria-pressed", String(paused));
       pauseBtn.setAttribute("aria-label", paused ? "Resume chat" : "Pause chat");
+      paintHandle();
     };
     updatePause();
     const toolbar = h("div", { class: "toolbar" },
@@ -283,6 +284,7 @@ export const desk: Page = {
             h("span", { class: "ss-tag" }, live ? (demo ? "Demo" : "Live") : "Off air"),
             h("span", null, live ? `${spanText(Date.now() / 1000 - startedAt)} · fresh chat for this stream` : yt?.connected ? "Waiting for you to go live" : "YouTube not connected"))),
         link);
+      paintHandle();
     };
     const waitingState = (): HTMLElement => {
       const el = empty(sessionId ? "message" : "radio", sessionId ? "A new stream, a fresh chat. Lines appear here as they arrive." : "No stream is running. Your next stream starts on a fresh, empty chat.");
@@ -296,6 +298,44 @@ export const desk: Page = {
       if (!savedMode()) redraw();
       paintStrip(); renderFacts();
     };
+
+    // ----- the controls drawer: filters, search, streams, dates and the stream strip are tucked away so the chat itself is as tall as it can be.
+    // One slim handle sits above the chat; tap it and the controls slide down. It remembers its state and shows a dot while a filter is on.
+    const DRAWER_KEY = "savahbot.chatdrawer";
+    let drawerOpen = (() => { try { return localStorage.getItem(DRAWER_KEY) === "1"; } catch { return false; } })();
+    let handleEl: HTMLButtonElement | null = null;
+    let handleKey = "";
+    function paintHandle(): void {
+      if (!handleEl) return;
+      const live = Boolean(sessionId);
+      const demo = status?.hub.mode === "demo";
+      const filtered = filter !== "all" || needle !== "" || range.active || viewing !== null || paused;
+      const name = viewing ? streamName(viewing) : live ? (streamTitle || (demo ? "Demo stream" : "On air")) : "No stream running";
+      const tag = viewing ? "Past" : live ? (demo ? "Demo" : "Live") : "Off air";
+      const key = [drawerOpen, filtered, name, tag, live, demo].join("|");
+      if (key === handleKey) return;
+      handleKey = key;
+      handleEl.setAttribute("aria-expanded", String(drawerOpen));
+      handleEl.setAttribute("aria-label", `${drawerOpen ? "Hide" : "Show"} chat controls: ${name}${filtered ? ", a filter is on" : ""}`);
+      handleEl.dataset.state = viewing ? "past" : live ? (demo ? "demo" : "live") : "off";
+      mount(handleEl,
+        h("span", { class: "cd-grip", "aria-hidden": "true" }),
+        h("span", { class: "cd-tag" }, tag),
+        h("span", { class: "cd-name" }, name),
+        filtered ? h("span", { class: "cd-dot", title: "A filter, search, date or pause is on" }) : null,
+        h("span", { class: "cd-chev", "aria-hidden": "true" }, icon("chevronDown", 18)));
+    }
+    const drawer = h("div", { class: "chat-drawer", id: "chat-drawer", "data-open": String(drawerOpen) }, h("div", { class: "cd-inner" }, toolbar, strip, dateWrap));
+    const setDrawer = (open: boolean) => {
+      drawerOpen = open;
+      drawer.dataset.open = String(open);
+      (drawer.firstElementChild as HTMLElement).toggleAttribute("inert", !open);   // hidden controls take no focus
+      try { localStorage.setItem(DRAWER_KEY, open ? "1" : "0"); } catch { /* private mode */ }
+      handleKey = ""; paintHandle();
+    };
+    handleEl = h("button", { class: "chat-handle", type: "button", "aria-controls": "chat-drawer", onclick: () => setDrawer(!drawerOpen) }) as HTMLButtonElement;
+    (drawer.firstElementChild as HTMLElement).toggleAttribute("inert", !drawerOpen);
+    paintHandle();
 
     // ----- send as the bot
     const input = h("input", { type: "text", maxLength: 500, placeholder: "Say something as the bot", "aria-label": "Message to send" });
@@ -390,7 +430,7 @@ export const desk: Page = {
 
     // ----- the chat card, which can grow to fill the workspace
     const readerUi = readerControl();
-    const main = h("div", { class: "chat-main" }, toolbar, strip, readerUi.note, dateWrap, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
+    const main = h("div", { class: "chat-main" }, handleEl, drawer, readerUi.note, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
     const side = h("aside", { class: "zoom-side", "aria-label": "Waiting for you" },
       h("div", { class: "zs-head" }, h("h3", null, icon("inbox", 16), "Waiting for you", sideCount), h("button", { class: "icon-btn zs-close", type: "button", "aria-label": "Close the waiting list", onclick: () => chatPane.classList.remove("side-open") }, icon("x", 18))),
       h("div", { class: "zs-body" }));
@@ -415,7 +455,7 @@ export const desk: Page = {
     };
     setSize(sizeIdx);
 
-    const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true, id: "queue" });
+    const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true, id: "queue", cls: "q-fixed" });
     const statusPane = card("activity", "Bot status", health, { flush: true, id: "status" });
     const live = liveCard();
     live.el.dataset.card = "live";

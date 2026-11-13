@@ -84,7 +84,7 @@ export const ago = (ts: number | null): string => {
 };
 
 /** card() whose body gets the padding the rest of the dashboard's cards have (they pad children with class "body"). */
-export function kcard(iconName: string | null, title: string, body: HTMLElement, opts: { flush?: boolean; actions?: HTMLElement | null } = {}): HTMLElement {
+export function kcard(iconName: string | null, title: string, body: HTMLElement, opts: { flush?: boolean; actions?: HTMLElement | null; scroll?: boolean } = {}): HTMLElement {
   body.classList.add("body");
-  return card(iconName, title, body, { flush: opts.flush, actions: opts.actions ?? undefined });
+  return card(iconName, title, body, { flush: opts.flush, actions: opts.actions ?? undefined, scroll: opts.scroll });
 }
