@@ -50,6 +50,12 @@ export const desk: Page = {
     let savedNote = "";
     let viewing: Stream | null = null; // a past stream opened from the Streams list (read-only)
     let sessionId = "";                // the stream running now ("" when none): a different one means a new stream, which starts on an empty chat
+    // state the controls handle reads (declared up here because the toolbar paints it while the page is still being built)
+    let startedAt = 0, streamTitle = "";
+    let handleEl: HTMLButtonElement | null = null;
+    let handleKey = "";
+    let drawerOpen = false;
+    const DRAWER_KEY = "savahbot.chatdrawer";
     let lastStream: Stream | null = null;   // the stream that ended most recently, offered while nothing is running
     const seen = new Set<number>();    // ids of the lines on screen, so catching up after a dropped connection never shows a line twice
     let sizeIdx = (() => { try { const v = Number(localStorage.getItem(SIZE_KEY)); return Number.isInteger(v) && v >= 0 && v < SIZES.length ? v : 1; } catch { return 1; } })();
@@ -269,7 +275,6 @@ export const desk: Page = {
 
     // ----- what is on air: this stream's name, how long it has run, and a shortcut to its link
     const strip = h("div", { class: "stream-strip", "data-state": "off" });
-    let startedAt = 0, streamTitle = "";
     const paintStrip = () => {
       const live = Boolean(sessionId);
       const demo = status?.hub.mode === "demo";
@@ -301,10 +306,7 @@ export const desk: Page = {
 
     // ----- the controls drawer: filters, search, streams, dates and the stream strip are tucked away so the chat itself is as tall as it can be.
     // One slim handle sits above the chat; tap it and the controls slide down. It remembers its state and shows a dot while a filter is on.
-    const DRAWER_KEY = "savahbot.chatdrawer";
-    let drawerOpen = (() => { try { return localStorage.getItem(DRAWER_KEY) === "1"; } catch { return false; } })();
-    let handleEl: HTMLButtonElement | null = null;
-    let handleKey = "";
+    drawerOpen = (() => { try { return localStorage.getItem(DRAWER_KEY) === "1"; } catch { return false; } })();
     function paintHandle(): void {
       if (!handleEl) return;
       const live = Boolean(sessionId);

@@ -2,7 +2,7 @@
 
 ## 1.4.1
 
-A taller chat, a hidden edit button, and cards that scroll inside themselves.
+A taller chat, a hidden edit button, and cards that scroll inside themselves. (Fixed before release: the Desk drew a blank page because the chat controls handle was read before it was set up.)
 
 ### Changed
 - **The Edit layout button is tucked away.** Desk, Insights, Notifications and Weather now open scrolled just past the row that holds the button, so the cards start right under the top bar. Scroll up a little to reach the button (or use search, "Edit layout").
