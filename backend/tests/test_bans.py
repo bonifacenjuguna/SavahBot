@@ -149,3 +149,39 @@ async def test_demo_sample_history(api):
     assert st == 200 and r["bans"] == 4
     st, b = await api.call("GET", "/api/bans")
     assert b["total"] >= 4 and {i["status"] for i in b["items"]} >= {"active", "lifted"}
+
+
+def test_ban_profile_shows_why_the_chat_around_it_and_the_history():
+    """1.4.3: tap a person in the ledger. A bot ban shows the flagged messages and signals; a hand-made one shows their latest lines before it."""
+    import json
+    import time
+    from types import SimpleNamespace as NS
+
+    from app.api import bans_routes
+
+    async def go():
+        s = await build_stack(seed=False)
+        now = time.time()
+        for i, (who, wid, body, ts, verdict) in enumerate([("Zed", "u9", "hello all", now - 300, "allow"), ("Ann", "u1", "hey Zed", now - 200, "allow"),
+                                                            ("Zed", "u9", "buy followers at spam.example", now - 100, "block"), ("Bo", "u2", "what a spammer", now - 90, "allow")]):
+            await s.db.execute("INSERT INTO chat_messages (platform, msg_id, author_id, author_name, body, level, ts, score, verdict) VALUES ('youtube', ?, ?, ?, ?, 'everyone', ?, 0, ?)",
+                               (f"m{i}", wid, who, body, ts, verdict))
+        act = await s.db.insert("INSERT INTO mod_actions (ts, platform, author_id, author_name, message_ids, body, action, score, reasons, status, mode) VALUES (?, 'youtube', 'u9', 'Zed', ?, ?, 'ban', 9, ?, 'done', 'auto')",
+                                (now - 94, json.dumps(["m2"]), "buy followers at spam.example", json.dumps(["link: spam.example", "repetition"])))
+        bot = await s.hub.bans.record(author_id="u9", author_name="Zed", kind="ban", duration=None, ban_ref="r1", action_id=act, source="auto", reason="Link spam", now=now - 93)
+        hand = await s.hub.bans.record(author_id="u9", author_name="Zed", kind="timeout", duration=300, ban_ref="", action_id=None, source="dashboard", reason="Chosen from the chat", now=now - 10)
+        c = NS(hub=s.hub, store=s.store)
+        r = await bans_routes.bans_profile(NS(path_params={"ban_id": bot}), c)
+        assert r["why"]["how"] == "recorded" and [m["body"] for m in r["why"]["evidence"]] == ["buy followers at spam.example"]
+        assert r["why"]["signals"] == ["link: spam.example", "repetition"] and r["why"]["score"] == 9
+        assert [(m["name"], m["mine"], m["evidence"]) for m in r["context"]] == [("Ann", False, False), ("Zed", True, True), ("Bo", False, False)]
+        assert len(r["history"]) == 2 and r["person"]["messages"] == 2 and r["person"]["flagged"] == 1
+        r = await bans_routes.bans_profile(NS(path_params={"ban_id": hand}), c)
+        assert r["why"]["how"] == "guess" and r["why"]["evidence"]                      # no message recorded for a hand-made action
+        try:
+            await bans_routes.bans_profile(NS(path_params={"ban_id": 9999}), c)
+            raise AssertionError("expected a 404")
+        except bans_routes.ApiError as e:
+            assert e.status == 404
+
+    asyncio.run(go())

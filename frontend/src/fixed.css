@@ -181,3 +181,38 @@ html[data-motion="reduce"] .rs-panel, html[data-motion="reduce"] .rs-ring, html[
 .rs-details summary { cursor: pointer; color: var(--muted); }
 .rs-details pre { margin: 8px 0; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 6%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
 .rs-warn + .rs-warn { margin-top: 2px; }
+
+/* ------------------------------------------------------------------ Bans: tap a person for their profile (1.4.3) */
+.row-open { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 4px; margin: -4px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.row-open > div { flex: 1 1 auto; min-width: 0; }
+.row-open > svg { flex: none; margin-left: auto; color: var(--muted); transition: transform .15s; }
+.row-open:hover strong { text-decoration: underline; }
+.row-open:hover > svg { transform: translateX(3px); color: var(--accent); }
+.row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sheet.profile-sheet { width: min(760px, 100%); }
+.pf { display: grid; gap: 16px; }
+.pf-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.pf-who { display: grid; gap: 4px; min-width: 0; }
+.pf-name { font-size: 1.2rem; overflow-wrap: anywhere; }
+.pf-actions { gap: 8px; }
+.pf-sec { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pf-sec > h3 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: .95rem; }
+.pf-sec p { margin: 0; }
+.pf-reason { padding: 8px 12px; border-left: 3px solid var(--warn, #a35f00); border-radius: 4px 10px 10px 4px; background: color-mix(in srgb, var(--warn, #a35f00) 9%, transparent); overflow-wrap: anywhere; }
+.pf-quote { margin: 0; padding: 10px 12px; border-left: 3px solid var(--bad, #c4202c); border-radius: 4px 12px 12px 4px; background: color-mix(in srgb, var(--bad, #c4202c) 8%, transparent); }
+.pf-qmeta { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.pf-qtext { overflow-wrap: anywhere; white-space: pre-wrap; }
+.pf-chat { max-height: min(300px, 42dvh); overflow-y: auto; overscroll-behavior: contain; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--ink) 3%, var(--panel)); font-size: .88rem; }
+.pf-line { display: block; padding: 4px 8px; border-radius: 8px; color: var(--muted); overflow-wrap: anywhere; }
+.pf-line strong { color: inherit; }
+.pf-line.mine { color: var(--ink); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.pf-line.evi { background: color-mix(in srgb, var(--bad, #c4202c) 13%, transparent); box-shadow: inset 3px 0 0 var(--bad, #c4202c); }
+.pf-line.bot { opacity: .6; font-style: italic; }
+.pf-time { margin-right: 6px; font-variant-numeric: tabular-nums; }
+.pf-flag { margin-left: 6px; color: var(--bad, #c4202c); vertical-align: -2px; }
+.pf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pf-item { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.pf-item.here { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.pf-more { padding-top: 12px; border-top: 1px solid var(--line); }
+.pf-more > summary { cursor: pointer; font-weight: 600; font-size: .92rem; padding: 4px 0; }
+.pf-more[open] > summary { margin-bottom: 8px; }

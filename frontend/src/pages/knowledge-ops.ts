@@ -15,7 +15,7 @@ export function renderDetectors(host: HTMLElement): void {
     mount(host,
       lede("Detectors are the readers. Each one looks for one kind of trouble in the packs and in the message. Choose Off, Shadow (watch and record, never score) or Live, and how strongly it counts."),
       h("div", { class: "k-grid two" }, detectors.map(detector)),
-      h("p", { class: "k-note" }, `${MODE_HELP.shadow} ${MODE_HELP.live} Everything the knowledge layer adds is capped, so on its own it can never ban anyone.`));
+      h("p", { class: "k-note" }, `${MODE_HELP.shadow} ${MODE_HELP.live} Everything the intelligence layer adds is capped, so on its own it can never ban anyone.`));
   };
   void load().catch((e) => { fail(e); mount(host, invite("alert", "Could not load the detectors", (e as Error).message)); });
 }

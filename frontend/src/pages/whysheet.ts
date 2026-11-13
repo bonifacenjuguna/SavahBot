@@ -22,7 +22,7 @@ export function openWhy(a: Action): void {
     b.addEventListener("click", () => busy(b, async () => { await post("/api/knowledge/lessons", { label, action_id: a.id }); }, label === "spam" ? "Learned: that was spam" : "Learned: that was fine"));
     return b;
   };
-  body.appendChild(h("div", { class: "why-teach" }, h("p", { class: "muted small" }, "Teach the bot what this really was. You can review, correct or forget it later in Settings, Knowledge, Learning."),
+  body.appendChild(h("div", { class: "why-teach" }, h("p", { class: "muted small" }, "Teach the bot what this really was. You can review, correct or forget it later in Settings, Intelligence, Learning."),
     h("div", { class: "row" }, teach("spam", "This was spam", "bad-btn", "ban"), teach("ham", "This was fine", "ok-btn", "check"))));
   sheet("Why was this flagged?", body);
 

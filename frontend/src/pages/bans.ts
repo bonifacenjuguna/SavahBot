@@ -5,6 +5,7 @@ import { icon } from "../icons.js";
 import { areaNav } from "./kit.js";
 import { empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
+import { openBanProfile } from "./person-profile.js";
 import { avatar, figures, invite, lede, seg } from "./widgets.js";
 
 interface Ban { id: number; ts: number; author_id: string; author_name: string; kind: "ban" | "timeout"; duration: number | null; source: string; reason: string; status: string; lifted_ts: number | null; lifted_by: string; error: string; demo: number; can_lift: boolean }
@@ -35,12 +36,12 @@ export const bans: Page = {
       });
       const what = b.kind === "ban" ? "Banned" : `Timed out${b.duration ? " for " + duration(b.duration) : ""}`;
       return h("div", { class: "block flush" }, h("div", { class: "row between", style: "padding:12px 14px;gap:12px;align-items:center" },
-        h("div", { class: "row", style: "gap:12px;align-items:center;min-width:0" }, avatar(b.author_name || b.author_id, 38),
+        h("button", { class: "row row-open", type: "button", "aria-label": `Open the profile of ${b.author_name || b.author_id}`, onclick: () => openBanProfile(b, () => void load().catch(fail)) }, avatar(b.author_name || b.author_id, 38),
           h("div", { style: "min-width:0" }, h("strong", null, b.author_name || b.author_id),
             h("div", { class: "muted small" }, `${what} · ${SOURCE[b.source] ?? b.source} · ${dateTime(b.ts)}${b.demo ? " · demo" : ""}`),
             b.reason ? h("div", { class: "muted small" }, b.reason) : null,
             b.status === "lifted" ? h("div", { class: "muted small" }, `Lifted ${b.lifted_ts ? dateTime(b.lifted_ts) : ""} by ${b.lifted_by}`) : null,
-            b.error ? h("div", { class: "small", style: "color:var(--bad, #c0392b)" }, b.error) : null)),
+            b.error ? h("div", { class: "small", style: "color:var(--bad, #c0392b)" }, b.error) : null), icon("chevronRight", 18)),
         b.status === "active" ? lift : h("span", { class: "chip" }, b.status)));
     };
 
@@ -87,7 +88,7 @@ export const bans: Page = {
       top,
       h("section", { class: "block fixed-scroll" }, h("header", null, h("h2", null, icon("list", 18), "Ledger")),
         h("div", { class: "k-stack", style: "padding:12px 14px" }, h("div", { class: "row wrap", style: "gap:10px" }, views.el, search), list,
-          h("p", { class: "muted small" }, "Only bans made by SavahBot from version 1.2.0 on can be lifted here. Older bans, and bans made in YouTube Studio, must be lifted in YouTube Studio: YouTube gives no way to list them."))),
+          h("p", { class: "muted small" }, "Tap a person to see their profile and why it happened. Only bans made by SavahBot from version 1.2.0 on can be lifted here. Older bans, and bans made in YouTube Studio, must be lifted in YouTube Studio: YouTube gives no way to list them."))),
       h("section", { class: "block" }, h("header", null, h("h2", null, icon("sliders", 18), "Be gentler")), h("div", { style: "padding:12px 14px" }, rulesBox))));
     void load().catch((e) => { fail(e); mount(list, invite("alert", "Could not load the bans", (e as Error).message)); });
   },

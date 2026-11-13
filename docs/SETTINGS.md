@@ -10,7 +10,7 @@
 | **Privacy & data** | Every kind of data stored, how many items, retention, where it lives, who receives some of it. Clear notification history, push delivery log and weather cache. Security records are protected and cannot be cleared here. |
 | **Device & app** | Install status and install help, service-worker state, notification permission, update check, storage use, clear this browser's saved preferences. |
 | **Developer** | Configuration check (plain-language problems), database/Redis/background/event health, feature availability, which secrets are set (never their values), deployment info. |
-| **Knowledge** | Packs, detectors, learning, live lists (see KNOWLEDGE.md). |
+| **Intelligence** | Knowledge packs, detectors, learning, live lists (see KNOWLEDGE.md). |
 | **All settings** | The searchable list of every environment option with reset to default (the original Settings page). |
 
 Other areas keep their own pages and are linked from the cards: **Security** (SECURITY.md), **Notifications** (NOTIFICATIONS.md), **Weather > Weather settings** (WEATHER.md), **Backup** (BACKUP_AND_RECOVERY.md), **Setup** (YouTube and Telegram connections), **Moderation, Bans, Commands**.

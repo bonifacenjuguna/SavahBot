@@ -1,6 +1,6 @@
-# Knowledge guide
+# Intelligence guide (Settings > Intelligence)
 
-Knowledge is SavahBot's built-in spam, scam and abuse intelligence. It runs entirely inside your bot: no AI service, and no outside call is made to judge a message. Find it in **Settings > Knowledge**.
+Knowledge is SavahBot's built-in spam, scam and abuse intelligence. It runs entirely inside your bot: no AI service, and no outside call is made to judge a message. Find it in **Settings > Intelligence**; its first section, **Knowledge**, holds the packs.
 
 ## The six tabs
 

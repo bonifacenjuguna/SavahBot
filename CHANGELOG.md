@@ -4,7 +4,12 @@
 
 Taller scrolling cards with footers that are never cut off.
 
+### Changed
+- **"Knowledge" in Settings is now called Intelligence.** The page covers everything the bot uses to spot spam, scams and abuse, and its first section is still called Knowledge (the packs), so the two names no longer collide. The icon is unchanged. Old links (`?tab=knowledge`) keep working, `?tab=intelligence` works too, and search, the command palette, help text and docs use the new name.
+
 ### Added
+- **Person profile from the Bans ledger.** Tap anyone who is banned or timed out (the whole row, or the arrow) to open their profile: who they are (messages stored, how many were flagged, first seen, regular, notes), **why it happened** (the reason, the bot's score and the signals that flagged them, and the exact message or messages that caused it), **the chat around it** (everyone's lines from just before to just after, theirs highlighted and the offending lines marked), their full history of bans, timeouts and moderation log entries, and their latest messages. You can lift the ban, add a note to the Notebook, or copy their ID from there. For a ban you chose by hand no single message is recorded, so it shows their latest lines before it and says so.
+- New API: `GET /api/bans/{id}/profile`.
 - **Live progress for restoring a backup.** "Add from this backup" / "Replace with this backup" now opens a progress card: a ring and bar with the real percentage, what it is doing right now (making the safety copy, each part of the backup with its own row count, checking, reloading), and a running clock. When it ends the card turns green with how many rows were added (and how many were already there), or red with the reason.
 - **Controls when something goes wrong:** **Try again** and **Back to options** on a failed restore, and **Cancel restore** while it runs (everything is put back as it was). If your connection drops while the server is still working, the card keeps watching and shows how it ended. A "still working" note appears if nothing moves for 30 seconds.
 - **Show / hide eye on the passphrase boxes** when making a backup and when restoring one (including the first-run restore on the sign-in screen).

@@ -1,4 +1,4 @@
-/** Settings > Knowledge: the shell, the Overview and the Test lab. Other views live in knowledge-packs.ts and knowledge-ops.ts. */
+/** Settings > Intelligence (this file keeps its old name): the shell, the Overview and the Test lab. Other views live in knowledge-packs.ts and knowledge-ops.ts. */
 import { tabRail } from "../nav.js";
 import { get, patch, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
@@ -24,7 +24,7 @@ const TABS: { id: View; label: string; icon: string }[] = [
 export function renderKnowledge(root: HTMLElement, query: URLSearchParams): () => void {
   const view = (TABS.some((t) => t.id === query.get("view")) ? query.get("view") : "overview") as View;
   const host = h("div", { class: "k-stack" });
-  const tabs = h("nav", { class: "k-tabs", "aria-label": "Knowledge sections" }, TABS.map((t) =>
+  const tabs = h("nav", { class: "k-tabs", "aria-label": "Intelligence sections" }, TABS.map((t) =>
     h("button", { type: "button", "aria-current": t.id === view ? "page" : undefined, onclick: () => goKnowledge(t.id) }, icon(t.icon, 16), t.label)));
   mount(root, h("div", { class: "k-top" }, tabs), host);
   tabRail(tabs, "knowledge-tabs");       // the active tab opens in the middle and the row remembers where it was
@@ -53,9 +53,9 @@ function renderOverview(host: HTMLElement): void {
     const st = ov.status;
     const total = Math.max(1, ov.detectors.length);
     const modes = ov.detector_modes;
-    const master = h("input", { type: "checkbox", class: "switch", checked: st.enabled, "aria-label": "Use the knowledge layer" }) as HTMLInputElement;
+    const master = h("input", { type: "checkbox", class: "switch", checked: st.enabled, "aria-label": "Use the intelligence layer" }) as HTMLInputElement;
     master.onchange = async () => {
-      try { await patch("/api/settings", { values: { intel_enabled: master.checked } }); toast(master.checked ? "Knowledge layer on" : "Knowledge layer off, the bot behaves as in 1.1.5"); void refreshStatus(); await load(); }
+      try { await patch("/api/settings", { values: { intel_enabled: master.checked } }); toast(master.checked ? "Intelligence on" : "Intelligence off, the bot behaves as in 1.1.5"); void refreshStatus(); await load(); }
       catch (e) { master.checked = !master.checked; toast((e as Error).message, "error"); }
     };
     const benchBox = h("div", { class: "k-stack" });
@@ -85,7 +85,7 @@ function renderOverview(host: HTMLElement): void {
         shadowList(ov.recent_shadow), h("div", { class: "row" }, h("button", { class: "btn small", type: "button", onclick: () => goKnowledge("detectors") }, icon("target", 15), "Open detectors")))),
       toolsCard(),
       kcard("chart", "Accuracy check", h("div", { class: "k-stack" },
-        h("p", { class: "k-note" }, "Runs a fixed set of real-looking spam and normal chat lines through your bot and shows what it catches with and without the knowledge layer. It never touches your chat."),
+        h("p", { class: "k-note" }, "Runs a fixed set of real-looking spam and normal chat lines through your bot and shows what it catches with and without the intelligence layer. It never touches your chat."),
         h("div", { class: "row" }, benchBtn), benchBox)),
       ov.feeds.total ? kcard("radio", "Live data", h("div", { class: "row between" }, h("span", { class: "muted" }, `${ov.feeds.enabled} of ${ov.feeds.total} lists on · ${plural(ov.feeds.entries, "domain")} · last refreshed ${ago(ov.feeds.last_ok)}${ov.feeds.errors ? ` · ${plural(ov.feeds.errors, "problem")}` : ""}`),
         h("button", { class: "btn small", type: "button", onclick: () => goKnowledge("live") }, "Manage"))) : null);
@@ -103,7 +103,7 @@ function renderBenchmark(r: Benchmark): HTMLElement {
   const list = (title: string, items: { text: string; score: number }[], note: string) => items.length ? h("details", { class: "group" }, h("summary", null, h("span", null, title), h("span", { class: "chip" }, String(items.length))),
     h("div", { class: "k-stack", style: "padding:10px 14px" }, h("p", { class: "k-note" }, note), h("ul", { class: "list" }, items.map((m) => h("li", null, h("q", null, m.text), h("span", { class: "muted small" }, ` score ${m.score}`)))))) : null;
   return h("div", { class: "k-stack" },
-    h("div", { class: "k-compare after" }, col("Without the knowledge layer", r.without_intel, ""), col("With it", r.with_intel, "ok")),
+    h("div", { class: "k-compare after" }, col("Without the intelligence layer", r.without_intel, ""), col("With it", r.with_intel, "ok")),
     h("p", { class: "k-note" }, `"Flagged" means a score of ${r.thresholds.flag} or more, "delete level" means ${r.thresholds.delete} or more. ${r.note}`),
     list("Spam it missed", r.missed, "These stayed below the flag line."), list("Spam it only flagged", r.weak, "Flagged, but not strong enough to delete without your approval."),
     r.false_alarms.length ? list("Normal chat it flagged by mistake", r.false_alarms, "These are false alarms. Find the pack responsible in the Test lab.") : h("p", { class: "k-note" }, "No normal chat was flagged."));

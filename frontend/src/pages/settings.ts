@@ -25,15 +25,17 @@ export const settings: Page = {
   render(root, query) {
     // 1.2.0: Settings is a hub. The address says which view is open (?tab=), so links, search results and the back button all work.
     const TABS = [{ id: "overview", label: "Overview", icon: "desk" }, { id: "appearance", label: "Appearance", icon: "sparkle" }, { id: "privacy", label: "Privacy & data", icon: "database" },
-      { id: "device", label: "Device & app", icon: "smartphone" }, ...(hasKeyboard() ? [{ id: "shortcuts", label: "Shortcuts", icon: "keyboard" } as const] : []), { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Knowledge", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
+      { id: "device", label: "Device & app", icon: "smartphone" }, ...(hasKeyboard() ? [{ id: "shortcuts", label: "Shortcuts", icon: "keyboard" } as const] : []), { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Intelligence", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
     type Tab = (typeof TABS)[number]["id"];
-    const tab = (TABS.find((t) => t.id === query.get("tab"))?.id ?? "overview") as Tab;
+    // 1.4.3: this view is called Intelligence (its first section is still Knowledge). ?tab=knowledge keeps working, and so does ?tab=intelligence.
+    const asked = query.get("tab") === "intelligence" ? "knowledge" : query.get("tab");
+    const tab = (TABS.find((t) => t.id === asked)?.id ?? "overview") as Tab;
     const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "overview" ? "/settings" : `/settings?tab=${v}`); });
     const host = h("div", { class: "k-stack" });
     const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), h("div", { class: "tab-row" }, views.el), host);
     const fail = (e: unknown) => mount(host, empty("alert", e instanceof Error ? e.message : "This section could not load."));
     if (tab === "knowledge") {
-      shell("Knowledge", "What the bot knows and how it uses it: packs of patterns, the detectors that read them, what it learns from you, and live threat lists.");
+      shell("Intelligence", "How the bot spots spam, scams and abuse: what it knows (packs of patterns), the detectors that read them, what it learns from you, and live threat lists.");
       return renderKnowledge(host, query);
     }
     if (tab === "overview") { shell("Settings", "Everything about how SavahBot works, in one place. Search, or open an area."); void renderOverview(host).catch(fail); return undefined; }
