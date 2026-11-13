@@ -4,7 +4,15 @@
 
 Taller scrolling cards with footers that are never cut off.
 
+### Added
+- **Live progress for restoring a backup.** "Add from this backup" / "Replace with this backup" now opens a progress card: a ring and bar with the real percentage, what it is doing right now (making the safety copy, each part of the backup with its own row count, checking, reloading), and a running clock. When it ends the card turns green with how many rows were added (and how many were already there), or red with the reason.
+- **Controls when something goes wrong:** **Try again** and **Back to options** on a failed restore, and **Cancel restore** while it runs (everything is put back as it was). If your connection drops while the server is still working, the card keeps watching and shows how it ended. A "still working" note appears if nothing moves for 30 seconds.
+- **Show / hide eye on the passphrase boxes** when making a backup and when restoring one (including the first-run restore on the sign-in screen).
+- New API: `GET /api/backup/progress`, `POST /api/backup/cancel`.
+
 ### Fixed
+- **Restoring was slow and could look frozen:** rows are now written in batches of 400 instead of one by one, which is many times faster on Postgres.
+- **Merge and Replace on Postgres no longer trip on column types.** Values from a backup are converted to the column's type (a whole number for a decimal column, text for a number, and so on). In Merge, one bad row used to be skipped silently; now it costs only itself and the card reports how many rows could not be added and why. Replace stays all or nothing and rolls back on any problem.
 - **Backup import ("Add from this backup" / "Replace") failed with "Something went wrong"** on Postgres (a Railway deployment). After writing the rows, the restore moves each table's id counter forward, and it did that for tables whose id is text (Knowledge packs and feeds, Insights stream sessions), which Postgres refuses. Any restore that included Knowledge or History therefore failed, and the automatic roll-back failed the same way. Counters are now only touched for tables that have one. SQLite was never affected.
 - **Clearer backup errors:** if a restore step does fail, the message now names the cause instead of a bare server error, a failed roll-back says so and points to "Undo the last restore", and a problem writing the log entry or alert after a successful restore no longer makes the restore look failed.
 - **Activity log:** on a computer the log list spilled out of its card and was drawn over the "Keeping and alerts" card below it. The log is now a full-width card that clips and scrolls its own list, with the settings card cleanly underneath.

@@ -167,11 +167,11 @@ async def test_failed_import_rolls_back_and_sessions_are_never_exported(api):
     real = archive.apply_scope
     calls = []
 
-    async def flaky(c, scope, data, mode):
+    async def flaky(c, scope, data, mode, tick=None, cancel=None):
         calls.append(scope)
         if len(calls) == 2:
             raise RuntimeError("disk on fire")
-        return await real(c, scope, data, mode)
+        return await real(c, scope, data, mode, tick, cancel)
     archive.apply_scope = flaky
     await api.c.db.execute("DELETE FROM commands")
     await api.call("POST", "/api/commands", {"name": "!before", "response": "x"})
@@ -272,3 +272,58 @@ async def test_sequence_repair_skips_tables_with_text_ids_on_postgres():
     c = _FakeCtx()
     await archive._fix_sequences(c, ["knowledge_packs", "commands", "quotes"])
     assert len(c.db.ran) == 1 and c.db.ran[0][1] == ("commands_id_seq",)
+
+
+# ------------------------------------------------------------------ 1.4.3: batched writes, real progress, cancel
+async def _mem_service():
+    from types import SimpleNamespace as NS
+    from app.backup.service import BackupService
+    from app.db import Database
+    db = Database("sqlite:///:memory:")
+    await db.connect()
+
+    async def noop(*a, **k):
+        return None
+    c = NS(db=db, bus=NS(publish=lambda *a, **k: None), access=NS(audit=noop, _alert=noop))
+    c.backup = BackupService(c)
+    return c
+
+
+async def test_merge_and_replace_write_in_batches_and_report_bad_rows():
+    c = await _mem_service()
+    rows = [[i, f"q{i}", "a", 1.5] for i in range(1, 1501)]
+    data = {"tables": {"quotes": {"columns": ["id", "body", "author", "created"], "rows": rows}}, "kv": {}}
+    ticks = []
+    r = await archive.apply_scope(c, "community", data, "merge", lambda n: ticks.append(n))
+    assert r["added"] == 1500 and sum(ticks) == 1500
+    assert (await archive.apply_scope(c, "community", data, "merge"))["skipped"] == 1500           # again: all already here
+    bad = {"tables": {"quotes": {"columns": ["id", "body", "author", "created"], "rows": [[9001, "ok", "a", 1.0], [9002, None, "a", 1.0], [9003, "ok3", "a", 1.0]]}}, "kv": {}}
+    r = await archive.apply_scope(c, "community", bad, "merge")
+    assert r["added"] == 2 and r["failed"] == 1 and "quotes" in r["error"]                         # one bad row costs only itself
+    r = await archive.apply_scope(c, "community", data, "replace")
+    assert r["added"] == 1500 and (await c.db.fetchone("SELECT COUNT(*) AS n FROM quotes"))["n"] == 1500
+    with pytest.raises(Exception):
+        await archive.apply_scope(c, "community", bad, "replace")                                  # replace is all or nothing
+
+
+async def test_import_reports_progress_and_can_be_cancelled_and_rolled_back():
+    c = await _mem_service()
+    svc = c.backup
+    for i in range(1, 1201):
+        await c.db.execute("INSERT INTO quotes (body, author, created) VALUES (?, ?, ?)", (f"q{i}", "a", 1.0))
+    exp = await svc.export(["community"], "pw")
+    await c.db.execute("DELETE FROM quotes")
+    await svc.import_(exp["data"], exp["key"], "pw", "merge", [], False)
+    p = svc.progress_info()
+    assert p["state"] == "done" and p["pct"] == 100 and p["result"]["added"] == 1200 and p["scopes"][0]["done"] == p["scopes"][0]["total"] == 1200
+
+    async def cancel_when_running():
+        while not (svc._run and svc._run["state"] == "running" and svc._run["cancellable"]):
+            await asyncio.sleep(0)
+        assert svc.request_cancel()
+    task = asyncio.create_task(cancel_when_running())
+    with pytest.raises(BackupError, match="cancelled"):
+        await svc.import_(exp["data"], exp["key"], "pw", "replace", [], False)
+    await task
+    assert svc.progress_info()["state"] == "failed"
+    assert (await c.db.fetchone("SELECT COUNT(*) AS n FROM quotes"))["n"] == 1200                   # everything was put back

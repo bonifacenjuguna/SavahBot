@@ -184,6 +184,20 @@ class _SQLite:
     async def run(self, sql: str, params: Sequence[Any], mode: str) -> Any:
         return await asyncio.to_thread(self._exec, sql, params, mode)
 
+    def _many(self, sql: str, rows: Sequence[Sequence[Any]]) -> None:
+        with self._lock:
+            self._conn.execute("BEGIN")
+            try:
+                self._conn.executemany(sql, [tuple(r) for r in rows])
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+
+    async def run_many(self, sql: str, rows: Sequence[Sequence[Any]]) -> None:
+        """Many rows in one go, all or nothing."""
+        await asyncio.to_thread(self._many, sql, rows)
+
     async def init_schema(self) -> None:
         tables, indexes = schema_phases()
         fix = lambda st: st.replace("{PK}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL")
@@ -240,6 +254,11 @@ class _Postgres:
                 return int(status.split()[-1])
             except (ValueError, IndexError):
                 return 0
+
+    async def run_many(self, sql: str, rows: Sequence[Sequence[Any]]) -> None:
+        """Many rows in one go, all or nothing (asyncpg wraps executemany in one transaction)."""
+        async with self._pool.acquire() as conn:
+            await conn.executemany(self._q(sql), [tuple(r) for r in rows])
 
     async def init_schema(self) -> None:
         tables, indexes = schema_phases()
@@ -304,6 +323,11 @@ class Database:
         if self.echo:
             logger.debug("SQL %s %s", sql, params)
         return await self._impl.run(sql, params, "exec")
+
+    async def executemany(self, sql: str, rows: Sequence[Sequence[Any]]) -> None:
+        if self.echo:
+            logger.debug("SQL many %s x%s", sql, len(rows))
+        await self._impl.run_many(sql, rows)
 
     async def fetchall(self, sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
         if self.echo:

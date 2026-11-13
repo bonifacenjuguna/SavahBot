@@ -128,9 +128,92 @@ def read_zip(blob: bytes) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
 
 
 # ---------------------------------------------------------------------------------------------- applying
-async def _insert(db: Any, table: str, cols: list[str], row: list[Any], keep_id: bool) -> None:
-    use = [(c, v) for c, v in zip(cols, row) if keep_id or c != "id"]
-    await db.execute(f"INSERT INTO {table} ({', '.join(c for c, _ in use)}) VALUES ({', '.join('?' for _ in use)})", [v for _, v in use])
+CHUNK = 400
+_INT = {"integer", "bigint", "smallint"}
+_FLT = {"double precision", "real", "numeric"}
+_TXT = {"text", "character varying", "character"}
+
+
+def _to_int(v: Any) -> Any:
+    if v is None or isinstance(v, int):
+        return None if v is None else int(v)
+    if isinstance(v, float):
+        return int(round(v))
+    s = str(v).strip()
+    try:
+        return int(s)
+    except ValueError:
+        return int(round(float(s)))
+
+
+def _to_text(v: Any) -> Any:
+    if v is None or isinstance(v, str):
+        return v
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, (dict, list)):
+        return json.dumps(v)
+    return str(v)
+
+
+def _converter(typ: str) -> Any:
+    """Postgres is strict about column types (a whole number for a decimal column, text for a number), and a backup made on SQLite can hold either.
+    Each value is brought to the type of the column it is going into. SQLite takes anything, so it needs no conversion."""
+    if typ in _INT:
+        return _to_int
+    if typ in _FLT:
+        return lambda v: None if v is None else float(v)
+    if typ == "boolean":
+        return lambda v: None if v is None else (v.strip().lower() in ("1", "true", "t", "yes") if isinstance(v, str) else bool(v))
+    if typ in _TXT:
+        return _to_text
+    return lambda v: v
+
+
+async def _types(db: Any, table: str) -> dict[str, str]:
+    if db.backend == "sqlite":
+        return {}
+    return {r["column_name"]: r["data_type"] for r in await db.fetchall("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = ?", (table,))}
+
+
+async def _count(db: Any, table: str) -> int:
+    return int((await db.fetchone(f"SELECT COUNT(*) AS n FROM {table}"))["n"])
+
+
+async def write_rows(db: Any, table: str, cols: list[str], rows: list[list[Any]], *, keep_id: bool, strict: bool,
+                     tick: Any = None, cancel: Any = None) -> dict[str, Any]:
+    """Write rows in batches of CHUNK (far faster than one by one). A row that already exists is left alone.
+    strict (replace, undo): any problem stops everything. Otherwise (merge) a batch with a bad row is retried row by row, so one bad row is counted
+    and reported instead of silently losing its neighbours or stopping the restore."""
+    out: dict[str, Any] = {"added": 0, "failed": 0, "error": ""}
+    if not rows:
+        return out
+    keep = [i for i, c in enumerate(cols) if keep_id or c != "id"]
+    names = [cols[i] for i in keep]
+    types = await _types(db, table)
+    conv = [_converter(types.get(n, "")) for n in names]
+    sql = f"INSERT INTO {table} ({', '.join(names)}) VALUES ({', '.join('?' for _ in names)}) ON CONFLICT DO NOTHING"
+    prep = lambda r: [f(r[i]) for f, i in zip(conv, keep)]
+    before = await _count(db, table)
+    for n in range(0, len(rows), CHUNK):
+        if cancel and cancel():
+            raise BackupError("Restore cancelled.")
+        chunk = rows[n:n + CHUNK]
+        try:
+            await db.executemany(sql, [prep(r) for r in chunk])
+        except Exception:
+            if strict:
+                raise
+            for r in chunk:
+                try:
+                    await db.execute(sql, prep(r))
+                except Exception as exc:
+                    out["failed"] += 1
+                    out["error"] = out["error"] or f"{table}: {str(exc)[:160]}"
+        if tick:
+            tick(len(chunk))
+    out["added"] = max(0, await _count(db, table) - before)
+    return out
 
 
 async def snapshot_tables(c: Any, tables: list[str], kv: list[str]) -> dict[str, Any]:
@@ -149,9 +232,8 @@ async def restore_snapshot(c: Any, snap: dict[str, Any]) -> None:
     for t, d in snap["tables"].items():
         await c.db.execute(f"DELETE FROM {t}")
         have = set(await _columns(c.db, t))
-        for row in d["rows"]:
-            pairs = [(k, v) for k, v in zip(d["columns"], row) if k in have]
-            await c.db.execute(f"INSERT INTO {t} ({', '.join(k for k, _ in pairs)}) VALUES ({', '.join('?' for _ in pairs)})", [v for _, v in pairs])
+        idx = [i for i, k in enumerate(d["columns"]) if k in have]
+        await write_rows(c.db, t, [d["columns"][i] for i in idx], [[r[i] for i in idx] for r in d["rows"]], keep_id=True, strict=True)
     for k, v in snap["kv"].items():
         await c.db.kv_set(k, v or "")
     await _fix_sequences(c, list(snap["tables"]))
@@ -172,12 +254,22 @@ async def _fix_sequences(c: Any, tables: list[str]) -> None:
         await c.db.execute(f"SELECT setval(?::text::regclass, COALESCE((SELECT MAX(id) FROM {t}), 1))", (seq["seq"],))
 
 
-async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str) -> dict[str, Any]:
-    """Apply one scope. replace = the backup's rows become the only rows. merge = add what is missing, keep everything else."""
-    db, report = c.db, {"added": 0, "skipped": 0, "demo_skipped": 0}
+async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str, tick: Any = None, cancel: Any = None) -> dict[str, Any]:
+    """Apply one scope. replace = the backup's rows become the only rows. merge = add what is missing, keep everything else.
+    `tick(n)` is told how many of the backup's rows have been dealt with, so the screen can show real progress; `cancel()` says whether to stop."""
+    db, report = c.db, {"added": 0, "skipped": 0, "demo_skipped": 0, "failed": 0, "error": ""}
     for t, d in data["tables"].items():
+        raw = len(d["rows"])
+        dealt = 0
+
+        def step(n: int) -> None:
+            nonlocal dealt
+            dealt += n
+            if tick:
+                tick(n)
         target = "settings" if t == "settings_secret" else t
         if not await _exists(db, target):
+            step(raw)
             continue
         have = set(await _columns(db, target))
         cols = [k for k in d["columns"] if k in have]
@@ -202,24 +294,22 @@ async def apply_scope(c: Any, scope: str, data: dict[str, Any], mode: str) -> di
                 await db.execute(f"DELETE FROM {target} WHERE demo = 0")
             else:
                 await db.execute(f"DELETE FROM {target}")
-        existing: set[tuple] = set()
         if mode == "merge" or t == "settings_secret":
             noid = [k for k in cols if k != "id"]
             existing = {tuple(str(r[k]) for k in noid) for r in await db.fetchall(f"SELECT {', '.join(noid)} FROM {target}")} if noid else set()
-        for r in rows:
             if existing:
-                key = tuple(str(v) for k, v in zip(cols, r) if k != "id")
-                if key in existing:
-                    report["skipped"] += 1
-                    continue
-            try:
-                await _insert(db, target, cols, r, keep_id=(mode == "replace"))
-                report["added"] += 1
-            except Exception:   # a unique name that already exists (for example a command): the existing one wins in merge mode
-                if mode == "replace":
-                    raise
-                report["skipped"] += 1
+                fresh = [r for r in rows if tuple(str(v) for k, v in zip(cols, r) if k != "id") not in existing]
+                report["skipped"] += len(rows) - len(fresh)
+                step(len(rows) - len(fresh))
+                rows = fresh
+        got = await write_rows(db, target, cols, rows, keep_id=(mode == "replace"), strict=(mode == "replace"), tick=step, cancel=cancel)
+        report["added"] += got["added"]
+        report["failed"] += got["failed"]
+        report["skipped"] += max(0, len(rows) - got["added"] - got["failed"])    # a unique name that already exists (for example a command): the existing one wins in merge mode
+        report["error"] = report["error"] or got["error"]
         await _fix_sequences(c, [target])
+        if tick and dealt < raw:
+            tick(raw - dealt)
     for k, v in data["kv"].items():
         if mode == "replace" or not await db.kv_get(k):
             await db.kv_set(k, str(v))

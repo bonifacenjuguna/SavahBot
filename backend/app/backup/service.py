@@ -1,6 +1,7 @@
 """Backup service: make an encrypted backup, check one, restore one (with a safety snapshot and an undo)."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -24,6 +25,8 @@ TOKEN_KEY = "restore_token_hash"
 class BackupService:
     def __init__(self, c: Any) -> None:
         self.c = c
+        self._run: dict[str, Any] | None = None
+        self._cancel = False
 
     # ------------------------------------------------------------------ info
     async def info(self) -> dict[str, Any]:
@@ -77,6 +80,46 @@ class BackupService:
         header, manifest, _ = self._open(data_b64, key, passphrase)
         return {"ok": True, **self._summary(header, manifest)}
 
+    # ------------------------------------------------------------------ progress (1.4.3)
+    # One restore runs at a time. The screen polls progress_info() while the restore request is open, so a long restore shows real movement
+    # (which part, how many rows) and, if the connection drops, the screen can still find out how it ended.
+    def progress_info(self) -> dict[str, Any]:
+        run = getattr(self, "_run", None)
+        if not run:
+            return {"state": "idle"}
+        return {**run, "scopes": [dict(x) for x in run["scopes"]], "elapsed": round((run["finished"] or time.time()) - run["started"], 1)}
+
+    def request_cancel(self) -> bool:
+        run = getattr(self, "_run", None)
+        if run and run["state"] == "running" and run.get("cancellable"):
+            self._cancel = True
+            run["stage"] = "Cancelling, putting everything back"
+            return True
+        return False
+
+    def _running(self) -> bool:
+        run = getattr(self, "_run", None)
+        return bool(run and run["state"] == "running" and time.time() - run["started"] < 3600)
+
+    def _begin(self, chosen: list[str], parts: dict[str, Any], mode: str) -> dict[str, Any]:
+        self._cancel = False
+        self._run = {"id": secrets.token_hex(4), "state": "running", "mode": mode, "stage": "Opening the backup", "pct": 2, "started": time.time(), "finished": None,
+                     "cancellable": False, "error": "", "result": None,
+                     "scopes": [{"id": s, "label": archive.SCOPES[s]["label"], "state": "wait", "done": 0, "total": sum(len(d["rows"]) for d in parts[s]["tables"].values())}
+                                for s in chosen]}
+        return self._run
+
+    def _recalc(self) -> None:
+        run = self._run
+        total = sum(x["total"] for x in run["scopes"]) or 1
+        done = sum(x["done"] for x in run["scopes"])
+        run["pct"] = round(10 + 80 * min(1.0, done / total), 1)
+
+    def _stage(self, text: str, pct: float | None = None) -> None:
+        self._run["stage"] = text
+        if pct is not None:
+            self._run["pct"] = pct
+
     # ------------------------------------------------------------------ import
     async def import_(self, data_b64: str, key: str, passphrase: str, mode: str, scopes: list[str], dry_run: bool) -> dict[str, Any]:
         if mode not in ("replace", "merge"):
@@ -92,52 +135,86 @@ class BackupService:
         report: dict[str, Any] = {"ok": True, "dry_run": dry_run, "mode": mode, "scopes": chosen, "plan": plan, **self._summary(header, manifest)}
         if dry_run:
             return report
+        if self._running():
+            raise BackupError("A restore is already running. Wait for it to finish, or cancel it.")
+        run = self._begin(chosen, parts, mode)
+        try:
+            await self._do_import(run, parts, chosen, mode, report)
+        except Exception as exc:
+            run.update(state="failed", error=str(exc), stage="Failed", finished=time.time(), cancellable=False)
+            raise
+        return report
+
+    async def _do_import(self, run: dict[str, Any], parts: dict[str, Any], chosen: list[str], mode: str, report: dict[str, Any]) -> None:
         tables = [t for s in chosen for t in archive.SCOPES[s]["tables"]]
         kv = [k for s in chosen for k in archive.SCOPES[s]["kv"]]
         if "credentials" in chosen:
             tables.append("settings")
+        self._stage("Making a safety copy so you can undo", 6)
         try:
             snap = await archive.snapshot_tables(self.c, tables, kv)
             await self._keep_undo(snap)
         except Exception as exc:     # nothing has been changed yet
             logger.exception("Could not make the safety copy before restoring")
             raise BackupError(f"Nothing was changed: the safety copy could not be made. ({exc})") from exc
+        run["cancellable"] = True
         try:
-            results = {s: await archive.apply_scope(self.c, s, parts[s], mode) for s in chosen}
+            results: dict[str, Any] = {}
+            for sc in run["scopes"]:
+                sc["state"] = "run"
+                self._stage(f"{'Replacing' if mode == 'replace' else 'Adding'}: {sc['label']}")
+
+                def tick(n: int, sc: dict[str, Any] = sc) -> None:
+                    sc["done"] = min(sc["total"], sc["done"] + n)
+                    self._recalc()
+                results[sc["id"]] = await archive.apply_scope(self.c, sc["id"], parts[sc["id"]], mode, tick, lambda: self._cancel)
+                sc["state"], sc["done"] = "done", sc["total"]
+                self._recalc()
+            run["cancellable"] = False
             if mode == "replace":                       # verify: after a replace, the table sizes must be exactly the backup's
+                self._stage("Checking the result", 92)
                 for s in chosen:
                     for t, d in parts[s]["tables"].items():
-                        if t == "settings_secret":
-                            continue
-                        if t == "settings":
+                        if t in ("settings_secret", "settings"):
                             continue
                         demo = await archive._has_demo(self.c.db, t) if await archive._exists(self.c.db, t) else False
                         want = len(d["rows"]) - (sum(1 for r in d["rows"] if int(r[d["columns"].index("demo")] or 0)) if demo and "demo" in d["columns"] else 0)
                         have = (await self.c.db.fetchone(f"SELECT COUNT(*) AS n FROM {t}{' WHERE demo = 0' if demo else ''}"))["n"] if await archive._exists(self.c.db, t) else want
                         if have != want:
                             raise BackupError(f"Checking the result failed for {t}: expected {want} rows, found {have}.")
+            self._stage("Reloading the bot with the restored data", 96)
             await self._reload(chosen)
         except Exception as exc:
+            run["cancellable"] = False
+            cancelled = self._cancel and "cancelled" in str(exc).lower()
             logger.exception("Import failed; rolling back")
+            self._stage("Putting everything back as it was", 97)
             try:
                 await archive.restore_snapshot(self.c, snap)
-            except Exception as back:     # 1.4.3: say so plainly instead of a bare server error (the safety copy is still kept for Undo)
+            except Exception as back:     # say so plainly instead of a bare server error (the safety copy is still kept for Undo)
                 logger.exception("Rolling back after a failed import also failed")
                 raise BackupError(f"The import failed ({exc}) and putting things back also failed ({back}). Press Undo the last restore to try again; a safety copy was kept.") from exc
             await self._reload(chosen)
+            if cancelled:
+                raise BackupError("Restore cancelled. Everything was put back as it was.") from exc
             raise BackupError(f"The import failed and everything was put back as it was. ({exc})") from exc
         report["applied"] = results
         report["can_undo"] = True
+        added = sum(r["added"] for r in results.values())
+        run.update(state="done", stage="Finished", pct=100, finished=time.time(), cancellable=False,
+                   result={"added": added, "skipped": sum(r["skipped"] for r in results.values()), "failed": sum(r["failed"] for r in results.values()),
+                           "error": next((r["error"] for r in results.values() if r["error"]), ""), "fingerprint": report["fingerprint"], "mode": mode})
         try:      # the data is already restored: a problem writing the log or sending the alert must not make the restore look like it failed
             await self.c.access.audit("backup_imported", None, "", f"{mode}: {', '.join(chosen)}")
             await self.c.access._alert(f"♻️ A backup was restored ({mode}: {', '.join(chosen)}).")
             self.c.bus.publish("backup", {"title": "Backup restored", "text": f"{mode}: {', '.join(chosen)}"})
         except Exception:
             logger.exception("Restored, but the log entry or alert could not be written")
-        return report
 
     async def _keep_undo(self, snap: dict[str, Any]) -> None:
-        blob = base64.b64encode(zlib.compress(json.dumps(snap, default=str).encode(), 6)).decode()
+        def pack() -> str:     # a big snapshot takes a while to compress: do it off the event loop so the bot and the progress screen keep answering
+            return base64.b64encode(zlib.compress(json.dumps(snap, default=str).encode(), 6)).decode()
+        blob = await asyncio.to_thread(pack)
         await self.c.db.kv_set(UNDO_KEY, blob if len(blob) < 60 * 1024 * 1024 else "")
 
     async def undo(self) -> dict[str, Any]:
