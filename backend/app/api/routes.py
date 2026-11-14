@@ -170,7 +170,7 @@ async def me(request: Request, c: Any) -> dict:
 @R.add("/status", ["GET"])
 async def status(request: Request, c: Any) -> dict:
     return {
-        "app": c.cfg.get("app_name"), "version": __version__, "timezone": c.cfg.get("owner_timezone"),
+        "app": c.cfg.get("app_name"), "version": __version__, "timezone": c.cfg.get("owner_timezone"), "now": time.time(),
         "hub": c.hub.status(), "telegram": c.telegram.status(), "youtube": c.youtube.status(), "demo": c.demo.status(),
         "pending": len(await c.store.pending_actions(_demo_filter(c))), "database": c.db.backend, "uptime": round(time.time() - c.started_at),
         "sse_clients": c.bus.subscriber_count,
@@ -506,7 +506,7 @@ async def chat_recent(request: Request, c: Any) -> dict:
         items = await c.hub.sessions.chat(sid, limit=limit)
     cur = c.hub.status()["session"]
     # With no stream running, `items` is only what was left of the stream that just ended (or nothing); `last` says which stream that was.
-    return {"items": items, "session": cur, "last": None if cur else await c.hub.sessions.last_finished(want_demo)}
+    return {"items": items, "session": cur, "now": time.time(), "last": None if cur else await c.hub.sessions.last_finished(want_demo)}
 
 
 @R.add("/chat/search", ["GET"])

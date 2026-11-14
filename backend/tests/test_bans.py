@@ -185,3 +185,33 @@ def test_ban_profile_shows_why_the_chat_around_it_and_the_history():
             assert e.status == 404
 
     asyncio.run(go())
+
+
+def test_people_profile_works_for_anyone_and_activity_entries_carry_the_person():
+    """1.4.3: the one profile sheet opens from the chat, Insights, Moderation and the Activity log, so it must work for a person nothing was done to."""
+    import time
+    from types import SimpleNamespace as NS
+
+    from app.api import bans_routes
+
+    async def go():
+        s = await build_stack(seed=False)
+        now = time.time()
+        await s.db.execute("INSERT INTO chat_messages (platform, msg_id, author_id, author_name, body, level, ts, score, verdict) VALUES ('youtube', 'a1', 'u5', 'Quiet', 'hi there', 'everyone', ?, 0, 'allow')", (now - 30,))
+        c = NS(hub=s.hub, store=s.store)
+        r = await bans_routes.people_profile(NS(query_params={"author_id": "u5"}), c)
+        assert r["ban"] is None and r["why"]["at"] is None and r["person"]["name"] == "Quiet" and r["person"]["messages"] == 1
+        bid = await s.hub.bans.record(author_id="u5", author_name="Quiet", kind="timeout", duration=60, ban_ref="", action_id=None, source="dashboard", reason="Chosen", now=now - 5)
+        r = await bans_routes.people_profile(NS(query_params={"author_id": "u5"}), c)                  # no ban given: the latest one is explained
+        assert r["ban"]["id"] == bid and r["active_ban_id"] == bid
+        r = await bans_routes.people_profile(NS(query_params={"author_id": "someone-else", "ban_id": str(bid)}), c)
+        assert r["ban"] is None                                                                          # an id for another person is never explained under this one
+        try:
+            await bans_routes.people_profile(NS(query_params={}), c)
+            raise AssertionError("expected 422")
+        except bans_routes.ApiError as e:
+            assert e.status == 422
+        await s.activity.record("moderation", "ban", "Timeout for Quiet (auto)", "notable", who=("u5", "youtube"))
+        assert (await s.activity.query())["items"][0]["author_id"] == "u5"
+
+    asyncio.run(go())

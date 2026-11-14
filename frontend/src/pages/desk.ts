@@ -1,5 +1,6 @@
 import { pageLayout } from "../layout.js";
 import { get, post } from "../api.js";
+import { openProfile } from "./person-profile.js";
 import { ago, busy, clock, dateTime, debounce, h, mount, toast } from "../dom.js";
 import * as feed from "../events.js";
 import { icon } from "../icons.js";
@@ -52,6 +53,8 @@ export const desk: Page = {
     let sessionId = "";                // the stream running now ("" when none): a different one means a new stream, which starts on an empty chat
     // state the controls handle reads (declared up here because the toolbar paints it while the page is still being built)
     let startedAt = 0, streamTitle = "";
+    let skew = 0;                       // the server's clock minus this device's (seconds), so the stream clock is right even when the device clock is not
+    const nowSec = () => Date.now() / 1000 + skew;
     let handleEl: HTMLButtonElement | null = null;
     let handleKey = "";
     let drawerOpen = false;
@@ -143,7 +146,8 @@ export const desk: Page = {
       const cls = k === "ok" ? "" : k === "flagged" ? " flagged" : " blocked";
       const el = h("div", { class: `line${cls}${picked.has(m) ? " picked" : ""}` }, h("time", { title: dateTime(m.ts) }, withDate ? dateTime(m.ts) : clock(m.ts)),
         h("div", null,
-          h("span", { class: `who ${m.level}` }, m.author_name),
+          h("span", { class: `who ${m.level}${m.author_id && m.level !== "bot" ? " who-open" : ""}`, title: m.author_id && m.level !== "bot" ? "Open profile" : "",
+            onclick: m.author_id && m.level !== "bot" ? (e: Event) => { e.stopPropagation(); openProfile({ author_id: m.author_id, platform: m.platform, name: m.author_name }); } : undefined }, m.author_name),
           h("span", { class: "text" }, m.text),
           k !== "ok" ? h("div", { class: `why ${k}` }, icon(k === "blocked" ? "shield" : "flag", 13), h("span", null, whyText(m, k))) : null));
       els.set(m, el);
@@ -287,7 +291,7 @@ export const desk: Page = {
           h("strong", { class: "ss-title" }, live ? (streamTitle || (demo ? "Demo stream" : "On air")) : "No stream running"),
           h("div", { class: "ss-meta" },
             h("span", { class: "ss-tag" }, live ? (demo ? "Demo" : "Live") : "Off air"),
-            h("span", null, live ? `${spanText(Date.now() / 1000 - startedAt)} · fresh chat for this stream` : yt?.connected ? "Waiting for you to go live" : "YouTube not connected"))),
+            h("span", null, live ? `${spanText(nowSec() - startedAt)} · fresh chat for this stream` : yt?.connected ? "Waiting for you to go live" : "YouTube not connected"))),
         link);
       paintHandle();
     };
@@ -466,6 +470,30 @@ export const desk: Page = {
     live.el.dataset.card = "live";
     const sideStack = h("div", { class: "stack", "data-card": "side", "data-label": "Side column" }, queuePane, live.el, statusPane);
 
+    // ----- the stream clock: how long this stream has been on air, ticking every second, between the title and the rate (1.4.3)
+    const clockLabel = h("span", { class: "sc-label" }, "Off air");
+    const clockTime = h("span", { class: "sc-time" }, "-:--:--");
+    const streamClock = h("span", { class: "stream-clock", role: "timer", "data-state": "off", title: "No stream is running", "aria-label": "No stream is running" }, h("span", { class: "sc-dot", "aria-hidden": "true" }), clockLabel, clockTime);
+    chatPane.querySelector(":scope > header > h2")?.after(streamClock);
+    const hms = (total: number) => { const s = Math.max(0, Math.floor(total)); return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+    let clockMinute = -1;
+    function paintClock(): void {
+      const demo = status?.hub.mode === "demo";
+      const started = sessionId ? startedAt : (status?.hub.session?.started ?? 0);
+      const live = Boolean(sessionId) || Boolean(status?.hub.stream_live && started);
+      streamClock.setAttribute("data-state", live ? (demo ? "demo" : "live") : "off");
+      clockLabel.textContent = live ? (demo ? "Demo" : "Live") : "Off air";
+      if (!live || !started) { clockTime.textContent = "-:--:--"; clockMinute = -1; streamClock.title = "No stream is running"; streamClock.setAttribute("aria-label", "No stream is running"); return; }
+      const sec = Math.max(0, nowSec() - started);
+      clockTime.textContent = hms(sec);
+      streamClock.title = `${demo ? "Demo stream" : "On air"} for ${hms(sec)} (hours:minutes:seconds), started ${new Date(started * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const minute = Math.floor(sec / 60) + (demo ? 0.5 : 0);     // the half marks demo, so the spoken label is rebuilt when the mode changes as well as each minute
+      if (minute !== clockMinute) {
+        clockMinute = minute;
+        const hrs = Math.floor(sec / 3600), mins = Math.floor((sec % 3600) / 60);
+        streamClock.setAttribute("aria-label", `${demo ? "Demo stream" : "Live"} running for ${hrs} ${hrs === 1 ? "hour" : "hours"} ${mins} ${mins === 1 ? "minute" : "minutes"}`);
+      }
+    }
     const zoom = zoomToFill(chatPane, {
       onOpen: () => {
         paintExpand(true);
@@ -505,15 +533,16 @@ export const desk: Page = {
     document.addEventListener("keydown", onKey);
 
     /** Loads the chat of the stream that is running now. With `catchUp` it only adds what a dropped connection missed. */
-    const loadRecent = (catchUp = false) => get<{ items: Line[]; session: { id: string; started: number; title: string } | null; last: Stream | null }>("/api/chat/recent?limit=150").then((r) => {
+    const loadRecent = (catchUp = false) => get<{ items: Line[]; session: { id: string; started: number; title: string } | null; last: Stream | null; now?: number }>("/api/chat/recent?limit=150").then((r) => {
       lastStream = r.last;
+      if (r.now) skew = r.now - Date.now() / 1000;
       if ((r.session?.id ?? "") !== sessionId) newStream(r.session?.id ?? "", r.session?.title ?? "", r.session?.started ?? 0);
       else if (r.session) { streamTitle = r.session.title || streamTitle; startedAt = r.session.started; }
       // With no stream running, whatever is left is the stream that just ended: shown for reading, never mixed into the next one
       for (const m of r.items) add(m, true);
       if (!catchUp) list.scrollTop = list.scrollHeight;
       if (!lines.length || !catchUp) redraw();
-      paintStrip(); renderFacts();
+      paintStrip(); renderFacts(); paintClock();
     }).catch((e) => { if (!catchUp) toast(e.message, "error"); });
     void loadRecent();
     void loadPending().catch((e) => toast(e.message, "error"));
@@ -531,8 +560,10 @@ export const desk: Page = {
       // the connection dropped and came back: fetch what was missed instead of making you refresh
       feed.onReconnect(() => { void loadRecent(true); void loadPending().catch(() => undefined); if (savedMode() && viewing?.live) reload(); }),
     ];
-    offs.push(onStatus(() => { renderFacts(); paintStrip(); }));
+    offs.push(onStatus(() => { if (status?.now) skew = status.now - Date.now() / 1000; renderFacts(); paintStrip(); paintClock(); }));
     const t = window.setInterval(() => { renderFacts(); if (sessionId) paintStrip(); }, 5000);
-    return () => { lay.dispose(); offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
+    const clockTimer = window.setInterval(paintClock, 1000);
+    paintClock();
+    return () => { window.clearInterval(clockTimer); lay.dispose(); offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },
 };

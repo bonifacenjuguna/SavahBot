@@ -1,10 +1,18 @@
+import { openProfile } from "./person-profile.js";
 import { tabRail } from "../nav.js";
 import { post } from "../api.js";
 import { busy, dateTime, duration, h, type Child } from "../dom.js";
 import { icon } from "../icons.js";
 
+/** A person's name that opens their profile (1.4.3). Plain text when no ID is stored. */
+export function personLink(a: { author_id?: string; platform?: string; author_name: string; id?: number }, actionId?: number): HTMLElement {
+  if (!a.author_id) return h("strong", null, a.author_name);
+  return h("button", { class: "person-link", type: "button", title: "Open profile", "aria-label": `Open the profile of ${a.author_name}`,
+    onclick: (e: Event) => { e.stopPropagation(); openProfile({ author_id: a.author_id, platform: a.platform, name: a.author_name, action_id: actionId ?? a.id }); } }, a.author_name);
+}
+
 export interface Action {
-  id: number; ts: number; author_name: string; action: string; duration: number | null; score: number; reasons: string[];
+  id: number; ts: number; author_id?: string; platform?: string; author_name: string; action: string; duration: number | null; score: number; reasons: string[];
   status: string; body: string; error: string; demo: boolean;
 }
 
@@ -100,7 +108,7 @@ export function approvalList(items: Action[], reload: () => Promise<void> | void
       reasons.addEventListener("click", flip);
       reasons.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
       return h("li", { class: "approval" },
-        h("div", { class: "ap-head" }, h("strong", null, a.author_name), h("span", { class: `chip ${a.action === "ban" ? "bad" : "warn"}` }, `${actionLabel(a)} · score ${a.score}`), h("span", { class: "ap-time muted small" }, dateTime(a.ts))),
+        h("div", { class: "ap-head" }, personLink(a), h("span", { class: `chip ${a.action === "ban" ? "bad" : "warn"}` }, `${actionLabel(a)} · score ${a.score}`), h("span", { class: "ap-time muted small" }, dateTime(a.ts))),
         a.body ? h("q", null, a.body) : null,
         why ? reasons : null,
         h("div", { class: "ap-actions" }, h("button", { class: "btn small primary", onclick: decide(a.id, "approve") }, icon("check", 15), "Approve"),

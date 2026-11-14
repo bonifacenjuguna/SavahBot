@@ -16,6 +16,7 @@ from .runtime_config import is_secret
 
 logger = logging.getLogger(__name__)
 
+register_schema(columns=[("activity_log", "author_id", "TEXT NOT NULL DEFAULT ''"), ("activity_log", "platform", "TEXT NOT NULL DEFAULT ''")])   # 1.4.3: who a moderation entry is about, so it can open their profile
 register_schema(["CREATE TABLE IF NOT EXISTS activity_log (id {PK}, ts {REAL} NOT NULL, area TEXT NOT NULL, importance TEXT NOT NULL, action TEXT NOT NULL, summary TEXT NOT NULL, before_v TEXT NOT NULL DEFAULT '', after_v TEXT NOT NULL DEFAULT '', actor TEXT NOT NULL DEFAULT '')",
                  "CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity_log (ts)",
                  "CREATE INDEX IF NOT EXISTS idx_activity_area ON activity_log (area, ts)"])
@@ -43,17 +44,21 @@ def _show(v: Any) -> str:
     return json.dumps(v, ensure_ascii=False)[:120] if not isinstance(v, str) else v[:120]
 
 
+def _who(d: dict) -> tuple[str, str] | None:
+    return (str(d["author_id"]), str(d.get("platform") or "youtube")) if d.get("author_id") else None
+
+
 class ActivityLog:
     def __init__(self, db: Any, cfg: Any, notify: Any = None) -> None:
         self.db, self.cfg, self.notify = db, cfg, notify
 
-    async def record(self, area: str, action: str, summary: str, importance: str = "routine", before: Any = "", after: Any = "", actor: str = "owner") -> None:
+    async def record(self, area: str, action: str, summary: str, importance: str = "routine", before: Any = "", after: Any = "", actor: str = "owner", who: tuple[str, str] | None = None) -> None:
         """Best effort: a failure to log must never break the action that was logged."""
         try:
             area = area if area in AREAS else "settings"
             importance = importance if importance in IMPORTANCE else "routine"
-            await self.db.execute("INSERT INTO activity_log (ts, area, importance, action, summary, before_v, after_v, actor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                  (time.time(), area, importance, action[:60], summary[:240], _show(before), _show(after), actor[:40]))
+            await self.db.execute("INSERT INTO activity_log (ts, area, importance, action, summary, before_v, after_v, actor, author_id, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                  (time.time(), area, importance, action[:60], summary[:240], _show(before), _show(after), actor[:40], (who or ("", ""))[0][:80], (who or ("", ""))[1][:20]))
             if importance == "sensitive" and self.notify is not None and self.cfg.get("activity_notify_sensitive"):
                 await self.notify.emit("security.alert", "Sensitive change", summary[:140], route="#/activity")
         except Exception:
@@ -98,11 +103,11 @@ class ActivityLog:
         t, d = ev.get("type"), ev.get("data") or {}
         job = None
         if t == "ban_made":
-            job = self.record("moderation", "ban", f"{(d.get('kind') or 'action').capitalize()} for {d.get('author', 'someone')} ({d.get('source', 'bot')})", "notable", actor=str(d.get("source", "bot")))
+            job = self.record("moderation", "ban", f"{(d.get('kind') or 'action').capitalize()} for {d.get('author', 'someone')} ({d.get('source', 'bot')})", "notable", actor=str(d.get("source", "bot")), who=_who(d))
         elif t == "ban_lifted":
-            job = self.record("moderation", "unban", f"Lifted the ban on {d.get('author', 'someone')}", "notable", actor=str(d.get("by", "owner")))
+            job = self.record("moderation", "unban", f"Lifted the ban on {d.get('author', 'someone')}", "notable", actor=str(d.get("by", "owner")), who=_who(d))
         elif t == "chat_deleted":
-            job = self.record("chat", "delete", f"Deleted a message from {d.get('author', 'someone')} from the chat" + (" (demo)" if d.get("simulated") else ""), "routine")
+            job = self.record("chat", "delete", f"Deleted a message from {d.get('author', 'someone')} from the chat" + (" (demo)" if d.get("simulated") else ""), "routine", who=_who(d))
         elif t == "backup":
             job = self.record("data", "backup", str(d.get("title", "Backup")) + ": " + str(d.get("text", "")), "sensitive")
         if job is not None:

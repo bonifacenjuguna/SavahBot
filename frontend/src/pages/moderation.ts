@@ -6,7 +6,7 @@ import * as feed from "../events.js";
 import { icon } from "../icons.js";
 import { onStatus, status, refreshStatus } from "../state.js";
 import { dateRange, rangeQuery, type RangeValue } from "./kit.js";
-import { actionLabel, approvalList, card, chipFor, empty, pageHead, type Action } from "./shared.js";
+import { actionLabel, approvalList, card, chipFor, empty, pageHead, personLink, type Action } from "./shared.js";
 import { phraseTool, testLab } from "./modtools.js";
 import { openWhy } from "./whysheet.js";
 import type { Page } from "./types.js";
@@ -73,7 +73,7 @@ export const moderation: Page = {
           const why = a.reasons.join(", ");
           return h("tr", null,
             h("td", { class: "mh-when", "data-label": "When" }, dateTime(a.ts)),
-            h("td", { class: "mh-who", "data-label": "Who" }, h("div", { class: "mh-name" }, h("strong", null, a.author_name), a.demo ? h("span", { class: "chip" }, "demo") : null),
+            h("td", { class: "mh-who", "data-label": "Who" }, h("div", { class: "mh-name" }, personLink(a), a.demo ? h("span", { class: "chip" }, "demo") : null),
               a.body ? h("div", { class: "mh-msg", title: a.body }, a.body) : null),
             h("td", { class: "mh-act", "data-label": "Action" }, h("span", { class: `chip tier-${a.action}` }, actionLabel(a))),
             h("td", { class: "mh-out", "data-label": "Outcome" }, h("div", null, h("span", { class: `chip ${chipFor(a.status)}` }, a.status), a.error ? h("div", { class: "reasons" }, a.error) : null)),

@@ -398,7 +398,7 @@ class Hub:
                     author_id=a["author_id"], author_name=a["author_name"], kind=a["action"], duration=a["duration"] if a["action"] == "timeout" else None,
                     ban_ref="" if simulated else str(getattr(src, "last_ban_id", "") or ""), action_id=id_, source=source,
                     reason=", ".join(a.get("reasons") or [])[:300], platform=a["platform"], demo=simulated)
-                self.bus.publish("ban_made", {"author": a["author_name"], "kind": a["action"], "source": source})
+                self.bus.publish("ban_made", {"author": a["author_name"], "author_id": a["author_id"], "platform": a["platform"], "kind": a["action"], "source": source})
         self.bus.publish("mod_resolved", {"id": id_, "status": status, "action": a["action"], "author": a["author_name"]})
         return {"ok": status != "failed", "status": status, "error": "; ".join(errors)}
 
@@ -436,9 +436,9 @@ class Hub:
             ban_id = await self.bans.record(author_id=row["author_id"], author_name=row["author_name"], kind=action, duration=seconds if action == "timeout" else None,
                                             ban_ref="" if simulated else str(getattr(src, "last_ban_id", "") or ""), action_id=None, source="dashboard", reason="Chosen from the chat",
                                             platform=row["platform"], demo=simulated)
-            self.bus.publish("ban_made", {"author": row["author_name"], "kind": action, "source": "dashboard"})
+            self.bus.publish("ban_made", {"author": row["author_name"], "author_id": row["author_id"], "platform": row["platform"], "kind": action, "source": "dashboard"})
         else:
-            self.bus.publish("chat_deleted", {"author": row["author_name"], "simulated": simulated})
+            self.bus.publish("chat_deleted", {"author": row["author_name"], "author_id": row["author_id"], "platform": row["platform"], "simulated": simulated})
         return {"ok": True, "ban_id": ban_id, "simulated": simulated}
 
     async def unban(self, ban_id: int, by: str = "dashboard") -> dict[str, Any]:
@@ -458,7 +458,7 @@ class Hub:
                 return {"ok": False, "error": err}
         await self.bans.mark_lifted(ban_id, by)
         self.engine.strikes_clear(f"{row['platform']}:{row['author_id']}")
-        self.bus.publish("ban_lifted", {"id": ban_id, "author": row["author_name"], "by": by})
+        self.bus.publish("ban_lifted", {"id": ban_id, "author": row["author_name"], "author_id": row["author_id"], "platform": row["platform"], "by": by})
         return {"ok": True}
 
     async def second_chance(self, now: float) -> None:

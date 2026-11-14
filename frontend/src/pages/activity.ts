@@ -1,10 +1,11 @@
+import { openProfile } from "./person-profile.js";
 import { get, patch } from "../api.js";
 import { busy, dateTime, h, mount, toast } from "../dom.js";
 import { icon, statusIcon } from "../icons.js";
 import { empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 
-interface Item { id: number; ts: number; area: string; importance: "sensitive" | "notable" | "routine"; action: string; summary: string; before_v: string; after_v: string; actor: string }
+interface Item { id: number; ts: number; area: string; importance: "sensitive" | "notable" | "routine"; action: string; summary: string; before_v: string; after_v: string; actor: string; author_id?: string; platform?: string }
 interface Res { items: Item[]; more: boolean; areas: Record<string, string> }
 
 const TONE: Record<Item["importance"], [string, string]> = { sensitive: ["bad", "Sensitive"], notable: ["warn", "Notable"], routine: ["ok", "Routine"] };
@@ -14,7 +15,8 @@ function entry(i: Item): HTMLElement {
   const [tone, label] = TONE[i.importance];
   const change = i.before_v || i.after_v ? h("div", { class: "muted small wrap" }, i.before_v ? `Before: ${i.before_v}` : "", i.before_v && i.after_v ? "  →  " : "", i.after_v ? `After: ${i.after_v}` : "") : null;
   return h("div", { style: "display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line)" }, statusIcon(tone === "bad" ? "bad" : tone === "warn" ? "warn" : "ok", 18),
-    h("div", { style: "min-width:0" }, h("div", { class: "wrap" }, h("strong", null, i.summary)), change, h("div", { class: "muted small" }, `${label} · ${dateTime(i.ts)}${i.actor ? ` · ${i.actor}` : ""}`)));
+    h("div", { style: "min-width:0" }, h("div", { class: "wrap" }, h("strong", null, i.summary)), change, h("div", { class: "muted small" }, `${label} · ${dateTime(i.ts)}${i.actor ? ` · ${i.actor}` : ""}`),
+      i.author_id ? h("button", { class: "btn small ghost act-profile", type: "button", onclick: () => openProfile({ author_id: i.author_id, platform: i.platform, name: i.summary.replace(/^.*? (?:for|on|from) /, "").replace(/ \(.*$/, "").replace(/ from the chat.*$/, "") }) }, icon("user", 14), "Open profile") : null));
 }
 
 export const activity: Page = {
