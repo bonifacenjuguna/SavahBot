@@ -40,11 +40,12 @@ export const INDEX: Entry[] = [
   { id: "p-clear", title: "Clear caches and history", text: "Clear notification history and the weather cache.", words: "clear delete cache history cleanup wipe", route: "/settings?tab=privacy", group: "privacy", icon: "trash" },
   { id: "b-export", title: "Export a backup", text: "An encrypted file of your settings and content.", words: "backup export svbak encrypt key download", route: "/backup", group: "backup", icon: "database" },
   { id: "b-import", title: "Restore a backup", text: "Check, preview and restore, with an undo.", words: "restore import recovery undo", route: "/backup", group: "backup", icon: "database" },
+  { id: "b-reset", title: "Reset", text: "Put dashboard settings, card layouts or what the bot learned back to default.", words: "reset defaults restore factory layouts learning clear", route: "/backup", group: "backup", icon: "undo" },
   { id: "d-install", title: "Install the app", text: "Add SavahBot to your home screen or desktop.", words: "install pwa app home screen offline", route: "/settings?tab=device", group: "device", icon: "smartphone" },
   { id: "d-local", title: "Data on this device", text: "See and clear what this browser stores.", words: "local storage cache service worker clear device", route: "/settings?tab=device", group: "device", icon: "smartphone" },
   { id: "x-health", title: "Service health", text: "Database, Redis, background work and features.", words: "health status redis database leader scheduler diagnostics", route: "/settings?tab=developer", group: "developer", icon: "gauge" },
   { id: "x-config", title: "Configuration check", text: "Plain-language problems with your environment settings.", words: "config validation env environment problems check", route: "/settings?tab=developer", group: "developer", icon: "checklist" },
-  { id: "x-all", title: "All environment settings", text: "Every option, searchable, with reset to default.", words: "all settings env variables options advanced railway", route: "/settings?tab=all", group: "developer", icon: "sliders" },
+  { id: "x-all", title: "All environment settings", text: "Every option, searchable, with reset to default.", words: "all settings env variables options advanced railway", route: "/settings?tab=developer", group: "developer", icon: "sliders" },
 ];
 
 const KEY = "savahbot.settings.recent";

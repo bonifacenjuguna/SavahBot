@@ -188,8 +188,7 @@ export async function renderDeveloper(el: HTMLElement): Promise<void> {
       row("Cache", `${x.cache.weather_entries} weather entries (${x.cache.weather_provider})`, null)), ),
     card("plug", "Features", body(...Object.entries(x.features).map(([k, v]) => row(k.replace(/_/g, " "), null, h("span", { class: `chip ${v ? "ok" : ""}` }, v ? "available" : "not set up")))), { flush: true }),
     card("lock", "Secrets (only whether they are set)", body(h("p", { class: "muted small" }, "Values are never shown anywhere in SavahBot."), ...Object.entries(x.secrets).map(([k, v]) => row(k.replace(/_/g, " "), null, h("span", { class: `chip ${v ? "ok" : ""}` }, v ? "set" : "not set")))), { flush: true }),
-    card("cloud", "This deployment", body(row("Version", `${x.app.name} ${x.app.version} · ${x.app.env} · Python ${x.app.python}`, null), row("Running for", dur(x.app.uptime), null), row("Backend address", x.deployment.backend_host || "not set", null), row("Dashboard address", x.deployment.frontend_host || "not set", null),
-      h("p", null, h("a", { class: "btn small", href: "/settings?tab=all" }, icon("sliders", 14), "All environment settings"))), { flush: true }));
+    card("cloud", "This deployment", body(row("Version", `${x.app.name} ${x.app.version} · ${x.app.env} · Python ${x.app.python}`, null), row("Running for", dur(x.app.uptime), null), row("Backend address", x.deployment.backend_host || "not set", null), row("Dashboard address", x.deployment.frontend_host || "not set", null)), { flush: true }));
 }
 
 /** Settings, Shortcuts (1.3.9): every keyboard shortcut in one place. Only offered on desktops and laptops. */

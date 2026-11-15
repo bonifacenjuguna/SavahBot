@@ -39,7 +39,7 @@ export async function renderOverview(el: HTMLElement): Promise<void> {
     if (!q) { mount(results); return; }
     const hits = search(q);
     mount(results, hits.length ? hits.map(result) : empty("search", `Nothing matches “${q}”. Try another word, or open All environment settings.`),
-      h("a", { class: "btn small", href: `/settings?tab=all&q=${encodeURIComponent(q)}` }, icon("sliders", 15), "Search every environment setting too"));
+      h("a", { class: "btn small", href: `/settings?tab=developer&q=${encodeURIComponent(q)}` }, icon("sliders", 15), "Search every environment setting too"));
   };
   input.oninput = showSearch;
   const attention = o.attention.length ? card("alert", `Needs a look (${o.attention.length})`, h("div", { class: "n-log" }, o.attention.map((a) => h("a", { class: `n-hist ${a.level === "bad" ? "bad" : a.level === "warn" ? "warn" : "info"}`, href: routeHref(a.route) },

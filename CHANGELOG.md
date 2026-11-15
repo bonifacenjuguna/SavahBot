@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.4
+
+Developer holds the technical settings, and Backup gets a Reset card.
+
+### Changed
+- **"All settings" now lives inside Developer.** The separate All settings tab is gone from the Settings strip. Developer & advanced shows Configuration check and Service health first, then **All environment settings** (search, "Changed from default only", edit, reset to default) in its own card. Old links keep working: `?tab=all` opens Developer, and the Overview's "Search every environment setting too" lands there with the search filled in. Appearance, Privacy & data, Device & app and Intelligence stay where they were.
+- **Chat handle on Desk shows a clock.** The OFF AIR / DEMO / LIVE tag is unchanged; the stream name next to it (which the drawer already shows) is replaced by the time on air as `HH:MM:SS`, counting every second (`00:00:00` off air). Viewing a past stream still shows its name.
+- Backup page is now "Backup, restore & reset".
+
+### Added
+- **Reset card on Backup.** Three separate resets, each with a confirmation and none touching chat history, bans, commands or sign-in: settings changed in the dashboard (back to default), card layouts (desktop and mobile), and what the bot learned from you (knowledge packs stay). Also findable from Settings search.
+
 ## 1.4.3
 
 Taller scrolling cards with footers that are never cut off.

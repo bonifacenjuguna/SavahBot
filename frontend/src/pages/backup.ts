@@ -1,11 +1,12 @@
 /** Backup & Recovery: one encrypted file with everything, a key shown once, and a careful way back in. */
-import { ApiError, get, post } from "../api.js";
+import { ApiError, del, get, post } from "../api.js";
 import { busy, h, mount, sheet, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { areaNav } from "./kit.js";
 import { card, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 import { lede, seg } from "./widgets.js";
+import { setLayouts } from "../layout.js";
 
 interface Info { scopes: { id: string; label: string; default: boolean; rows: number }[]; undo_available: boolean; last_export: number | null }
 interface Exported { filename: string; key: string; fingerprint: string; size: number; data: string; passphrase: boolean }
@@ -221,6 +222,40 @@ export function restoreForm(opts: { firstRun?: boolean; onDone?: () => void }): 
   return h("div", { class: "k-stack" }, file, key, revealable(pass), opts.firstRun ? token : null, h("div", { class: "row" }, check), out);
 }
 
+/** 1.4.4: Reset. Each row puts one thing back to how it came, after a confirmation. None of them touches chat history, bans, commands, or sign-in. */
+function resetCard(): HTMLElement {
+  const row = (ic: string, title: string, text: string, label: string, ask: string, run: () => Promise<string>): HTMLElement => {
+    const b = h("button", { class: "btn small", type: "button" }, icon(ic, 15), label) as HTMLButtonElement;
+    b.onclick = () => {
+      if (!window.confirm(`${ask}\n\nThis cannot be undone. Make a backup first if you might want it back.`)) return;
+      void busy(b, async () => { try { const msg = await fresh(run); if (msg) toast(msg, "ok"); } catch (e) { fail(e); } });
+    };
+    return h("div", { class: "n-row" }, h("div", { class: "n-row-main" }, h("strong", null, title), h("span", { class: "muted small" }, text)), b);
+  };
+  return card("undo", "Reset", h("div", { class: "k-stack", style: "padding:12px 14px" },
+    lede("Put one thing back to how it came, without touching anything else. Chat history, bans, commands and sign-in are never changed here."),
+    h("div", null,
+      row("sliders", "Settings changed in the dashboard", "Every option you changed from the dashboard goes back to its default (or to what your environment sets).", "Reset settings",
+        "Reset every setting you changed in the dashboard back to its default?",
+        async () => {
+          const r = await get<{ items: { name: string; source: string }[] }>("/api/settings");
+          const mine = r.items.filter((x) => x.source === "dashboard");
+          for (const x of mine) await del(`/api/settings/${x.name}`);
+          return mine.length ? `Reset ${mine.length} ${mine.length === 1 ? "setting" : "settings"}` : "Nothing to reset";
+        }),
+      row("desk", "Card layouts", "Desk, Moderation, Insights, Notifications and Weather go back to the default arrangement, on computers and phones.", "Reset layouts",
+        "Put every page's cards back to the default order, for both desktop and mobile?",
+        async () => {
+          const r = await post<{ layouts: unknown; reset: number }>("/api/layouts/reset", { pages: [], kinds: [] });
+          setLayouts(r.layouts);
+          return r.reset ? "Layouts reset" : "Nothing to reset";
+        }),
+      row("sparkle", "What the bot learned from you", "Forgets the suggestions and corrections it learned. The built-in knowledge packs stay.", "Reset learning",
+        "Make the bot forget everything it learned from your corrections?",
+        async () => { const r = await post<{ cleared: number }>("/api/knowledge/learning/reset"); return `Cleared ${r.cleared ?? 0}`; })),
+  ), { flush: true });
+}
+
 export const backup: Page = {
   id: "backup",
   title: "Backup",
@@ -251,9 +286,10 @@ export const backup: Page = {
           h("p", { class: "muted small" }, "Never included, whatever you tick: signed-in sessions, push-notification device tokens, the server's signing secret and environment variables. Sign-in methods are only included if you tick the last box. Demo mode's sample data is never exported or imported: the dashboard already has its own."),
           revealable(pass), h("div", { class: "row" }, go),
           info.last_export ? h("p", { class: "muted small" }, `Last backup: ${new Date(info.last_export * 1000).toLocaleString()}`) : null), { flush: true }),
-        card("upload", "Restore a backup", h("div", { class: "k-stack", style: "padding:12px 14px" }, restoreForm({ onDone: () => void load().catch(fail) }), undo), { flush: true }));
+        card("upload", "Restore a backup", h("div", { class: "k-stack", style: "padding:12px 14px" }, restoreForm({ onDone: () => void load().catch(fail) }), undo), { flush: true }),
+        resetCard());
     }
-    mount(root, h("div", { class: "page" }, areaNav("backup"), pageHead("database", "Backup & restore", "Move everything to a new deployment, or keep a safe copy."), body));
+    mount(root, h("div", { class: "page" }, areaNav("backup"), pageHead("database", "Backup, restore & reset", "Move everything to a new deployment, keep a safe copy, or put things back to default."), body));
     void load().catch(fail);
   },
 };

@@ -16,11 +16,11 @@ const BLURB: Record<string, string> = {
   security: "Sign-in methods, devices and lockdown",
   notifications: "Push, bell, quiet hours and history",
   weather: "Current weather, forecast and weather alerts",
-  backup: "Encrypted export and restore",
+  backup: "Encrypted export, restore and reset",
   insights: "Charts of chat and moderation",
   demo: "Run simulated chat scenarios",
   setup: "Connect YouTube and Telegram",
-  settings: "Every option, and the bot's Intelligence",
+  settings: "Appearance, Intelligence and Developer",
 };
 
 function hero(s: Status | null): { state: "live" | "demo" | "standby"; title: string; detail: string } {

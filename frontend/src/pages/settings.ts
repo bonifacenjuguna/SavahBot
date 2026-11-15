@@ -4,7 +4,7 @@ import { icon } from "../icons.js";
 import { refreshStatus } from "../state.js";
 import { areaNav } from "./kit.js";
 import { renderKnowledge } from "./knowledge.js";
-import { empty, pageHead } from "./shared.js";
+import { card, empty, pageHead } from "./shared.js";
 import { seg } from "./widgets.js";
 import { renderOverview } from "./settings-overview.js";
 import { renderAppearance, renderDeveloper, renderDevice, renderPrivacy, renderShortcuts } from "./settings-panels.js";
@@ -17,33 +17,8 @@ interface Setting {
   is_set: boolean; secret: boolean; source: string; editable: boolean; options: string[] | null; reserved: boolean;
 }
 
-export const settings: Page = {
-  id: "settings",
-  title: "Settings",
-  icon: "sliders",
-  blurb: "Every option, searchable",
-  render(root, query) {
-    // 1.2.0: Settings is a hub. The address says which view is open (?tab=), so links, search results and the back button all work.
-    const TABS = [{ id: "overview", label: "Overview", icon: "desk" }, { id: "appearance", label: "Appearance", icon: "sparkle" }, { id: "privacy", label: "Privacy & data", icon: "database" },
-      { id: "device", label: "Device & app", icon: "smartphone" }, ...(hasKeyboard() ? [{ id: "shortcuts", label: "Shortcuts", icon: "keyboard" } as const] : []), { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Intelligence", icon: "sparkle" }, { id: "all", label: "All settings", icon: "sliders" }] as const;
-    type Tab = (typeof TABS)[number]["id"];
-    // 1.4.3: this view is called Intelligence (its first section is still Knowledge). ?tab=knowledge keeps working, and so does ?tab=intelligence.
-    const asked = query.get("tab") === "intelligence" ? "knowledge" : query.get("tab");
-    const tab = (TABS.find((t) => t.id === asked)?.id ?? "overview") as Tab;
-    const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "overview" ? "/settings" : `/settings?tab=${v}`); });
-    const host = h("div", { class: "k-stack" });
-    const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), h("div", { class: "tab-row" }, views.el), host);
-    const fail = (e: unknown) => mount(host, empty("alert", e instanceof Error ? e.message : "This section could not load."));
-    if (tab === "knowledge") {
-      shell("Intelligence", "How the bot spots spam, scams and abuse: what it knows (packs of patterns), the detectors that read them, what it learns from you, and live threat lists.");
-      return renderKnowledge(host, query);
-    }
-    if (tab === "overview") { shell("Settings", "Everything about how SavahBot works, in one place. Search, or open an area."); void renderOverview(host).catch(fail); return undefined; }
-    if (tab === "appearance") { shell("Appearance", "How the dashboard looks on this device."); renderAppearance(host); return undefined; }
-    if (tab === "privacy") { shell("Privacy & data", "What is stored, for how long, and what you can clear."); void renderPrivacy(host).catch(fail); return undefined; }
-    if (tab === "device") { shell("Device & app", "Install, offline use and this browser."); void renderDevice(host).catch(fail); return undefined; }
-    if (tab === "shortcuts") { shell("Keyboard shortcuts", "Every key that jumps somewhere or opens something."); renderShortcuts(host); return undefined; }
-    if (tab === "developer") { shell("Developer & advanced", "Service health and configuration checks. Secrets are never shown."); void renderDeveloper(host).catch(fail); return undefined; }
+/** Developer: every environment option, searchable, editable, with reset to default. (Until 1.4.4 this was its own "All settings" tab.) */
+function renderEnvSettings(host: HTMLElement, query: URLSearchParams): void {
     const box = h("div", { class: "block flush" });
     const search = h("input", { type: "search", placeholder: "Search settings", "aria-label": "Search settings" });
     const changedOnly = h("input", { type: "checkbox", class: "switch", "aria-label": "Only settings changed from the default" });
@@ -84,13 +59,50 @@ export const settings: Page = {
     search.oninput = draw;
     changedOnly.onchange = draw;
     search.value = query.get("q") ?? "";
-    mount(root, pageHead("sliders", "All settings", "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."), areaNav("settings"),
-      h("div", { class: "tab-row" }, views.el),
-      h("div", { class: "row between", style: "margin-bottom:14px" },
+    mount(host, card("sliders", "All environment settings", h("div", { class: "k-stack" },
+      h("p", { class: "muted small" }, "Changes made here apply immediately and override the environment until you reset them. Secrets are never shown."),
+      h("div", { class: "row between", style: "margin-bottom:6px" },
         h("div", { class: "input-icon", style: "flex:1 1 280px;max-width:420px" }, icon("search", 16), search),
         h("label", { class: "check small" }, changedOnly, "Changed from default only"), summary),
-      box);
+      box), { id: "env-settings" }));
+    if (query.get("q")) host.querySelector("#env-settings")?.scrollIntoView({ block: "start" });
     void load().catch((e) => toast(e.message, "error"));
+}
+
+export const settings: Page = {
+  id: "settings",
+  title: "Settings",
+  icon: "sliders",
+  blurb: "Every option, searchable",
+  render(root, query) {
+    // 1.2.0: Settings is a hub. The address says which view is open (?tab=), so links, search results and the back button all work.
+    const TABS = [{ id: "overview", label: "Overview", icon: "desk" }, { id: "appearance", label: "Appearance", icon: "sparkle" }, { id: "privacy", label: "Privacy & data", icon: "database" },
+      { id: "device", label: "Device & app", icon: "smartphone" }, ...(hasKeyboard() ? [{ id: "shortcuts", label: "Shortcuts", icon: "keyboard" } as const] : []), { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Intelligence", icon: "sparkle" }] as const;
+    type Tab = (typeof TABS)[number]["id"];
+    // 1.4.3: this view is called Intelligence (its first section is still Knowledge). ?tab=knowledge keeps working, and so does ?tab=intelligence.
+    const asked = query.get("tab") === "intelligence" ? "knowledge" : query.get("tab") === "all" ? "developer" : query.get("tab");   // 1.4.4: ?tab=all (All settings) now lives inside Developer
+    const tab = (TABS.find((t) => t.id === asked)?.id ?? "overview") as Tab;
+    const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "overview" ? "/settings" : `/settings?tab=${v}`); });
+    const host = h("div", { class: "k-stack" });
+    const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), h("div", { class: "tab-row" }, views.el), host);
+    const fail = (e: unknown) => mount(host, empty("alert", e instanceof Error ? e.message : "This section could not load."));
+    if (tab === "knowledge") {
+      shell("Intelligence", "How the bot spots spam, scams and abuse: what it knows (packs of patterns), the detectors that read them, what it learns from you, and live threat lists.");
+      return renderKnowledge(host, query);
+    }
+    if (tab === "overview") { shell("Settings", "Everything about how SavahBot works, in one place. Search, or open an area."); void renderOverview(host).catch(fail); return undefined; }
+    if (tab === "appearance") { shell("Appearance", "How the dashboard looks on this device."); renderAppearance(host); return undefined; }
+    if (tab === "privacy") { shell("Privacy & data", "What is stored, for how long, and what you can clear."); void renderPrivacy(host).catch(fail); return undefined; }
+    if (tab === "device") { shell("Device & app", "Install, offline use and this browser."); void renderDevice(host).catch(fail); return undefined; }
+    if (tab === "shortcuts") { shell("Keyboard shortcuts", "Every key that jumps somewhere or opens something."); renderShortcuts(host); return undefined; }
+    if (tab === "developer") {
+      shell("Developer & advanced", "Service health, configuration checks and every environment option. Secrets are never shown.");
+      const top = h("div", { class: "k-stack" }), env = h("div", { class: "k-stack" });
+      mount(host, top, env);
+      renderEnvSettings(env, query);
+      void renderDeveloper(top).catch((e) => mount(top, empty("alert", e instanceof Error ? e.message : "This section could not load.")));
+      return undefined;
+    }
     return undefined;
   },
 };
