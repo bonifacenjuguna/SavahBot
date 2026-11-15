@@ -100,7 +100,7 @@
   color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent); }
 .chat-handle[data-state="live"] .cd-tag { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
 .chat-handle[data-state="demo"] .cd-tag, .chat-handle[data-state="past"] .cd-tag { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
-.cd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: .9rem; }
+.cd-name { font-variant-numeric: tabular-nums; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: .9rem; }
 .cd-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); animation: cd-pulse 2s ease-out infinite; }
 @keyframes cd-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .cd-chev { flex: none; display: inline-flex; color: var(--muted); transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }

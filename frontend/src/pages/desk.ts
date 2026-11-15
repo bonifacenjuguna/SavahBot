@@ -11,11 +11,19 @@ import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./sh
 import { variableChips } from "./variables.js";
 import { liveCard } from "./live-card.js";
 import { dayLabel, openStreams, spanText, streamName, whenText, type Stream } from "./streams.js";
+
 import { openStreamLink } from "./stream-link.js";
 import { openSheet, pinLine, pins, unpin, wireLine, type ActionCtx } from "../chat-actions.js";
 import { readerControl, readerItems } from "../reader-ui.js";
 import { reader } from "../reader.js";
 import type { Page } from "./types.js";
+
+/** 00:00:00 (hours:minutes:seconds) for the clock on the chat handle. */
+function clockText(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
+}
 
 interface Line { id?: number; author_id?: string; platform?: string; author_name: string; text: string; level: string; ts: number; verdict: string | null; score: number | null; reasons?: string[]; demo?: boolean }
 type Filter = "all" | "flagged" | "blocked";
@@ -315,7 +323,7 @@ export const desk: Page = {
       const demo = status?.hub.mode === "demo";
       const filtered = filter !== "all" || needle !== "" || range.active || viewing !== null || paused;
       // the handle shows how long the stream has run; the stream's name lives inside the drawer (paintStrip)
-      const name = viewing ? streamName(viewing) : live ? `On air for ${spanText(Date.now() / 1000 - startedAt)}` : "Waiting to go live";
+      const name = viewing ? streamName(viewing) : clockText(live ? Date.now() / 1000 - startedAt : 0);
       const tag = viewing ? "Past" : live ? (demo ? "Demo" : "Live") : "Off air";
       const key = [drawerOpen, filtered, name, tag, live, demo].join("|");
       if (key === handleKey) return;
@@ -536,6 +544,7 @@ export const desk: Page = {
     ];
     offs.push(onStatus(() => { renderFacts(); paintStrip(); }));
     const t = window.setInterval(() => { renderFacts(); if (sessionId) paintStrip(); }, 5000);
-    return () => { lay.dispose(); offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
+    const tick = window.setInterval(() => { if (sessionId && !viewing) paintHandle(); }, 1000);   // the handle clock counts every second
+    return () => { lay.dispose(); window.clearInterval(tick); offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
   },
 };
