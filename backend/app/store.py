@@ -325,6 +325,22 @@ class Store:
         )
 
     async def update_blacklist(self, id_: int, **fields: Any) -> bool:
+        """1.4.3: editing a phrase is checked like adding one: not empty, a valid pattern if it is a pattern, and not the same as another entry."""
+        row = await self.db.fetchone("SELECT phrase, is_regex FROM blacklist WHERE id = ?", (id_,))
+        if not row:
+            return False
+        if fields.get("phrase") is not None:
+            fields["phrase"] = fields["phrase"].strip()
+            if not fields["phrase"]:
+                raise ValidationFailed("Phrase cannot be empty.")
+        phrase = fields.get("phrase") if fields.get("phrase") is not None else row["phrase"]
+        if bool(fields["is_regex"]) if fields.get("is_regex") is not None else bool(row["is_regex"]):
+            try:
+                re.compile(phrase)
+            except re.error as exc:
+                raise ValidationFailed(f"Invalid regular expression: {exc}") from exc
+        if fields.get("phrase") is not None and await self.db.fetchone("SELECT id FROM blacklist WHERE phrase = ? AND id != ?", (phrase, id_)):
+            raise ValidationFailed("That phrase is already on the list.")
         for k in ("enabled", "is_regex"):
             if k in fields:
                 fields[k] = int(bool(fields[k]))

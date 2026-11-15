@@ -224,3 +224,16 @@ html[data-motion="reduce"] .rs-panel, html[data-motion="reduce"] .rs-ring, html[
 .who-open { cursor: pointer; }
 .who-open:hover { text-decoration: underline; text-underline-offset: 3px; }
 .act-profile { margin-top: 6px; }
+
+/* ------------------------------------------------------------------ Moderation: Blocked phrases is a fixed-height card with an inline editor (1.4.3) */
+.block.fixed-scroll.mt-card > .mt-body { padding-bottom: 16px; }
+.mt-card .mt-sticky { position: sticky; top: -14px; z-index: 3; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 10px; margin: 0 -16px; padding: 14px 16px 10px; background: var(--panel); box-shadow: 0 10px 10px -10px color-mix(in srgb, var(--ink) 22%, transparent); }
+.mt-card .mt-sticky .mt-find[hidden] { display: none; }
+.ph-row.editing { display: block; padding: 14px; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); animation: ph-open .2s ease-out; }
+@keyframes ph-open { from { opacity: .4; transform: scale(.985); } }
+.ph-edit { display: grid; gap: 12px; min-width: 0; }
+.ph-edit > label { display: grid; gap: 6px; }
+.ph-edit .sev { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+.ph-edit-actions { gap: 8px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .ph-row.editing { animation: none; } }
+html[data-motion="reduce"] .ph-row.editing { animation: none; }

@@ -215,3 +215,25 @@ def test_people_profile_works_for_anyone_and_activity_entries_carry_the_person()
         assert (await s.activity.query())["items"][0]["author_id"] == "u5"
 
     asyncio.run(go())
+
+
+def test_editing_a_blocked_phrase_is_checked_like_adding_one():
+    """1.4.3: the Moderation card can edit a phrase, so an edit may not make it empty, an invalid pattern or a copy of another entry."""
+    from app.store import ValidationFailed
+
+    async def go():
+        s = await build_stack(seed=False)
+        a = await s.store.add_blacklist("sub for sub")
+        b = await s.store.add_blacklist("free nitro", False, 55)
+        assert await s.store.update_blacklist(a, phrase="  sub4sub  ", weight=90)
+        assert [x["phrase"] for x in await s.store.list_blacklist() if x["id"] == a] == ["sub4sub"]      # trimmed
+        for bad in ({"phrase": "   "}, {"phrase": "free nitro"}, {"is_regex": True, "phrase": "("}):
+            try:
+                await s.store.update_blacklist(a, **bad)
+                raise AssertionError(f"expected a refusal for {bad}")
+            except ValidationFailed:
+                pass
+        assert await s.store.update_blacklist(b, phrase="free nitro")                                       # saving it unchanged is fine
+        assert not await s.store.update_blacklist(9999, phrase="x")                                         # an unknown id is reported, not created
+
+    asyncio.run(go())

@@ -33,6 +33,7 @@ export function phraseTool(): PhraseTool {
   let th: Thresholds = FALLBACK;
   let filter: "all" | "on" | "off" | "regex" = "all";
   let needle = "";
+  let editing = 0;      // the id of the phrase being edited in place, 0 for none (1.4.3)
 
   // ---- add one
   const input = h("input", { type: "text", placeholder: "Word, phrase or pattern", required: true, maxLength: 200, "aria-label": "Phrase to block", autocomplete: "off", spellcheck: false });
@@ -123,7 +124,60 @@ export function phraseTool(): PhraseTool {
     const opts: ["all" | "on" | "off" | "regex", string][] = [["all", `All ${c.all}`], ["on", `On ${c.on}`], ["off", `Off ${c.off}`], ["regex", `Patterns ${c.regex}`]];
     mount(filterBox, items.length > 3 ? h("div", { class: "chip-row nowrap" }, opts.map(([id, label]) => h("button", { type: "button", class: `chip pick${filter === id ? " on" : ""}`, "aria-pressed": String(filter === id), onclick: () => { filter = id; drawFilters(); drawList(); } }, label))) : null);
   };
+  /** 1.4.3: a phrase opens into an editor right where it is: the words, how to match, and what a match does. Enter saves, Esc cancels, Undo is offered after. */
+  const editRow = (p: Phrase): HTMLElement => {
+    let eKind: "text" | "regex" = p.is_regex ? "regex" : "text";
+    const presets: { id: "standard" | "flag" | "delete" | "timeout"; title: string; w: number }[] = [
+      { id: "standard", title: "Standard", w: 0 }, { id: "flag", title: "Flag", w: th.flag }, { id: "delete", title: "Delete", w: th.delete }, { id: "timeout", title: "Time out", w: th.timeout }];
+    const known = presets.find((o) => o.w === p.weight);
+    let eSev: string = known ? known.id : "custom";                                  // a weight set some other way is kept unless you pick another
+    const weightOf = (id: string): number => (id === "custom" ? p.weight : presets.find((o) => o.id === id)!.w);
+    const field = h("input", { type: "text", value: p.phrase, required: true, maxLength: 200, "aria-label": "Edit the phrase", autocomplete: "off", spellcheck: false }) as HTMLInputElement;
+    const eHint = h("p", { class: "mt-hint", role: "status" });
+    const check = () => {
+      eHint.textContent = "";
+      if (eKind !== "regex" || !field.value) return;
+      try { new RegExp(field.value); } catch { eHint.textContent = "This pattern looks invalid. Check brackets and slashes."; }
+    };
+    field.addEventListener("input", check);
+    const kindE = seg("How to match", [{ id: "text" as const, label: "Phrase" }, { id: "regex" as const, label: "Pattern (regex)" }], eKind, (v) => { eKind = v; check(); });
+    const sevE = h("div", { class: "sev", role: "radiogroup", "aria-label": "What should a match do" });
+    const drawE = () => {
+      const opts = known ? presets : [...presets, { id: "custom" as const, title: "Keep +" + p.weight, w: p.weight }];
+      mount(sevE, opts.map((o) => h("button", { type: "button", class: "sev-opt", role: "radio", "aria-checked": String(eSev === o.id), onclick: () => { eSev = o.id; drawE(); } },
+        h("strong", null, o.title), h("span", null, tierOf(o.w || th.default_weight, th).label))));
+    };
+    drawE();
+    const cancel = () => { editing = 0; drawList(); };
+    const save = h("button", { class: "btn primary", type: "submit" }, icon("check", 16), "Save changes") as HTMLButtonElement;
+    const form = h("form", { class: "ph-edit", onsubmit: (e: Event) => {
+      e.preventDefault();
+      const phrase = field.value.trim().replace(/\s+/g, " ");
+      if (!phrase) { toast("The phrase cannot be empty.", "error"); return; }
+      if (eKind === "regex") { try { new RegExp(phrase); } catch { toast("That pattern is not valid.", "error"); return; } }
+      if (items.some((x) => x.id !== p.id && x.phrase.toLowerCase() === phrase.toLowerCase() && x.is_regex === (eKind === "regex"))) { toast("That one is already on the list.", "error"); return; }
+      const body: Partial<Phrase> = {};
+      if (phrase !== p.phrase) body.phrase = phrase;
+      if ((eKind === "regex") !== p.is_regex) body.is_regex = eKind === "regex";
+      if (weightOf(eSev) !== p.weight) body.weight = weightOf(eSev);
+      if (!Object.keys(body).length) { cancel(); return; }
+      const before = { phrase: p.phrase, is_regex: p.is_regex, weight: p.weight };
+      busy(save, async () => {
+        items = (await patch<{ items: Phrase[] }>(`/api/blacklist/${p.id}`, body)).items;
+        editing = 0; draw();
+        toastAction("Phrase updated", "Undo", async () => { await patch(`/api/blacklist/${p.id}`, before); await load(); });
+      });
+    } },
+      h("label", { class: "mt-opt-label" }, "Phrase", field), eHint,
+      h("div", { class: "mt-opt" }, h("span", { class: "mt-opt-label" }, "Match as"), kindE.el),
+      h("div", { class: "mt-opt" }, h("span", { class: "mt-opt-label" }, "When it matches"), sevE),
+      h("div", { class: "row ph-edit-actions" }, save, h("button", { class: "btn ghost", type: "button", onclick: cancel }, "Cancel")));
+    form.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); cancel(); } });
+    requestAnimationFrame(() => { field.focus(); field.setSelectionRange(field.value.length, field.value.length); field.scrollIntoView({ block: "nearest" }); });
+    return h("li", { class: "ph-row editing" }, form);
+  };
   const row = (p: Phrase): HTMLElement => {
+    if (editing === p.id) return editRow(p);
     const tier = tierOf(p.weight || th.default_weight, th);
     const sw = h("input", { type: "checkbox", class: "switch", checked: p.enabled, "aria-label": `${p.enabled ? "Turn off" : "Turn on"} ${p.phrase}` });
     sw.addEventListener("change", () => {
@@ -135,6 +189,7 @@ export function phraseTool(): PhraseTool {
       h("div", { class: "ph-main" }, h("code", { class: "ph-text" }, p.phrase),
         h("div", { class: "chip-row tight" }, p.is_regex ? h("span", { class: "chip" }, "Pattern") : null, h("span", { class: `chip tier-${tier.id}` }, tier.label), p.weight ? h("span", { class: "chip", title: "Points added to the message score" }, `+${p.weight}`) : null, p.enabled ? null : h("span", { class: "chip" }, icon("eyeOff", 12), "Off"))),
       h("div", { class: "acts" }, sw,
+        iconAct("edit", `Edit ${p.phrase}`, () => { editing = p.id; drawList(); }, "accent"),
         iconAct("trash", `Remove ${p.phrase}`, (e) => busy(e.currentTarget as HTMLButtonElement, async () => {
           const keep = { phrase: p.phrase, is_regex: p.is_regex, weight: p.weight, enabled: p.enabled };
           await del(`/api/blacklist/${p.id}`); await load();
@@ -144,19 +199,24 @@ export function phraseTool(): PhraseTool {
   const drawList = () => {
     const shown = items.filter((p) => (filter === "all" || (filter === "on" && p.enabled) || (filter === "off" && !p.enabled) || (filter === "regex" && p.is_regex)) && (!needle || p.phrase.toLowerCase().includes(needle))).sort((a, b) => b.id - a.id);
     findRow.hidden = items.length <= 8;
+    const c = counts();
+    footText.textContent = shown.length === items.length ? `${plural(items.length, "phrase")} · ${c.on} on` : `Showing ${shown.length} of ${items.length} · ${c.on} on`;
     if (!items.length) { mount(list, invite("ban", "Nothing is blocked yet", "Add a phrase above, or start with a pack of common spam lines.", h("button", { class: "btn ghost", type: "button", onclick: () => { packPanel.hidden = false; manyPanel.hidden = true; packToggle.setAttribute("aria-expanded", "true"); drawPacks(); packPanel.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }, icon("package", 16), "See starter packs"))); return; }
     mount(list, shown.length ? h("ul", { class: "ph-list" }, shown.map(row)) : empty("search", "No phrases match."));
   };
   const status = h("span", { class: "chip" }, "0 on");
   const drawStatus = () => { const c = counts(); status.textContent = `${c.on} on`; status.className = `chip${c.on ? " ok" : ""}`; };
+  const footText = h("span", { class: "cf-text" });
+  const footMore = h("span", { class: "cf-more" }, icon("chevronDown", 14), "Scroll for more");
   const draw = () => { drawStatus(); drawFilters(); drawList(); drawPacks(); };
   drawSev();
 
   const body = h("div", { class: "mt-body" },
     h("p", { class: "lede" }, "A match adds to a message’s score. Extra spaces, symbols and look-alike letters do not get around it."),
     addForm, h("div", { class: "mt-links" }, manyToggle, packToggle), manyPanel, packPanel,
-    h("div", { class: "mt-list-head" }, filterBox, copyAll), findRow, list);
-  const el = card("ban", "Blocked phrases", body, { flush: true, actions: status, cls: "mt-card" });
+    h("div", { class: "mt-sticky" }, h("div", { class: "mt-list-head" }, filterBox, copyAll), findRow), list);
+  // 1.4.3: a fixed-height card like History: the list scrolls inside it, the filters and search stay pinned at the top of the list, a footer keeps the count in view
+  const el = card("ban", "Blocked phrases", body, { flush: true, actions: status, cls: "mt-card", scroll: true, footer: [footText, footMore] });
 
   const load = async () => { const r = await get<{ items: Phrase[]; thresholds?: Thresholds }>("/api/blacklist"); items = r.items; if (r.thresholds) th = r.thresholds; drawSev(); draw(); };
 
