@@ -6,7 +6,7 @@ import { areaNav } from "./kit.js";
 import { renderKnowledge } from "./knowledge.js";
 import { card, empty, pageHead } from "./shared.js";
 import { seg } from "./widgets.js";
-import { renderOverview } from "./settings-overview.js";
+import { renderAttention, settingsSearch } from "./settings-overview.js";
 import { renderAppearance, renderDeveloper, renderDevice, renderPrivacy, renderShortcuts } from "./settings-panels.js";
 import type { Page } from "./types.js";
 import { navigate } from "../router.js";
@@ -76,29 +76,29 @@ export const settings: Page = {
   blurb: "Every option, searchable",
   render(root, query) {
     // 1.2.0: Settings is a hub. The address says which view is open (?tab=), so links, search results and the back button all work.
-    const TABS = [{ id: "overview", label: "Overview", icon: "desk" }, { id: "appearance", label: "Appearance", icon: "sparkle" }, { id: "privacy", label: "Privacy & data", icon: "database" },
+    const TABS = [{ id: "appearance", label: "Appearance", icon: "sparkle" }, { id: "privacy", label: "Privacy & data", icon: "database" },
       { id: "device", label: "Device & app", icon: "smartphone" }, ...(hasKeyboard() ? [{ id: "shortcuts", label: "Shortcuts", icon: "keyboard" } as const] : []), { id: "developer", label: "Developer", icon: "gauge" }, { id: "knowledge", label: "Intelligence", icon: "sparkle" }] as const;
     type Tab = (typeof TABS)[number]["id"];
     // 1.4.3: this view is called Intelligence (its first section is still Knowledge). ?tab=knowledge keeps working, and so does ?tab=intelligence.
     const asked = query.get("tab") === "intelligence" ? "knowledge" : query.get("tab") === "all" ? "developer" : query.get("tab");   // 1.4.4: ?tab=all (All settings) now lives inside Developer
-    const tab = (TABS.find((t) => t.id === asked)?.id ?? "overview") as Tab;
-    const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "overview" ? "/settings" : `/settings?tab=${v}`); });
+    const tab = (TABS.find((t) => t.id === asked)?.id ?? "appearance") as Tab;
+    const views = seg<Tab>("Settings view", TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon })), tab, (v) => { navigate(v === "appearance" ? "/settings" : `/settings?tab=${v}`); });
     const host = h("div", { class: "k-stack" });
-    const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), h("div", { class: "tab-row" }, views.el), host);
+    const shell = (title: string, blurb: string) => mount(root, pageHead("sliders", title, blurb), areaNav("settings"), settingsSearch(host), h("div", { class: "tab-row" }, views.el), host);
     const fail = (e: unknown) => mount(host, empty("alert", e instanceof Error ? e.message : "This section could not load."));
     if (tab === "knowledge") {
       shell("Intelligence", "How the bot spots spam, scams and abuse: what it knows (packs of patterns), the detectors that read them, what it learns from you, and live threat lists.");
       return renderKnowledge(host, query);
     }
-    if (tab === "overview") { shell("Settings", "Everything about how SavahBot works, in one place. Search, or open an area."); void renderOverview(host).catch(fail); return undefined; }
     if (tab === "appearance") { shell("Appearance", "How the dashboard looks on this device."); renderAppearance(host); return undefined; }
     if (tab === "privacy") { shell("Privacy & data", "What is stored, for how long, and what you can clear."); void renderPrivacy(host).catch(fail); return undefined; }
     if (tab === "device") { shell("Device & app", "Install, offline use and this browser."); void renderDevice(host).catch(fail); return undefined; }
     if (tab === "shortcuts") { shell("Keyboard shortcuts", "Every key that jumps somewhere or opens something."); renderShortcuts(host); return undefined; }
     if (tab === "developer") {
       shell("Developer & advanced", "Service health, configuration checks and every environment option. Secrets are never shown.");
-      const top = h("div", { class: "k-stack" }), env = h("div", { class: "k-stack" });
-      mount(host, top, env);
+      const att = h("div", { class: "k-stack" }), top = h("div", { class: "k-stack" }), env = h("div", { class: "k-stack" });
+      mount(host, att, top, env);
+      void renderAttention(att).catch(() => undefined);
       renderEnvSettings(env, query);
       void renderDeveloper(top).catch((e) => mount(top, empty("alert", e instanceof Error ? e.message : "This section could not load.")));
       return undefined;

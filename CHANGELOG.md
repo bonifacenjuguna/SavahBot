@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.4.6
+
+No more Settings Overview: the pages that had no other way in are now in More, and search and "Needs a look" moved.
+
+### Changed
+- **The Overview tab is gone.** Settings opens on Appearance (old `/settings` and `?tab=overview` links land there). The tabs are Appearance, Privacy & data, Device & app, Developer and Intelligence (plus Shortcuts on a computer).
+- **Chat reader, Stream alerts, Activity log and Variables are now in More, System**, next to Setup and Settings, and each shows the same section switcher at the top as Setup and Settings.
+- **Search sits above every Settings tab.** While you type, results replace the tab; clear the box to come back.
+- **"Needs a look" moved to the top of Developer** (or "All clear").
+- Recently opened was removed with the Overview.
+
+## 1.4.5
+
+Technical setup moves to Developer, and the Settings Overview stops repeating places you already know.
+
+### Changed
+- **Firebase setup moved to Settings, Developer** (the variables checklist and "Check the service account"). Notifications keeps a one-line pointer to it.
+- **The Variables panel in Setup moved to Settings, Developer** as "Railway variables" (what the app expects, which are set, "Only what is missing"). Setup's "still unset" note now opens it. Setup is now Overview, Addresses, YouTube and Telegram. Your own `$(names)` page is unchanged.
+- **Settings Overview shows only pages that have no other way in:** Chat reader, Stream alerts, Activity log and Variables. The cards that just repeated a page from the bottom bar, More, or the tabs above (Security, Notifications, Integrations, Telegram, Moderation, Weather, Appearance, Privacy, Backup, Device, Developer) are gone. "Needs a look", search and Recently opened are unchanged.
+- Search finds Firebase push setup and Railway variables in Developer.
+
 ## 1.4.4
 
 Developer holds the technical settings, and Backup gets a Reset card.

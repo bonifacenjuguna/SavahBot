@@ -21,6 +21,10 @@ const BLURB: Record<string, string> = {
   demo: "Run simulated chat scenarios",
   setup: "Connect YouTube and Telegram",
   settings: "Appearance, Intelligence and Developer",
+  reader: "Read chat aloud, voices, voice packs",
+  "stream-settings": "Likes, viewers, subscribers, members",
+  activity: "What changed, by importance and area",
+  variables: "Your own $(names) for links and text",
 };
 
 function hero(s: Status | null): { state: "live" | "demo" | "standby"; title: string; detail: string } {

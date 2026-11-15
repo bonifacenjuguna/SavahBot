@@ -7,7 +7,7 @@ import { areaNav } from "./kit.js";
 import { telegramControl } from "./telegram-control.js";
 import { pageHead } from "./shared.js";
 import type { Page } from "./types.js";
-import { replaceQuery } from "../router.js";
+import { navigate, replaceQuery } from "../router.js";
 
 export interface Setup {
   requirements: Record<string, { env: string; set: boolean }[]>;
@@ -20,7 +20,6 @@ interface Diag {
   checks: { ok: boolean; text: string }[]; note: string;
 }
 
-const AREA_NAMES: Record<string, string> = { dashboard: "Dashboard", database: "Database", telegram: "Telegram", youtube: "YouTube", app: "App" };
 
 export interface Step { id: string; done: boolean; title: string; text: string; go: string }
 
@@ -41,7 +40,6 @@ const STEPS: { id: string; title: string; blurb: string; icon: string }[] = [
   { id: "addresses", title: "Addresses", blurb: "Links to paste", icon: "link" },
   { id: "youtube", title: "YouTube", blurb: "Account and channel", icon: "youtube" },
   { id: "telegram", title: "Telegram", blurb: "Bot and owner", icon: "telegram" },
-  { id: "variables", title: "Variables", blurb: "Railway settings", icon: "sliders" },
 ];
 
 type Tone = "ok" | "warn" | "bad" | "";
@@ -55,7 +53,6 @@ export const setup: Page = {
     let step = STEPS.some((x) => x.id === query.get("step")) ? query.get("step")! : query.get("youtube") ? "youtube" : "overview";
     let data: { s: Setup; st: Status | null } | null = null;
     let notice = query.get("message") ? { text: query.get("message")!, bad: query.get("youtube") === "error" } : null;
-    let onlyMissing = false;
     let verify: Verify | null = null;
     let diag: Diag | null = null;
 
@@ -129,7 +126,7 @@ export const setup: Page = {
         section("Checklist", h("ul", { class: "ov-list" }, steps.map((x, i) => h("li", null, h("button", { type: "button", class: `ov-row ${x.done ? "done" : "todo"}`, onclick: () => go(x.go) },
           h("span", { class: "mark" }, x.done ? statusIcon("ok", 26) : String(i + 1)), h("span", { class: "grow" }, h("strong", null, x.title), h("span", { class: "muted small wrap" }, x.text)),
           icon("chevronRight", 16)))))),
-        missing ? h("button", { class: "ov-note", type: "button", onclick: () => go("variables") }, icon("info", 16), h("span", null, `${missing} variable${missing === 1 ? " is" : "s are"} still unset. See Variables.`), icon("chevronRight", 16)) : null);
+        missing ? h("button", { class: "ov-note", type: "button", onclick: () => navigate("/settings?tab=developer") }, icon("info", 16), h("span", null, `${missing} variable${missing === 1 ? " is" : "s are"} still unset. See Settings, Developer.`), icon("chevronRight", 16)) : null);
     };
 
     const addresses = (): HTMLElement => {
@@ -226,24 +223,7 @@ export const setup: Page = {
         pager());
     };
 
-    const variables = (): HTMLElement => {
-      const { s } = data!;
-      const all = Object.values(s.requirements).flat();
-      const missing = all.filter((i) => !i.set).length;
-      const groups = Object.entries(s.requirements).map(([area, items]) => [area, onlyMissing ? items.filter((i) => !i.set) : items] as const).filter(([, items]) => items.length);
-      const toggle = h("input", { type: "checkbox", class: "switch", checked: onlyMissing, "aria-label": "Only show variables that are not set" });
-      toggle.onchange = () => { onlyMissing = toggle.checked; draw(); };
-      return h("div", { class: "stack" },
-        head("sliders", "Variables", "Set these in Railway. Everything else already has a safe default.", missing ? ["warn", `${missing} unset`] : ["ok", "All set"]),
-        section(null,
-          h("div", { class: "row between" }, h("span", { class: "muted small" }, `${all.length - missing} of ${all.length} set`), h("label", { class: "check small" }, toggle, "Only what is missing")),
-          groups.length ? h("div", { class: "stack" }, groups.map(([area, items]) => h("div", { class: "var-group" }, h("h3", null, AREA_NAMES[area] ?? area),
-            h("div", { class: "row", style: "margin-top:6px" }, items.map((i) => h("span", { class: `chip ${i.set ? "ok" : "warn"}`, title: i.set ? "Set" : "Not set" }, statusIcon(i.set ? "ok" : "warn", 14), i.env))))))
-            : h("div", { class: "empty" }, statusIcon("ok", 32), h("span", null, "Everything is set."))),
-        pager());
-    };
-
-    const PANELS: Record<string, () => HTMLElement> = { overview, addresses, youtube, telegram, variables };
+    const PANELS: Record<string, () => HTMLElement> = { overview, addresses, youtube, telegram };
     function draw(): void {
       if (!data) { mount(panel, h("div", { class: "skeleton" }, "Loading setup")); return; }
       drawNav();

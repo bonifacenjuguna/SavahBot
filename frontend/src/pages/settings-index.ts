@@ -44,6 +44,8 @@ export const INDEX: Entry[] = [
   { id: "d-install", title: "Install the app", text: "Add SavahBot to your home screen or desktop.", words: "install pwa app home screen offline", route: "/settings?tab=device", group: "device", icon: "smartphone" },
   { id: "d-local", title: "Data on this device", text: "See and clear what this browser stores.", words: "local storage cache service worker clear device", route: "/settings?tab=device", group: "device", icon: "smartphone" },
   { id: "x-health", title: "Service health", text: "Database, Redis, background work and features.", words: "health status redis database leader scheduler diagnostics", route: "/settings?tab=developer", group: "developer", icon: "gauge" },
+  { id: "x-firebase", title: "Firebase push setup", text: "Which push variables are set, and a check that Google accepts the service account.", words: "firebase fcm push vapid service account notifications setup", route: "/settings?tab=developer", group: "developer", icon: "checklist" },
+  { id: "x-railway", title: "Railway variables", text: "The variables the app expects and which are set.", words: "railway variables env environment unset missing setup", route: "/settings?tab=developer", group: "developer", icon: "sliders" },
   { id: "x-config", title: "Configuration check", text: "Plain-language problems with your environment settings.", words: "config validation env environment problems check", route: "/settings?tab=developer", group: "developer", icon: "checklist" },
   { id: "x-all", title: "All environment settings", text: "Every option, searchable, with reset to default.", words: "all settings env variables options advanced railway", route: "/settings?tab=developer", group: "developer", icon: "sliders" },
 ];

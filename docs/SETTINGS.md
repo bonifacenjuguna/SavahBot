@@ -5,7 +5,6 @@
 ## Views (tabs)
 | Tab | What it is |
 |---|---|
-| **Overview** | "Needs a look" list, a card per area with status that was actually checked, global search, recently opened. |
 | **Appearance** | Theme (system/light/dark), accent colour, density, text size, reduce motion. Saved on this device only. |
 | **Privacy & data** | Every kind of data stored, how many items, retention, where it lives, who receives some of it. Clear notification history, push delivery log and weather cache. Security records are protected and cannot be cleared here. |
 | **Device & app** | Install status and install help, service-worker state, notification permission, update check, storage use, clear this browser's saved preferences. |
@@ -15,7 +14,7 @@
 Other areas keep their own pages and are linked from the cards: **Security** (SECURITY.md), **Notifications** (NOTIFICATIONS.md), **Weather > Weather settings** (WEATHER.md), **Backup** (BACKUP_AND_RECOVERY.md), **Setup** (YouTube and Telegram connections), **Moderation, Bans, Commands**.
 
 ## Search
-Type in the Overview search box. It searches names, descriptions and keywords of every settings area (about 35 entries, each pointing at a real page or tab) and offers to search all environment options too. Words must all match; titles rank first. Recently opened entries are remembered on this device.
+Type in the search box above the Settings tabs. It searches names, descriptions and keywords of every settings area (about 35 entries, each pointing at a real page or tab) and offers to search all environment options too. Words must all match; titles rank first. Recently opened entries are remembered on this device.
 
 ## How settings are stored
 - **Server settings** (environment options): defaults < environment variables < values saved from the dashboard. Dashboard changes go to the database (`settings` table) and apply at once; "Reset to default" removes them. Validation happens on the server.

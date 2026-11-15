@@ -1,12 +1,13 @@
 /** Settings panels that live on this page: Appearance, Privacy & data, Device & app, Developer. */
 import { get, post } from "../api.js";
 import { busy, h, mount, toast } from "../dom.js";
-import { icon } from "../icons.js";
+import { icon, statusIcon } from "../icons.js";
 import { ACCENTS, TOAST_SECS, accentPref, densityPref, motionPref, progressPref, setAccent, setDensity, setMotion, setProgress, setText, setToastMode, setToastPos, setToastSecs, textPref, toastMode, toastPos, toastSecs, type Accent, type ToastMode, type ToastPos } from "../appearance.js";
 import { appContext, applyTheme, shortcutList, themePref, type ThemePref } from "../ui.js";
 import { LAYOUT_PAGES, currentLayouts, loadLayouts, setLayouts, type LayoutKind } from "../layout.js";
 import { getPWAState, installApp, openInstallGuide } from "../pwa.js";
 import { card } from "./shared.js";
+import type { PushConfig } from "../push.js";
 import { figures, lede, seg } from "./widgets.js";
 import { href as routeHref } from "../router.js";
 
@@ -174,8 +175,39 @@ interface Health {
   config_problems: { level: string; text: string; route: string }[]; secrets: Record<string, boolean>;
 }
 const dur = (s: number) => (s < 3600 ? `${Math.floor(s / 60)} min` : s < 86400 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h`);
+/** Firebase push setup (moved here from Notifications in 1.4.5): which variables are set, and a check that Google accepts the service account. */
+function firebaseCard(cfg: PushConfig): HTMLElement {
+  const check = h("button", { class: "btn small", type: "button", disabled: !cfg.push_ready }, icon("shield", 15), "Check the service account") as HTMLButtonElement;
+  check.onclick = () => busy(check, async () => { const r = await post<{ ok: boolean; problems: string[] }>("/api/notify/check"); toast(r.ok ? "Google accepted the service account." : r.problems[0], r.ok ? "ok" : "error"); });
+  return card("checklist", "Firebase setup (push)", h("div", { class: "k-stack", style: "padding:12px 14px" },
+    lede(cfg.push_ready && cfg.web_ready ? "Everything needed is set. Use the check to confirm Google accepts the service account." : "Set these variables on your host (Railway), then redeploy. docs/NOTIFICATIONS.md walks through where each one comes from."),
+    h("div", { class: "n-checks" }, cfg.checklist.map((c) => h("span", { class: `chip ${c.set ? "ok" : "warn"}` }, statusIcon(c.set ? "ok" : "warn", 15), c.name))),
+    h("div", { class: "row" }, check)), { flush: true });
+}
+
+/** The Railway variables the app expects, and which are set (moved here from Setup in 1.4.5). */
+const AREA_NAMES: Record<string, string> = { dashboard: "Dashboard", database: "Database", telegram: "Telegram", youtube: "YouTube", app: "App" };
+function railwayCard(req: Record<string, { env: string; set: boolean }[]>): HTMLElement {
+  const all = Object.values(req).flat(), missing = all.filter((i) => !i.set).length;
+  let only = false;
+  const list = h("div", { class: "k-stack" });
+  const toggle = h("input", { type: "checkbox", class: "switch", "aria-label": "Only show variables that are not set" }) as HTMLInputElement;
+  const draw = () => {
+    const groups = Object.entries(req).map(([a, items]) => [a, only ? items.filter((i) => !i.set) : items] as const).filter(([, items]) => items.length);
+    mount(list, groups.length ? groups.map(([a, items]) => h("div", null, h("strong", { class: "small" }, AREA_NAMES[a] ?? a),
+      h("div", { class: "row wrap", style: "margin-top:6px" }, items.map((i) => h("span", { class: `chip ${i.set ? "ok" : "warn"}`, title: i.set ? "Set" : "Not set" }, statusIcon(i.set ? "ok" : "warn", 14), i.env))))) : h("p", { class: "muted small" }, "Everything is set."));
+  };
+  toggle.onchange = () => { only = toggle.checked; draw(); };
+  draw();
+  return card("sliders", "Railway variables", h("div", { class: "k-stack", style: "padding:12px 14px" },
+    lede("Set these in Railway. Everything else already has a safe default."),
+    h("div", { class: "row between" }, h("span", { class: "muted small" }, `${all.length - missing} of ${all.length} set${missing ? `, ${missing} unset` : ""}`), h("label", { class: "check small" }, toggle, "Only what is missing")),
+    list), { flush: true });
+}
+
 export async function renderDeveloper(el: HTMLElement): Promise<void> {
   const x = await get<Health>("/api/system/health");
+  const [cfg, su] = await Promise.all([get<PushConfig>("/api/notify/config").catch(() => null), get<{ requirements: Record<string, { env: string; set: boolean }[]> }>("/api/setup").catch(() => null)]);
   const ok = (v: boolean, a = "ok", b = "problem") => h("span", { class: `chip ${v ? "ok" : "bad"}` }, v ? a : b);
   const refresh = h("button", { class: "btn small", type: "button" }, icon("refresh", 14), "Re-check") as HTMLButtonElement;
   refresh.onclick = () => busy(refresh, () => renderDeveloper(el));
@@ -188,7 +220,8 @@ export async function renderDeveloper(el: HTMLElement): Promise<void> {
       row("Cache", `${x.cache.weather_entries} weather entries (${x.cache.weather_provider})`, null)), ),
     card("plug", "Features", body(...Object.entries(x.features).map(([k, v]) => row(k.replace(/_/g, " "), null, h("span", { class: `chip ${v ? "ok" : ""}` }, v ? "available" : "not set up")))), { flush: true }),
     card("lock", "Secrets (only whether they are set)", body(h("p", { class: "muted small" }, "Values are never shown anywhere in SavahBot."), ...Object.entries(x.secrets).map(([k, v]) => row(k.replace(/_/g, " "), null, h("span", { class: `chip ${v ? "ok" : ""}` }, v ? "set" : "not set")))), { flush: true }),
-    card("cloud", "This deployment", body(row("Version", `${x.app.name} ${x.app.version} · ${x.app.env} · Python ${x.app.python}`, null), row("Running for", dur(x.app.uptime), null), row("Backend address", x.deployment.backend_host || "not set", null), row("Dashboard address", x.deployment.frontend_host || "not set", null)), { flush: true }));
+    card("cloud", "This deployment", body(row("Version", `${x.app.name} ${x.app.version} · ${x.app.env} · Python ${x.app.python}`, null), row("Running for", dur(x.app.uptime), null), row("Backend address", x.deployment.backend_host || "not set", null), row("Dashboard address", x.deployment.frontend_host || "not set", null)), { flush: true }),
+    cfg ? firebaseCard(cfg) : null, su ? railwayCard(su.requirements) : null);
 }
 
 /** Settings, Shortcuts (1.3.9): every keyboard shortcut in one place. Only offered on desktops and laptops. */

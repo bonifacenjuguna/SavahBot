@@ -3,7 +3,7 @@ import { pageLayout } from "../layout.js";
 import { folded } from "../nav.js";
 import { del, get, patch, post } from "../api.js";
 import { busy, dateTime, h, mount, toast } from "../dom.js";
-import { icon, statusIcon } from "../icons.js";
+import { icon } from "../icons.js";
 import { disablePush, enablePush, pushState, type PushConfig, type PushState } from "../push.js";
 import { openNotification, refresh as refreshBell } from "../notifications.js";
 import { areaNav, dateRange, type RangeValue } from "./kit.js";
@@ -60,14 +60,7 @@ async function overview(el: HTMLElement): Promise<void> {
     }
     return card("smartphone", "This device", h("div", { style: "padding:12px 14px" }, body), { flush: true });
   })();
-  const setup = card("checklist", "Firebase setup", h("div", { class: "k-stack", style: "padding:12px 14px" },
-    lede(cfg.push_ready && cfg.web_ready ? "Everything needed is set. Use the check to confirm Google accepts the service account." : "Set these variables on your host (Railway), then redeploy. docs/NOTIFICATIONS.md walks through where each one comes from."),
-    h("div", { class: "n-checks" }, cfg.checklist.map((c) => h("span", { class: `chip ${c.set ? "ok" : "warn"}` }, statusIcon(c.set ? "ok" : "warn", 15), c.name))),
-    h("div", { class: "row" }, ((): HTMLButtonElement => {
-      const b = h("button", { class: "btn small", type: "button", disabled: !cfg.push_ready }, icon("shield", 15), "Check the service account") as HTMLButtonElement;
-      b.onclick = () => busy(b, async () => { const r = await post<{ ok: boolean; problems: string[] }>("/api/notify/check"); toast(r.ok ? "Google accepted the service account." : r.problems[0], r.ok ? "ok" : "error"); });
-      return b;
-    })())), { flush: true });
+  const moved = h("p", { class: "muted small" }, "Firebase setup (the variables and the service account check) now lives in ", h("a", { href: "/settings?tab=developer" }, "Settings, Developer"), ".");
   const pause = (m: number | null, label: string) => h("button", { class: "btn small", type: "button", onclick: (e: Event) => void busy(e.currentTarget as HTMLButtonElement, async () => { await post("/api/notify/pause", { minutes: m }); paint(); }) }, label);
   const controls = card("sliders", "Switches", h("div", { class: "k-stack", style: "padding:6px 14px 12px" },
     row("Notifications", "Master switch. Off means nothing is created at all.", sw(prefs.enabled, "Notifications", (v) => void savePrefs({ enabled: v }).then(paint).catch(fail))),
@@ -77,7 +70,7 @@ async function overview(el: HTMLElement): Promise<void> {
     row("Pop-up messages on screen", "The small \"Saved\" and error messages. Turn off, move to the top or change how long they stay.", h("a", { class: "btn small", href: "/settings?tab=appearance" }, "Appearance")),
     row("Pause push", prefs.paused ? `Paused until ${clock(prefs.pause_until)}. Critical alerts still come through.` : prefs.quiet_now ? `Quiet hours until ${prefs.quiet_ends ? clock(prefs.quiet_ends) : "later"}.` : "Silence push for a while. The bell keeps filling.",
       h("div", { class: "row wrap" }, prefs.paused ? pause(null, "Resume") : [pause(15, "15 min"), pause(60, "1 hour"), pause(480, "8 hours"), pause(minsToMorning(), "Until morning")]))), { flush: true });
-  mount(el, figures([{ value: String(inbox.unread), label: "unread", tone: inbox.unread ? "warn" : "" }, { value: String(devs.devices.filter((d) => d.enabled).length), label: "push devices", tone: devs.devices.length ? "ok" : "" }, { value: prefs.paused ? "paused" : prefs.quiet_now ? "quiet" : "active", label: "right now", tone: prefs.paused || prefs.quiet_now ? "warn" : "ok" }]), deviceCard, controls, setup);
+  mount(el, figures([{ value: String(inbox.unread), label: "unread", tone: inbox.unread ? "warn" : "" }, { value: String(devs.devices.filter((d) => d.enabled).length), label: "push devices", tone: devs.devices.length ? "ok" : "" }, { value: prefs.paused ? "paused" : prefs.quiet_now ? "quiet" : "active", label: "right now", tone: prefs.paused || prefs.quiet_now ? "warn" : "ok" }]), deviceCard, controls, moved);
 }
 
 // ------------------------------------------------------------------ categories
