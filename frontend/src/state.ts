@@ -4,8 +4,6 @@ export interface Status {
   app: string;
   version: string;
   timezone: string;
-  /** 1.4.3: the server's clock when this was sent, so the stream clock does not depend on the device clock being right. */
-  now?: number;
   hub: {
     mode: "demo" | "live";
     source: string | null;
@@ -16,7 +14,6 @@ export interface Status {
     mod_mode: "off" | "suggest" | "auto";
     lines: number;
     blacklist_size: number;
-    session?: { id: string; started: number; title: string; resumed: boolean } | null;
   };
   telegram: { configured: boolean; mode: string; bot_username: string | null; owner_bound: boolean; webhook_url: string; polling: boolean; last_error: string; last_update: number | null };
   youtube: {
