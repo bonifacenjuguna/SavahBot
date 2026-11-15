@@ -314,7 +314,8 @@ export const desk: Page = {
       const live = Boolean(sessionId);
       const demo = status?.hub.mode === "demo";
       const filtered = filter !== "all" || needle !== "" || range.active || viewing !== null || paused;
-      const name = viewing ? streamName(viewing) : live ? (streamTitle || (demo ? "Demo stream" : "On air")) : "No stream running";
+      // the handle shows how long the stream has run; the stream's name lives inside the drawer (paintStrip)
+      const name = viewing ? streamName(viewing) : live ? `On air for ${spanText(Date.now() / 1000 - startedAt)}` : "Waiting to go live";
       const tag = viewing ? "Past" : live ? (demo ? "Demo" : "Live") : "Off air";
       const key = [drawerOpen, filtered, name, tag, live, demo].join("|");
       if (key === handleKey) return;
