@@ -3,7 +3,7 @@ export interface Entry { id: string; title: string; text: string; words: string;
 
 export const GROUPS: { id: string; title: string }[] = [
   { id: "security", title: "Security & access" }, { id: "notifications", title: "Notifications" }, { id: "integrations", title: "Integrations" }, { id: "moderation", title: "Moderation & automation" },
-  { id: "weather", title: "Weather & location" }, { id: "appearance", title: "Appearance" }, { id: "privacy", title: "Privacy & data" }, { id: "backup", title: "Backup & recovery" },
+  { id: "weather", title: "Weather & location" }, { id: "appearance", title: "Appearance" }, { id: "privacy", title: "Privacy & data" }, { id: "backup", title: "Backup & Recovery" },
   { id: "device", title: "Device & app" }, { id: "developer", title: "Developer & advanced" }];
 
 export const INDEX: Entry[] = [

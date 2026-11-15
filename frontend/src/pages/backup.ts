@@ -258,7 +258,7 @@ function resetCard(): HTMLElement {
 
 export const backup: Page = {
   id: "backup",
-  title: "Backup",
+  title: "Backup & Recovery",
   icon: "database",
   blurb: "Encrypted export and restore",
   render(root) {
@@ -289,7 +289,7 @@ export const backup: Page = {
         card("upload", "Restore a backup", h("div", { class: "k-stack", style: "padding:12px 14px" }, restoreForm({ onDone: () => void load().catch(fail) }), undo), { flush: true }),
         resetCard());
     }
-    mount(root, h("div", { class: "page" }, areaNav("backup"), pageHead("database", "Backup, restore & reset", "Move everything to a new deployment, keep a safe copy, or put things back to default."), body));
+    mount(root, h("div", { class: "page" }, areaNav("backup"), pageHead("database", "Backup & Recovery", "Move everything to a new deployment, keep a safe copy, or put things back to default."), body));
     void load().catch(fail);
   },
 };

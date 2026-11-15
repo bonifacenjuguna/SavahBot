@@ -4,6 +4,7 @@ import { icon, statusIcon } from "../icons.js";
 import { ring } from "../charts.js";
 import { refreshStatus, type Status } from "../state.js";
 import { areaNav } from "./kit.js";
+import { settingsTabs } from "./settings-tabs.js";
 import { telegramControl } from "./telegram-control.js";
 import { pageHead } from "./shared.js";
 import type { Page } from "./types.js";
@@ -235,7 +236,7 @@ export const setup: Page = {
       draw();
     }
 
-    mount(root, pageHead("plug", "Setup", "Connect YouTube and Telegram, step by step.", refreshBtn), areaNav("setup"), h("div", { class: "setup-wrap" }, nav, panel));
+    mount(root, pageHead("plug", "Setup", "Connect YouTube and Telegram, step by step.", refreshBtn), areaNav("settings"), h("div", { class: "tab-row" }, settingsTabs("setup").el), h("div", { class: "setup-wrap" }, nav, panel));
     draw();
     void load().catch((e) => toast(e.message, "error"));
   },

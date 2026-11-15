@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.8
+
+System is now the bot's own pages: Notifications, Security, Settings and Backup & Recovery.
+
+### Changed
+- **More, System lists Notifications, Security, Settings and Backup & Recovery** (in that order). Notifications, Security and Backup & Recovery moved out of Manage, which keeps Notebook, Community, Bans, Weather, Insights and Demo. All four pages share one section switcher at the top. Their links (`/notifications`, `/security`, `/backup`) did not change, and Setup stays a tab inside Settings.
+
+## 1.4.7
+
+Everything that is a setting now lives under Settings, and Backup has its full name.
+
+### Changed
+- **Chat reader, Stream alerts, Activity log, Variables and Setup are now tabs under Settings.** One strip runs across the top of all of them: Appearance, Privacy & data, Device & app, (Shortcuts on a computer), Intelligence, Chat reader, Stream alerts, Activity log, Variables, Setup, Developer. Appearance, Privacy, Device, Intelligence and Developer open inside Settings; the others open as their own page with the same strip on top. Their links (`/reader`, `/stream-settings`, `/activity`, `/variables`, `/setup`) did not change.
+- **More, System now lists only Settings.** The four pages added there in 1.4.6 are reached through Settings.
+- **Backup is called Backup & Recovery** everywhere: the More tile, the page title and the Settings search group.
+
 ## 1.4.6
 
 No more Settings Overview: the pages that had no other way in are now in More, and search and "Needs a look" moved.

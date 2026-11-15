@@ -5,6 +5,7 @@ import { KOKORO_VOICES, type Rules } from "../reader-core.js";
 import { loadRules, saveRules } from "../reader-ui.js";
 import { empty, pageHead } from "./shared.js";
 import { areaNav } from "./kit.js";
+import { settingsTabs } from "./settings-tabs.js";
 import type { Page } from "./types.js";
 
 interface Voices { dir: string; writable: boolean; max_mb: number; used_bytes: number; volume_hint: string; host: string; files_base: string; packs: { name: string; files: number; bytes: number; list: string[] }[] }
@@ -119,7 +120,7 @@ export const readerSettings: Page = {
   id: "reader", title: "Chat reader", icon: "volume", blurb: "Read chat aloud with built-in or neural voices",
   render(root) {
     const body = h("div", { class: "stack" }, h("p", { class: "muted" }, "Loading…"));
-    mount(root, h("div", { class: "page" }, areaNav("reader"), pageHead("volume", "Chat reader", "Reads your chat out loud while you are on the Desk.", h("a", { class: "btn small", href: "/settings" }, "Back to Settings")), body));
+    mount(root, h("div", { class: "page" }, areaNav("settings"), h("div", { class: "tab-row" }, settingsTabs("reader").el), pageHead("volume", "Chat reader", "Reads your chat out loud while you are on the Desk.", h("a", { class: "btn small", href: "/settings" }, "Back to Settings")), body));
     void render(body).catch(() => mount(body, empty("alert", "The reader settings could not load.")));
   },
 };

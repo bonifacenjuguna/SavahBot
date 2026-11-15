@@ -4,6 +4,7 @@ import { busy, dateTime, h, mount, toast } from "../dom.js";
 import { icon, statusIcon } from "../icons.js";
 import { empty, pageHead } from "./shared.js";
 import { areaNav } from "./kit.js";
+import { settingsTabs } from "./settings-tabs.js";
 import type { Page } from "./types.js";
 
 interface Item { id: number; ts: number; area: string; importance: "sensitive" | "notable" | "routine"; action: string; summary: string; before_v: string; after_v: string; actor: string; author_id?: string; platform?: string }
@@ -73,7 +74,7 @@ export const activity: Page = {
     const savePolicy = (values: Record<string, unknown>) => void patch("/api/settings", { values }).then(() => toast("Saved")).catch((e) => toast(e instanceof Error ? e.message : "Could not save", "error"));
     keep.onchange = () => { const n = Number(keep.value); if (!Number.isFinite(n) || n < 0 || n > 3650) { toast("Use 0 to 3650", "error"); return; } savePolicy({ activity_retention_days: n }); };
     notifySw.onchange = () => savePolicy({ activity_notify_sensitive: notifySw.checked });
-    mount(root, h("div", { class: "page" }, areaNav("activity"), pageHead("checklist", "Activity log", "What changed, newest first. Secrets, tokens, passwords and message text are never recorded. Sensitive entries cannot be deleted here; they leave when the retention period ends.", h("div", { class: "row", style: "gap:8px" }, h("a", { class: "btn small", href: "/settings" }, "Back to Settings"), exp)),
+    mount(root, h("div", { class: "page" }, areaNav("settings"), h("div", { class: "tab-row" }, settingsTabs("activity").el), pageHead("checklist", "Activity log", "What changed, newest first. Secrets, tokens, passwords and message text are never recorded. Sensitive entries cannot be deleted here; they leave when the retention period ends.", h("div", { class: "row", style: "gap:8px" }, h("a", { class: "btn small", href: "/settings" }, "Back to Settings"), exp)),
       h("div", { class: "sp-card fixed-scroll sp-scroll" }, h("div", { class: "row wrap", style: "gap:8px" }, search, area, imp, rng), list), policy));
     void load();
   },

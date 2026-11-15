@@ -3,6 +3,7 @@ import { busy, h, mount, sheet, toast } from "../dom.js";
 import { icon } from "../icons.js";
 import { empty, pageHead } from "./shared.js";
 import { areaNav } from "./kit.js";
+import { settingsTabs } from "./settings-tabs.js";
 import type { Page } from "./types.js";
 
 interface Var { name: string; value: string; kind: "text" | "link" | "number"; note: string; uses: number }
@@ -62,7 +63,7 @@ export const variables: Page = {
   id: "variables", title: "Variables", icon: "sparkle", blurb: "Your own $(names) for commands and messages",
   render(root) {
     const body = h("div", { class: "stack" }, h("p", { class: "muted" }, "Loading…"));
-    mount(root, h("div", { class: "page" }, areaNav("variables"), pageHead("sparkle", "Variables", "Short names for things you repeat, like links.", h("a", { class: "btn small", href: "/settings" }, "Back to Settings")), body));
+    mount(root, h("div", { class: "page" }, areaNav("settings"), h("div", { class: "tab-row" }, settingsTabs("variables").el), pageHead("sparkle", "Variables", "Short names for things you repeat, like links.", h("a", { class: "btn small", href: "/settings" }, "Back to Settings")), body));
     void render(body).catch(() => mount(body, empty("alert", "Variables could not load.")));
   },
 };
