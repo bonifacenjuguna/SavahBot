@@ -65,9 +65,11 @@ const NOT_FOUND: Page = {
 };
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Operate", ids: ["desk", "moderation", "commands"] },
-  { title: "Manage", ids: ["notebook", "community", "bans", "security", "notifications", "weather", "backup", "insights", "demo"] },
-  { title: "System", ids: ["setup", "settings"] },
+  { title: "Manage", ids: ["notebook", "community", "bans", "weather", "insights", "demo"] },
+  { title: "System", ids: ["notifications", "security", "settings", "backup"] },
 ];
+/** Pages that live under another sidebar item light that item up instead (they are tabs of Settings, or part of Weather). */
+const NAV_PARENT: Record<string, string> = { setup: "settings", reader: "settings", "stream-settings": "settings", activity: "settings", variables: "settings", "weather-settings": "weather" };
 const TAB_IDS = ["desk", "moderation", "commands", "insights"];
 const root = document.getElementById("app")!;
 let statusTimer: number | undefined;
@@ -346,7 +348,7 @@ function showShell(): void {
     const where = current();
     const query = where.query;
     const page = PAGES.find((p) => p.id === where.id) ?? (where.notFound ? NOT_FOUND : PAGES[0]);
-    for (const a of navLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+    for (const a of navLinks) (a.getAttribute("data-id") === (NAV_PARENT[page.id] ?? page.id) ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     for (const a of tabLinks) (a.getAttribute("data-id") === page.id ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     // More stays lit for every page that lives behind it (Notebook, Community, Setup and so on)
     if (TAB_IDS.includes(page.id) || page === NOT_FOUND) moreTab.removeAttribute("aria-current"); else moreTab.setAttribute("aria-current", "page");

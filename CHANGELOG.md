@@ -5,7 +5,7 @@
 System is now the bot's own pages: Notifications, Security, Settings and Backup & Recovery.
 
 ### Changed
-- **More, System lists Notifications, Security, Settings and Backup & Recovery** (in that order). Notifications, Security and Backup & Recovery moved out of Manage, which keeps Notebook, Community, Bans, Weather, Insights and Demo. All four pages share one section switcher at the top. Their links (`/notifications`, `/security`, `/backup`) did not change, and Setup stays a tab inside Settings.
+- **More, System lists Notifications, Security, Settings and Backup & Recovery** (in that order). Notifications, Security and Backup & Recovery moved out of Manage, which keeps Notebook, Community, Bans, Weather, Insights and Demo. All four pages share one section switcher at the top. Their links (`/notifications`, `/security`, `/backup`) did not change, and Setup stays a tab inside Settings. **The sidebar (computers and tablets) follows the same grouping:** System lists Notifications, Security, Settings and Backup & Recovery, and Setup, Chat reader, Stream alerts, Activity log and Variables light up Settings, since they are its tabs.
 
 ## 1.4.7
 
