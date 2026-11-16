@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.10
+
+### Fixed
+- **Computers: cards that belong side by side are now the same size.** Pages used to pour their cards down CSS columns, which left holes under short cards (Notifications "This device", Enforcement, Backup) and gave paired cards different heights. Cards now sit in rows of two with equal heights, and a card with no partner takes the whole row.
+- **Insights: the number cards were at the bottom of the page**, below Past streams, because of a rule left over from an older layout. They are back at the top, and the sixth card (Peak rate) no longer sits alone on a second row: six cards are 3 + 3, or one row of six on wide screens.
+- **Number cards never leave one on its own.** The column count now follows the number of cards (Security check showed 2 + 1, Insights 5 + 1).
+- **Notebook and Community: the two input cards (New note / New reminder, Add a quote / Add a regular) are the same height**, and the empty "Coming up" and "Regulars" boxes fill the room under them so both sides end on one line.
+- **Notebook: a single pinned note takes the whole row** instead of half of it.
+- **Notifications:** "This device" is a slim full row and the Switches sit in two columns; in Categories the quick presets are a slim full row above Moderation and System.
+- **Backup & Recovery:** "Make a backup" is a full row with its checklist in two columns; Restore and Reset share the row under it.
+- **Security:** cards of a similar height are paired (check + devices, sign-in + activity) and Emergency lockdown has its own row.
+- Phones and tablets (under 1100px) are unchanged. Nothing in the server changed.
+
 ## 1.4.9
 
 ### Changed

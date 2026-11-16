@@ -65,6 +65,8 @@
 /* ---------- notes ---------- */
 .nb-board { columns: 2 260px; column-gap: 12px; }
 .nb-board.as-list { columns: 1; }
+/* one note on its own (a single pinned note) takes the whole row instead of half of it */
+.nb-board:has(> .note:only-child) { columns: 1; }
 .note { break-inside: avoid; margin: 0 0 12px; padding: 14px 14px 8px; display: grid; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-width: 0; transition: border-color .15s; }
 .note:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .note.pinned { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }

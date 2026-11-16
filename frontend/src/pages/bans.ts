@@ -86,10 +86,10 @@ export const bans: Page = {
     mount(root, h("div", { class: "page" }, areaNav("bans"),
       pageHead("ban", "Enforcement", "Everyone the bot has timed out or banned, and the rules that keep it fair."),
       top,
-      h("section", { class: "block fixed-scroll" }, h("header", null, h("h2", null, icon("list", 18), "Ledger")),
+      h("section", { class: "block fixed-scroll", "data-card": "ledger" }, h("header", null, h("h2", null, icon("list", 18), "Ledger")),
         h("div", { class: "k-stack", style: "padding:12px 14px" }, h("div", { class: "row wrap", style: "gap:10px" }, views.el, search), list,
           h("p", { class: "muted small" }, "Tap a person to see their profile and why it happened. Only bans made by SavahBot from version 1.2.0 on can be lifted here. Older bans, and bans made in YouTube Studio, must be lifted in YouTube Studio: YouTube gives no way to list them."))),
-      h("section", { class: "block" }, h("header", null, h("h2", null, icon("sliders", 18), "Be gentler")), h("div", { style: "padding:12px 14px" }, rulesBox))));
+      h("section", { class: "block", "data-card": "be-gentler" }, h("header", null, h("h2", null, icon("sliders", 18), "Be gentler")), h("div", { style: "padding:12px 14px" }, rulesBox))));
     void load().catch((e) => { fail(e); mount(list, invite("alert", "Could not load the bans", (e as Error).message)); });
   },
 };
