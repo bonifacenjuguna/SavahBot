@@ -4,6 +4,9 @@
 
 ### Changed
 - **Expanded chat on a computer now works like the phone.** The chat takes the whole width and stays long and tidy. The **Waiting** button in the header (with the count on it) slides the waiting list in from the right; the cross or the button again slides it back out. It used to be a fixed column that took a third of the screen. The panel is closed when you expand, and the phone view is unchanged.
+- **More messages fit in the expanded chat on a computer** (about 24 where there were 11, on a 1366 x 768 screen). The DEMO / LIVE tag and clock moved up into the header row, the INSERT chips share the row with the message box, the frame around the chat is thinner, and message rows are tighter. T- and T+ still change the text size.
+- **Chrome's grey "SavahBot" notification is gone again** (it came back while you were on the app). The service worker's quiet placeholder was closed after 50 ms, and Chrome posts its own notification when none is on screen at the end of a push. The placeholder now stays up until the push finishes, and the open dashboard removes it a moment later; leftovers are cleared on the next push and at start-up.
+- **Phones: cards that scroll inside themselves no longer freeze the page** (the Enforcement ledger, Activity log, Blocked phrases and the like). They hand scrolling to the page at the end of their list, and are capped at about 75% of the screen so a strip of page always stays showing.
 - **The sidebar's first group is now Studio** (Desk, Moderation, Commands and Insights). Insights moved out of Manage, so on a phone it shows only in the bottom bar and no longer a second time in More.
 - **Bans is now called Enforcement** (page title, sidebar, More, Settings search, docs). It also holds the rules that keep the bot fair. The link `/bans` and the `b` shortcut did not change.
 

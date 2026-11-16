@@ -78,6 +78,8 @@ function readPayload(event) {
 }
 
 self.addEventListener("push", (event) => {
+  // a quiet placeholder left over from the last push is no longer needed
+  event.waitUntil(self.registration.getNotifications({ tag: "savahbot-quiet" }).then((l) => l.forEach((n) => n.close())).catch(() => undefined));
   // A push with no readable content still has to show something: if a push handler shows nothing, Chrome adds its own generic
   // "SavahBot" notification (the stray one in the notification shade).
   const p = readPayload(event) || { title: "SavahBot", body: "Something needs a look.", route: "#/notifications", tag: "savahbot-generic", priority: "normal", nid: "", category: "" };
@@ -97,10 +99,11 @@ self.addEventListener("push", (event) => {
       if (watching && p.category !== "test.test") {
         // 1.4.0: skipping the alert used to make Chrome post its own generic one. Show a silent placeholder and take it down at once
         // instead: that satisfies Chrome, and you only see the dashboard's own pop-up.
+        // 1.4.9: it must still be on screen when this push event ends: Chrome counts the visible notifications at that moment and posts its own
+        // grey "SavahBot" one if there are none, and closing it here after 50 ms was exactly that. The open dashboard removes it a moment later
+        // (closeQuietNotifications in push.ts), and every later push or start-up clears any that were left behind.
         await self.registration.showNotification(p.title, { body: "", tag: "savahbot-quiet", silent: true, icon: "/icon-192.png", badge: "/badge-96.png" });
         shown = true;
-        await new Promise((r) => setTimeout(r, 50));
-        (await self.registration.getNotifications({ tag: "savahbot-quiet" })).forEach((n) => n.close());
         return;
       }
       await self.registration.showNotification(p.title, {

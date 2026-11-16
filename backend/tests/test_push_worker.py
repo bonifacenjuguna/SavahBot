@@ -10,11 +10,12 @@ def test_test_notification_shows_even_when_dashboard_is_focused():
     assert 'if (watching && p.category !== "test.test") {' in SW
 
 
-def test_a_suppressed_push_still_shows_a_silent_placeholder_that_is_removed_at_once():
-    """Chrome adds its own grey "SavahBot" notification when a push shows nothing. So the suppressed branch shows a silent one and closes it."""
+def test_a_suppressed_push_still_shows_a_silent_placeholder_that_stays_until_the_event_ends():
+    """Chrome adds its own grey "SavahBot" notification when a push shows nothing. So the suppressed branch shows a silent one and does NOT close it inside the push event (1.4.9: Chrome counts the visible
+    notifications when the event ends, so closing it after 50 ms brought the grey one back). The dashboard closes it later (push.ts)."""
     handler = SW[SW.index('addEventListener("push"'):SW.index('addEventListener("notificationclick"')]
     quiet = handler[handler.index('if (watching'):handler.index("await self.registration.showNotification(p.title, {\n        body: p.body")]
-    assert "silent: true" in quiet and "showNotification" in quiet and ".close()" in quiet and "savahbot-quiet" in quiet
+    assert "silent: true" in quiet and "showNotification" in quiet and ".close()" not in quiet and "savahbot-quiet" in quiet
     assert "finally" in handler                                                   # and a failure partway still ends in a visible notification
 
 

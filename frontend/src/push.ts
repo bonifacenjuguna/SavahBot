@@ -94,15 +94,23 @@ export async function resumePush(): Promise<void> {
   } catch { /* offline or not signed in: try again next start */ }
 }
 
+/** 1.4.9: while you are looking at the dashboard the service worker shows a silent placeholder (Chrome insists on a visible notification for every push)
+ * and leaves it up until the push event ends. The dashboard takes it down here, a moment later, so it never lingers. */
+export function closeQuietNotifications(): void {
+  if (!("serviceWorker" in navigator)) return;
+  void navigator.serviceWorker.getRegistration().then((r) => r?.getNotifications({ tag: "savahbot-quiet" })).then((l) => l?.forEach((n) => n.close())).catch(() => undefined);
+}
+
 /** Taps on a system notification arrive here from the service worker. */
 export function listenForTaps(onRoute: (route: string) => void, onPush: () => void, onResub: () => void): () => void {
   if (!("serviceWorker" in navigator)) return () => undefined;
   const fn = (e: MessageEvent) => {
     const d = e.data as { type?: string; route?: string } | undefined;
     if (d?.type === "notify-click" && typeof d.route === "string" && /^#\/[\w\-/]{0,60}(\?[\w=&.\-%]{0,120})?$/.test(d.route)) onRoute(d.route);
-    else if (d?.type === "notify-push") onPush();
+    else if (d?.type === "notify-push") { onPush(); window.setTimeout(closeQuietNotifications, 2500); }
     else if (d?.type === "notify-resubscribe") onResub();
   };
   navigator.serviceWorker.addEventListener("message", fn);
+  closeQuietNotifications();   // one left from an earlier push
   return () => navigator.serviceWorker.removeEventListener("message", fn);
 }

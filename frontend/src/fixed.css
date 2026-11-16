@@ -237,3 +237,11 @@ html[data-motion="reduce"] .rs-panel, html[data-motion="reduce"] .rs-ring, html[
 .ph-edit-actions { gap: 8px; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .ph-row.editing { animation: none; } }
 html[data-motion="reduce"] .ph-row.editing { animation: none; }
+
+/* 1.4.9, phones: a card that scrolls inside itself used to fill the whole screen and hold on to every touch, so at the end of its list the page would not move
+ * (it felt frozen) and the cards below could not be reached. Now it hands over to the page at its end and always leaves a strip of page showing. */
+@media (max-width: 719px) {
+  :root { --fs-max: clamp(360px, calc(75dvh - var(--topbar-h, 56px)), 720px); }
+  .block.fixed-scroll > :not(header):not(footer):not(.arr-handle),
+  .sp-card.sp-scroll > :not(:first-child) { overscroll-behavior: auto; }
+}

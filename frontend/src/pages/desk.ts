@@ -480,16 +480,26 @@ export const desk: Page = {
     live.el.dataset.card = "live";
     const sideStack = h("div", { class: "stack", "data-card": "side", "data-label": "Side column" }, queuePane, live.el, statusPane);
 
+    const wide = window.matchMedia("(min-width: 1000px)");
     const zoom = zoomToFill(chatPane, {
       onOpen: () => {
         paintExpand(true);
         side.querySelector(".zs-body")!.appendChild(pendingBox);     // the waiting list moves in beside the chat
+        if (wide.matches) {
+          // 1.4.9, computers: the DEMO/LIVE tag and clock move up into the header row, and the INSERT chips join the message box, so the messages get the room
+          chatPane.querySelector(":scope > header h2")?.after(handleEl!);
+          handleEl!.classList.add("in-header");
+          form.insertBefore(chips, send);
+        }
         chatPane.classList.remove("side-open");
         window.requestAnimationFrame(() => { if (stick) list.scrollTop = list.scrollHeight; });
       },
       onClose: () => {
         paintExpand(false);
         chatPane.classList.remove("side-open");
+        handleEl!.classList.remove("in-header");
+        main.prepend(handleEl!);
+        form.after(chips);
         queuePane.appendChild(pendingBox);   // back where it was: the last child of its card (it is the card body itself)
         window.requestAnimationFrame(() => { if (stick) list.scrollTop = list.scrollHeight; });
         expandBtn.focus({ preventScroll: true });
