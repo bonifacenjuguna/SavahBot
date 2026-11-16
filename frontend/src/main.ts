@@ -18,7 +18,6 @@ import { refreshStatus, onStatus, type Status } from "./state.js";
 import { resetClock } from "./pages/kit.js";
 
 let resetTimer = 0;
-import { installMasonry } from "./masonry.js";
 import { installPageNav, trackRecent } from "./nav.js";
 import { onNotices, openNotifications, refresh as refreshBell, startNotifications, unreadCount, worstUnread } from "./notifications.js";
 import { initAppearance } from "./appearance.js";
@@ -358,8 +357,7 @@ function showShell(): void {
     cleanupNav?.();
     if (page !== NOT_FOUND) trackRecent(page.id);
     cleanup = page.render(content, query);
-    const navOff = installPageNav(content), masonryOff = installMasonry(content);
-    cleanupNav = () => { navOff(); masonryOff(); };
+    cleanupNav = installPageNav(content);
     if (lastId && lastId !== page.id) window.scrollTo(0, 0);
     lastId = page.id;
     tuckHead(content);

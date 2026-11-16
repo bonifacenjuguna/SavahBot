@@ -1,14 +1,5 @@
 # Changelog
 
-## 1.4.10
-
-Desktop pages, second pass. Found from screenshots of Insights, Notifications, Security, Backup & Recovery, Enforcement, Community and Notebook on a computer.
-
-### Changed
-- **Real masonry on computers (1100px and wider).** Pages made of cards used to fill the left column first, so a short card followed by a long one left a big empty hole under the short one (Notifications, Security, Backup & Recovery). Each card now goes into whichever column is shorter, so the columns end at about the same place. Tables, charts, tabs, figures and notes still take the whole row. Cards are not moved or re-created; a small script only measures them and sets how many rows each spans, and it follows them as they grow or shrink. Phones and tablets are exactly as they were.
-- **Rows of figures are always balanced.** Insights had five tiles on one row and "Peak rate" alone on the next; six now sit as three and three, seven or eight as four and four, and so on.
-- **The strip of sibling pages above each page is hidden on a computer** (Notebook, Community, Enforcement, Weather, Demo and the "..." button), because the sidebar already lists every page. Phones and the Settings tab strip are unchanged.
-
 ## 1.4.9
 
 ### Changed
