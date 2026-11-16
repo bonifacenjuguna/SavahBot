@@ -1,4 +1,4 @@
-/** Bans: everything the bot has timed out or banned, lifting them again, and the rules that make the bot gentler. */
+/** Enforcement (1.4.9; was "Bans", same /bans link): everything the bot has timed out or banned, lifting them again, and the rules that make the bot gentler. */
 import { get, patch, post } from "../api.js";
 import { busy, dateTime, duration, h, mount, toast } from "../dom.js";
 import { icon } from "../icons.js";
@@ -18,7 +18,7 @@ const fail = (e: unknown) => toast(e instanceof Error ? e.message : String(e), "
 
 export const bans: Page = {
   id: "bans",
-  title: "Bans",
+  title: "Enforcement",
   icon: "ban",
   blurb: "Lift bans and soften the bot's actions",
   render(root) {
@@ -84,7 +84,7 @@ export const bans: Page = {
     search.oninput = () => { clearTimeout(t); t = window.setTimeout(() => { needle = search.value.trim(); void load().catch(fail); }, 250); };
 
     mount(root, h("div", { class: "page" }, areaNav("bans"),
-      pageHead("ban", "Bans", "Everyone the bot has timed out or banned, and the rules that keep it fair."),
+      pageHead("ban", "Enforcement", "Everyone the bot has timed out or banned, and the rules that keep it fair."),
       top,
       h("section", { class: "block fixed-scroll" }, h("header", null, h("h2", null, icon("list", 18), "Ledger")),
         h("div", { class: "k-stack", style: "padding:12px 14px" }, h("div", { class: "row wrap", style: "gap:10px" }, views.el, search), list,

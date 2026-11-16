@@ -15,17 +15,28 @@
 /* the waiting list keeps its own approve-all row in view while it scrolls */
 .chat-card.zoomed .zs-body .ap-bulk { top: -10px; margin: -10px -10px 0; padding-top: 10px; }
 
-/* 1.4.0: the expanded chat on a computer. The chat and the waiting list are two separate panels with space between them and around them,
- * the waiting list is wider so a request is readable without opening it, and the messages are a little larger. */
+.side-n { display: none; }   /* the count on the Waiting button is for the computer view only; on a phone the button is icon-only */
+/* 1.4.9: the expanded chat on a computer works like the phone. The chat takes the whole width and stays long and tidy; the Waiting button in the header
+ * slides the waiting list in from the right (and the cross, or the button again, slides it back out). It was a fixed column before. */
 @media (min-width: 1000px) {
   .chat-card.zoomed .chat-body {
-    grid-template-columns: minmax(0, 1fr) clamp(340px, 30%, 480px);
-    gap: 16px; padding: 16px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0; padding: 16px;
     background: color-mix(in srgb, var(--bg) 70%, var(--panel));
   }
-  .chat-card.zoomed .chat-main,
-  .chat-card.zoomed .zoom-side { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: none; }
+  .chat-card.zoomed .chat-main { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: none; }
+  .chat-card.zoomed .zoom-side {
+    position: absolute; top: 16px; right: 16px; bottom: 16px; width: clamp(340px, 30%, 480px);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    transform: translateX(calc(100% + 32px)); transition: transform 0.3s var(--ease); z-index: 3;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  }
+  .chat-card.zoomed.side-open .zoom-side { transform: none; }
+  .chat-card.zoomed .chat-tools .zoom-only[aria-label^="Show what"] { display: inline-flex; align-items: center; gap: 6px; }
+  .chat-card.zoomed .chat-tools .zoom-only[aria-label^="Show what"] .side-n:not([hidden]) { display: inline-block; margin-left: 2px; background: var(--demo); color: #1b1300; border-radius: 999px; padding: 0 7px; font-size: 0.74rem; font-weight: 700; }
+  .chat-card.zoomed .zs-close { display: inline-flex; }
   .chat-card.zoomed .zs-head { padding: 14px 16px; }
   .chat-card.zoomed .zs-body { padding: 12px; }
 }
+@media (prefers-reduced-motion: reduce) { .chat-card.zoomed .zoom-side { transition: none; } }
 @media (min-width: 720px) { .chat-card.zoomed .feed { font-size: calc(1.06rem * var(--chat-scale, 1)); } }

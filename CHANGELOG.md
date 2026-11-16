@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.9
+
+### Changed
+- **Expanded chat on a computer now works like the phone.** The chat takes the whole width and stays long and tidy. The **Waiting** button in the header (with the count on it) slides the waiting list in from the right; the cross or the button again slides it back out. It used to be a fixed column that took a third of the screen. The panel is closed when you expand, and the phone view is unchanged.
+- **The sidebar's first group is now Studio** (Desk, Moderation, Commands and Insights). Insights moved out of Manage, so on a phone it shows only in the bottom bar and no longer a second time in More.
+- **Bans is now called Enforcement** (page title, sidebar, More, Settings search, docs). It also holds the rules that keep the bot fair. The link `/bans` and the `b` shortcut did not change.
+
 ## 1.4.8
 
 System is now the bot's own pages: Notifications, Security, Settings and Backup & Recovery.

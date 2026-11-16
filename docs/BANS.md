@@ -1,6 +1,6 @@
 # Ban management guide
 
-Find it in **Manage > Bans** (shortcut `b`), and in Telegram with `/bans` and `/unban`.
+Find it in **Manage > Enforcement** (shortcut `b`), and in Telegram with `/bans` and `/unban`.
 
 ## What it does
 

@@ -368,6 +368,7 @@ export const desk: Page = {
       { id: "status", label: "Status" },
     ], {}, "chat");
     const sideCount = h("span", { class: "n", hidden: true }, "");
+    const sideBadge = h("span", { class: "n side-n", hidden: true }, "");   // the same count, on the Waiting button (the panel is closed until you open it)
     const queueCount = h("span", { class: "chip warn", hidden: true });
     const loadPending = async () => {
       const r = await get<{ items: Action[] }>("/api/moderation/pending");
@@ -375,6 +376,8 @@ export const desk: Page = {
       mount(pendingBox, approvalList(r.items, loadPending));
       sideCount.hidden = !r.items.length;
       sideCount.textContent = String(r.items.length);
+      sideBadge.hidden = !r.items.length;
+      sideBadge.textContent = String(r.items.length);
       queueCount.hidden = !r.items.length;
       queueCount.textContent = `${r.items.length} waiting`;
       (tabs as any).refreshBadges?.();
@@ -450,7 +453,7 @@ export const desk: Page = {
     const side = h("aside", { class: "zoom-side", "aria-label": "Waiting for you" },
       h("div", { class: "zs-head" }, h("h3", null, icon("inbox", 16), "Waiting for you", sideCount), h("button", { class: "icon-btn zs-close", type: "button", "aria-label": "Close the waiting list", onclick: () => chatPane.classList.remove("side-open") }, icon("x", 18))),
       h("div", { class: "zs-body" }));
-    const sideToggle = h("button", { class: "btn small ghost zoom-only", type: "button", "aria-label": "Show what is waiting for you", onclick: () => chatPane.classList.toggle("side-open") }, icon("inbox", 15), h("span", { class: "hide-narrow" }, "Waiting"));
+    const sideToggle = h("button", { class: "btn small ghost zoom-only", type: "button", "aria-label": "Show what is waiting for you", onclick: () => chatPane.classList.toggle("side-open") }, icon("inbox", 15), h("span", { class: "hide-narrow" }, "Waiting"), sideBadge);
     const sizeDown = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Smaller text", title: "Smaller text", onclick: () => setSize(sizeIdx - 1) }, icon("textSize", 15), h("span", { class: "sz" }, "−"));
     const sizeUp = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Larger text", title: "Larger text", onclick: () => setSize(sizeIdx + 1) }, icon("textSize", 18), h("span", { class: "sz" }, "+"));
     const expandBtn = h("button", { class: "icon-btn expand-btn", type: "button", "aria-label": "Expand the chat to fill the screen", "aria-expanded": "false", title: "Expand chat (F)", onclick: (e: Event) => { e.preventDefault(); zoom.toggle(); } });

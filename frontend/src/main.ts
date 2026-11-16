@@ -64,8 +64,8 @@ const NOT_FOUND: Page = {
   },
 };
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
-  { title: "Operate", ids: ["desk", "moderation", "commands"] },
-  { title: "Manage", ids: ["notebook", "community", "bans", "weather", "insights", "demo"] },
+  { title: "Studio", ids: ["desk", "moderation", "commands", "insights"] },
+  { title: "Manage", ids: ["notebook", "community", "bans", "weather", "demo"] },
   { title: "System", ids: ["notifications", "security", "settings", "backup"] },
 ];
 /** Pages that live under another sidebar item light that item up instead (they are tabs of Settings, or part of Weather). */
