@@ -174,3 +174,10 @@ a.set-tile { padding: 14px; }
 .vc-chip:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 .vc-chip:active { transform: scale(.96); background: color-mix(in srgb, var(--accent) 32%, transparent); }
 .vc-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- Insights number cards: every card is the same size (1.4.12) -------------------------------------------------------
+   Each card now carries a value, a comparison or note, and a trend line, so they fill the same space; the rows are also held to the
+   tallest card, and the trend line sits at the bottom of every card. */
+.ins .kpis { grid-auto-rows: 1fr; }
+.ins .kpis .kpi { display: flex; flex-direction: column; align-content: normal; }
+.ins .kpis .kpi .spark { margin-top: auto; }

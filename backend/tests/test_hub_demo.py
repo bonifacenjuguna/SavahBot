@@ -331,3 +331,17 @@ def test_top_chatters_is_ten_people_with_ids_and_same_names_stay_apart():
         twins = [t for t in top if t["name"] == "Twin"]
         assert not twins or all(t["messages"] in (3, 1) for t in twins)
     run(go())
+
+
+def test_analytics_timeline_has_per_bucket_people_and_actions():
+    """1.4.12: each time slot also says how many people chatted and how many moderation actions (and waiting ones) it had."""
+    async def go():
+        s = await build_stack()
+        await s.demo.run_scenario("mixed")
+        now = s.clock.now() + 10
+        a = await summary(s.store, hours=1, demo=True, now=now)
+        assert all({"chatters", "actions", "pending"} <= set(b) for b in a["timeline"])
+        assert sum(b["actions"] for b in a["timeline"]) == a["totals"]["actions"] > 0
+        assert sum(b["pending"] for b in a["timeline"]) == a["totals"]["pending"]
+        assert max(b["chatters"] for b in a["timeline"]) >= 1
+    run(go())

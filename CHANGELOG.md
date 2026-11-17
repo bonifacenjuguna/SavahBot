@@ -5,6 +5,9 @@
 ### Fixed
 - **Phone turned sideways: the side bar filled the whole screen.** Between 720 and 999 px wide (most phones in landscape) a layout rule meant for the single-column page also removed the column of the icon side bar, so the bar (logo, Demo / Live switch, menu icons) was stacked full-width on top of the page and pushed the content out of sight. The side bar now keeps its narrow column beside the page. Portrait is unchanged.
 - **Short landscape screens.** When the screen is under 480 px tall the side bar is made more compact (smaller logo, status tile and menu rows) so more of the menu fits without scrolling.
+### Changed
+- **Insights: all six number cards are the same size.** Instead of shrinking the big cards, the small ones now carry the same kind of content: **Chatters** shows how many messages each person sent on average and a trend line of people per time slot; **Actions** shows what share of flagged messages the bot acted on, a comparison with the period before and a trend line; **Waiting** shows its share of all actions and when the requests came in; **Peak rate** shows when the busiest moment was, a comparison with the period before and the chat rate over time. Trend lines sit at the bottom of every card, and all rows are held to the tallest card.
+- The analytics timeline (`GET /api/analytics`) gained `chatters`, `actions` and `pending` per time slot. The existing fields are unchanged.
 
 ## 1.4.11
 

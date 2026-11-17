@@ -28,13 +28,24 @@ async def summary(store: Store, hours: float = 24, demo: bool | None = None, now
     step = _bucket_seconds(hours)
     start = int(since // step) * step
     n_buckets = int((now - start) // step) + 1
-    timeline = [{"t": start + i * step, "messages": 0, "flagged": 0} for i in range(n_buckets)]
+    timeline = [{"t": start + i * step, "messages": 0, "flagged": 0, "chatters": 0, "actions": 0, "pending": 0} for i in range(n_buckets)]
+    seen: list[set] = [set() for _ in range(n_buckets)]     # 1.4.12: distinct people per bucket (for the Chatters card's trend line)
     for c in chat:
         i = int((c["ts"] - start) // step)
         if 0 <= i < n_buckets:
             timeline[i]["messages"] += 1
             if c["verdict"] != "allow":
                 timeline[i]["flagged"] += 1
+            if c["level"] != "bot":
+                seen[i].add((c.get("platform") or "youtube", c.get("author_id") or c["author_name"]))
+    for i, people in enumerate(seen):
+        timeline[i]["chatters"] = len(people)
+    for a in actions:                                        # 1.4.12: moderation actions (and the ones still waiting) per bucket
+        i = int((a["ts"] - start) // step)
+        if 0 <= i < n_buckets:
+            timeline[i]["actions"] += 1
+            if a["status"] == "pending":
+                timeline[i]["pending"] += 1
 
     # one entry per person (id + platform), not per display name, so two people with the same name stay apart and a row can open that person's profile
     who: dict[tuple[str, str], str] = {}

@@ -10,7 +10,7 @@ import { card, empty, pageHead } from "./shared.js";
 import type { Page } from "./types.js";
 import { SIGNAL, avatar, plural, sentence } from "./widgets.js";
 
-interface Bucket { t: number; messages: number; flagged: number }
+interface Bucket { t: number; messages: number; flagged: number; chatters?: number; actions?: number; pending?: number }
 interface Summary {
   hours: number; bucket_seconds: number;
   totals: Record<string, number>;
@@ -39,12 +39,12 @@ export function change(now: number, before: number): { text: string; dir: "up" |
 }
 
 /** Totals for the stretch just before the one on screen, taken from a call that covers twice the range. */
-export function previousTotals(wide: Summary, cur: Summary): { messages: number; flagged: number } | null {
+export function previousTotals(wide: Summary, cur: Summary): { messages: number; flagged: number; actions: number; peak: number } | null {
   const first = cur.timeline[0]?.t;
   if (first === undefined || !wide.timeline.length) return null;
-  let messages = 0, flagged = 0;
-  for (const b of wide.timeline) if (b.t < first) { messages += b.messages; flagged += b.flagged; }
-  return { messages, flagged };
+  let messages = 0, flagged = 0, actions = 0, peak = 0;
+  for (const b of wide.timeline) if (b.t < first) { messages += b.messages; flagged += b.flagged; actions += b.actions ?? 0; peak = Math.max(peak, b.messages); }
+  return { messages, flagged, actions, peak };      // peak: the busiest bucket of the stretch before (messages; the caller turns it into a rate)
 }
 
 export const insights: Page = {
@@ -180,6 +180,12 @@ export const insights: Page = {
       const prev = wide && wideHours > hours ? previousTotals(wide, s) : null;
       const dMsg = prev ? change(msgs, prev.messages) : null;
       const dFlag = prev ? change(flagged, prev.flagged) : null;
+      const actionsN = t.actions ?? 0, pendingN = t.pending ?? 0, chattersN = t.chatters ?? 0;
+      const dAct = prev ? change(actionsN, prev.actions) : null;
+      const prevPeak = prev ? perMin(prev.peak) : 0;
+      const dPeak = prev && prevPeak > 0 ? change(Math.round(peak * 10) / 10, Math.round(prevPeak * 10) / 10) : null;
+      const rate = (v: number) => (v < 10 ? v.toFixed(1) : String(Math.round(v)));
+      const every = (v: number) => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10);
       const levelSlices = Object.entries(s.levels).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name: nice(LEVEL, name), value }));
       const outcomeSlices = Object.entries(s.outcomes).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name: nice(OUTCOME, name), value }));
       const anyData = msgs > 0 || (t.actions ?? 0) > 0;
@@ -187,11 +193,11 @@ export const insights: Page = {
 
       const kpiRow = h("div", { class: "kpis", style: "margin-bottom:0" },
           kpi("", "message", "Messages", n0(msgs), `${avg < 10 ? avg.toFixed(1) : Math.round(avg)} per minute on average`, sparkline(s.timeline.map((b) => b.messages)), dMsg && { ...dMsg, good: dMsg.dir === "flat" ? null : dMsg.dir === "up" }, ["messages", "chatters"]),
-          kpi("", "users", "Chatters", n0(t.chatters ?? 0), "Distinct people"),
+          kpi("", "users", "Chatters", n0(chattersN), chattersN ? `${every(people / chattersN)} messages each on average` : "Distinct people", sparkline(s.timeline.map((b) => b.chatters ?? 0)), null, ["chatters"]),
           kpi(flagged ? "warn" : "", "flag", "Flagged", n0(flagged), `${flagRate}% of messages`, sparkline(s.timeline.map((b) => b.flagged), "s2"), dFlag && { ...dFlag, good: dFlag.dir === "flat" ? null : dFlag.dir === "down" }, ["flagged", "deleted"]),
-          kpi("", "shield", "Actions", n0(t.actions ?? 0), "Deletes, timeouts, bans"),
-          kpi(t.pending ? "warn" : "", "inbox", "Waiting", n0(t.pending ?? 0), t.pending ? "Needs a decision" : "All clear"),
-          kpi("", "trending", "Peak rate", `${peak < 10 ? peak.toFixed(1) : Math.round(peak)}/min`, "Busiest moment in range"));
+          kpi("", "shield", "Actions", n0(actionsN), actionsN && flagged ? `${Math.round((actionsN / flagged) * 100)}% of flagged messages` : "Deletes, timeouts, bans", sparkline(s.timeline.map((b) => b.actions ?? 0), "s3"), dAct && { ...dAct, good: null }),
+          kpi(pendingN ? "warn" : "", "inbox", "Waiting", n0(pendingN), pendingN ? (actionsN ? `Needs a decision, ${Math.round((pendingN / actionsN) * 100)}% of actions` : "Needs a decision") : "All clear", sparkline(s.timeline.map((b) => b.pending ?? 0), "s2")),
+          kpi("", "trending", "Peak rate", `${rate(peak)}/min`, peakBucket && peak > 0 ? `Busiest moment, around ${fmt(peakBucket.t)}` : "Busiest moment in range", sparkline(s.timeline.map((b) => perMin(b.messages))), dPeak && { ...dPeak, good: null }));
       const span2 = (el: HTMLElement): HTMLElement => { el.dataset.span = "2"; return el; };
       const gridEl = h("div", { class: "ins-grid" },
         span2(card("sparkle", "What stood out", highlights(s, { peak, peakAt: peakBucket?.t ?? 0, fmt, flagRate }), { flush: true, id: "stood-out" })),
