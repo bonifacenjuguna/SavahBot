@@ -527,7 +527,13 @@ details.group[open] > summary { border-bottom: 1px solid var(--line); }
 /* short landscape phones */
 @media (max-height: 480px) and (orientation: landscape) {
   .feed { height: 60vh; min-height: 180px; }
-  .rail { gap: 8px; }
+  .rail { gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+  .rail-brand svg, .rail-brand img { width: 26px; height: 26px; }
+  .modecard { padding: 4px; gap: 4px; }
+  .mc-badge { width: 30px; height: 30px; border-radius: 9px; }
+  .mc-switch button { padding: 4px 2px; }
+  .nav a { padding: 7px 8px; }
+  .nav { gap: 0; }
 }
 @media (pointer: coarse) {
   .nav a, .rail-btn { min-height: 44px; }

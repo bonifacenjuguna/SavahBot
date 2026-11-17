@@ -22,7 +22,7 @@
  */
 "use strict";
 
-const VERSION = "1.4.11";
+const VERSION = "1.4.12";
 const CACHE = `savahbot-offline-${VERSION}`;           // the offline page and the last app shell: replaced with each version
 const ASSETS = "savahbot-assets";                       // the build's hashed files: a file name never changes its content, so this survives updates
 const MAX_ASSETS = 160;

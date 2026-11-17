@@ -43,9 +43,11 @@
    minmax(0, 1fr) lets it shrink; the cards then wrap or scroll inside themselves. */
 @media (max-width: 999px) {
   .cols, .cols.even, .cols.three { grid-template-columns: minmax(0, 1fr); }
-  .app { grid-template-columns: minmax(0, 1fr); }
+  /* the icon rail keeps its own column between 720 and 999px (a phone turned sideways); without it the rail was stacked full-width above the page */
+  .app { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
 }
 @media (max-width: 719px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
   .cards-grid, .when-grid, .mode-cards, .scn-grid, .pack-grid, .det-grid, .sh-dets { grid-template-columns: minmax(0, 1fr); }
   .setting { grid-template-columns: minmax(0, 1fr); }
 }

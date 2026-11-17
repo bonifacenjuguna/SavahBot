@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.12
+
+### Fixed
+- **Phone turned sideways: the side bar filled the whole screen.** Between 720 and 999 px wide (most phones in landscape) a layout rule meant for the single-column page also removed the column of the icon side bar, so the bar (logo, Demo / Live switch, menu icons) was stacked full-width on top of the page and pushed the content out of sight. The side bar now keeps its narrow column beside the page. Portrait is unchanged.
+- **Short landscape screens.** When the screen is under 480 px tall the side bar is made more compact (smaller logo, status tile and menu rows) so more of the menu fits without scrolling.
+
 ## 1.4.11
 
 A much more capable installed app. Everything is optional and silent where a browser lacks the feature.
