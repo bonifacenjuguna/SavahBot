@@ -49,3 +49,55 @@ def test_system_alert_is_hidden_only_when_dashboard_is_visible_and_focused():
     assert 'c.visibilityState === "visible" && c.focused' in handler
     notes = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "notifications.ts").read_text(encoding="utf8")
     assert 'document.visibilityState === "visible" && document.hasFocus()' in notes
+
+
+# ------------------------------------------------------------------ 1.4.11
+def test_an_update_waits_for_the_page_instead_of_swapping_in_under_a_session():
+    install = SW[SW.index('addEventListener("install"'):SW.index('addEventListener("activate"')]
+    assert "if (!self.registration.active) return self.skipWaiting()" in install        # only the very first install starts at once
+    assert 'event.data.type === "skip-waiting"' in SW and "self.skipWaiting()" in SW
+
+
+def test_the_worker_never_touches_the_api_or_authenticated_requests():
+    fetch_handler = SW[SW.index('addEventListener("fetch"'):SW.index("// ------------------------------------------------------------------------------------------------ push")]
+    assert 'request.method !== "GET"' in fetch_handler and "url.origin !== self.location.origin || sensitive(request, url)" in fetch_handler
+    sensitive = SW[SW.index("function sensitive"):]
+    sensitive = sensitive[:sensitive.index("\n}")]
+    assert 'url.pathname.startsWith("/api/")' in sensitive and 'request.headers.has("authorization")' in sensitive      # same-origin /api/ and signed requests stay out
+    assert 'startsWith("/assets/")' in fetch_handler                                       # the only thing it keeps: the build's own hashed files
+    assert "respondWith" in fetch_handler and "Authorization" not in fetch_handler
+
+
+def test_approval_buttons_use_only_the_signed_link_never_the_sign_in_token():
+    block = SW[SW.index("async function decide"):SW.index("// ------------------------------------------------------------------------------------------------ Background Sync")]
+    assert '"/api/notify/act"' in block and "JSON.stringify({ token: atk, verb })" in block
+    assert "Authorization" not in block and "replay" not in block
+    assert "ACT_TOKEN.test(atk)" in SW[SW.index('addEventListener("notificationclick"'):SW.index("async function setBadge") if "async function setBadge" in SW else None]
+    assert 'actions: p.atk ? [{ action: "approve"' in SW
+
+
+def test_background_sync_sends_saved_writes_once_and_drops_refused_ones():
+    block = SW[SW.index("async function replay"):SW.index("// ------------------------------------------------------------------------------------------------ Periodic")]
+    assert block.index('s.delete(item.id)') < block.index("fetch(")                       # taken out first, so it can never be sent twice
+    assert "res.status >= 500 || res.status === 401 || res.status === 429" in block        # not delivered: back in the queue
+    assert 'self.navigator.locks.request("savahbot-outbox-flush"' in block                 # the page and the worker never send at the same moment
+    assert 'event.tag === "savahbot-outbox"' in SW and 'event.tag !== "savahbot-badge"' in SW
+
+
+def test_the_badge_link_can_only_read_the_waiting_count():
+    block = SW[SW.index('addEventListener("periodicsync"'):]
+    assert "/api/notify/badge?t=" in block and 'method: "POST"' not in block and "Authorization" not in block
+
+
+def test_the_manifest_declares_the_installed_app_capabilities():
+    import json
+    m = json.loads((Path(__file__).resolve().parents[2] / "frontend" / "public" / "manifest.webmanifest").read_text(encoding="utf8"))
+    assert m["display_override"][0] == "window-controls-overlay" and "standalone" in m["display_override"]
+    assert m["share_target"] == {"action": "/share", "method": "GET", "params": {"title": "title", "text": "text", "url": "url"}}
+    assert m["protocol_handlers"] == [{"protocol": "web+savahbot", "url": "/open?u=%s"}]
+    assert m["launch_handler"]["client_mode"][0] == "navigate-existing"
+    shots = m["screenshots"]
+    assert {s["form_factor"] for s in shots} == {"wide", "narrow"} and len(shots) >= 4
+    for s in shots:
+        assert (Path(__file__).resolve().parents[2] / "frontend" / "public" / s["src"].lstrip("/")).is_file(), s["src"]
+    assert len(m["shortcuts"]) >= 4 and all(s["url"].startswith("/") for s in m["shortcuts"])

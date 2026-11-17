@@ -1,4 +1,6 @@
 import { navigate } from "./router.js";
+import { forgetAll, recall, remember } from "./offline.js";
+import { canQueue, enqueue, isRelativeReminder, queuedNotice, revokeReplay } from "./outbox.js";
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code: string = "") {
     super(message);
@@ -42,6 +44,8 @@ export function getToken(): string {
 export function setToken(token: string): void {
   memoryToken = token;
   write(TOKEN_KEY, token);
+  // 1.4.11: signed out (or the session ended): saved copies of this account's data are wiped and the service worker loses its way to act for it
+  if (!token) { void forgetAll(); void revokeReplay(); }
 }
 
 export const loggedOut = new EventTarget();
@@ -85,6 +89,17 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
+    // 1.4.11: no connection at all. A read shows the last saved copy; a note, quote or clock-time reminder waits on this device and is sent later.
+    if (method === "GET") {
+      const saved = await recall<T>(path);
+      if (saved !== null) return saved;
+    } else if (sent && canQueue(method, path, body)) {
+      await enqueue(path, body, sent, base);
+      queuedNotice.dispatchEvent(new Event("queued"));
+      return { ok: true, queued: true } as T;
+    } else if (method === "POST" && path === "/api/reminders" && body && isRelativeReminder(String((body as { when?: unknown }).when ?? ""))) {
+      throw new ApiError("You are offline. A reminder like \"30m\" needs a connection; use a clock time such as 18:30 to save it for later.", 0);
+    }
     throw new ApiError(
       base ? `Cannot reach the backend at ${base}. Check the address and that the service is running.` : "Cannot reach the backend. Set its address on the sign-in screen.",
       0,
@@ -109,6 +124,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   }
   if (res.status === 403 && data?.code === "lockdown" && location.pathname !== "/security") navigate("/security");
   if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status}).`, res.status, data?.code ?? "");
+  if (method === "GET") remember(path, data);        // 1.4.11: the last good answer, for reading offline (only the allow-listed read-only paths are kept)
   return data as T;
 }
 

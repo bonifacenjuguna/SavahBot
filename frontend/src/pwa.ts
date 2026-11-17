@@ -14,6 +14,7 @@ import "./pwa.css";
 import { hasToken } from "./api.js";
 import { copyButton, h, sheet, toast } from "./dom.js";
 import { icon } from "./icons.js";
+import { warmAssets, watchForUpdates } from "./updates.js";
 
 // ------------------------------------------------------------------------------------------------ types
 /** Chromium's install event. It is not in TypeScript's DOM types. */
@@ -260,6 +261,26 @@ function schedule(): void {
   }, wait);
 }
 
+/** 1.4.11: opens a page of the dashboard in a window of its own (the Desk on a second screen, say). Same sign-in, its own window; the shared live
+ * feed (events.ts) means a second window does not open a second connection to the server. Only paths of this app are accepted. */
+export function popOut(path: string): void {
+  if (!/^\/[A-Za-z0-9_-]{0,60}(\?[\w=&.%-]{0,120})?$/.test(path)) return;
+  const w = Math.min(1280, Math.round(screen.availWidth * 0.8));
+  const hgt = Math.min(860, Math.round(screen.availHeight * 0.85));
+  window.open(path, `savahbot-${path.split("?")[0].slice(1) || "desk"}`, `popup=yes,width=${w},height=${hgt}`);
+}
+
+/** 1.4.11: the first time you decide a moderation request, the app has shown what it is for. Offer to install it right then instead of after the usual
+ * delay. Once only (ever), and under all the usual rules: not when installed, not inside a "not now" cooldown, not while a dialog is open. */
+const NUDGE_KEY = "savahbot.pwa.nudged";
+export function nudgeInstall(): void {
+  try { if (localStorage.getItem(NUDGE_KEY)) return; } catch { /* private mode: it just may repeat once per visit */ }
+  if (!shellUp || standalone || !wantBanner()) return;
+  try { localStorage.setItem(NUDGE_KEY, "1"); } catch { /* ignore */ }
+  shellSince = 0;
+  schedule();
+}
+
 // ------------------------------------------------------------------------------------------------ banner
 function liftToasts(on: boolean): void {
   const root = document.documentElement;
@@ -462,7 +483,9 @@ async function registerWorker(): Promise<void> {
       await Promise.all(regs.map((r) => r.unregister()));
       return;
     }
-    await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    warmAssets();
+    watchForUpdates(reg);          // 1.4.11: a new version waits and shows "Reload" instead of swapping under you
   } catch {
     /* an insecure origin or a blocked worker: the app works the same without it */
   }

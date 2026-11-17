@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.requests import Request
 
 from ..notify import NotifyError, categories as cats
-from .routes import ApiError, R, need, parse
+from .routes import ApiError, R, client_ip, need, parse
 
 
 class _In(BaseModel):
@@ -58,6 +58,11 @@ class Token(_In):
 class DevicePatch(_In):
     label: str | None = Field(default=None, max_length=60)
     enabled: bool | None = None
+
+
+class Act(_In):
+    token: str = Field(min_length=10, max_length=200)
+    verb: str = Field(pattern="^(approve|reject)$")
 
 
 class Test(_In):
@@ -211,3 +216,37 @@ async def notify_stats(request: Request, c: Any) -> dict:
 @R.add("/notify/log", ["GET"])
 async def notify_log(request: Request, c: Any) -> dict:
     return {"items": await c.notifier.delivery_log(50)}
+
+
+# ================================================================================= for the service worker (1.4.11)
+# The service worker cannot read the sign-in token, so these use narrow signed tokens instead (see Notifier.link_token). They are public
+# routes that check their own token, refuse everything while lockdown is on, and can do nothing beyond what the token says.
+@R.add("/notify/act", ["POST"], public=True)
+async def notify_act(request: Request, c: Any) -> dict:
+    """Approve or reject ONE waiting moderation request from a push notification button."""
+    b = await parse(request, Act)
+    if c.access.lockdown:
+        raise ApiError("Lockdown is on. Open the dashboard to continue.", 403, "lockdown")
+    aid = c.notifier.read_link_token(b.token, "act")
+    if not aid:
+        raise ApiError("This button has expired. Open the dashboard to decide.", 410, "expired")
+    result = await (c.hub.approve(aid) if b.verb == "approve" else c.hub.reject(aid))
+    if not result.get("ok"):
+        raise ApiError(result.get("error") or "Could not complete that.", 409)
+    await c.access.audit("notify_action", None, client_ip(request), f"{b.verb} #{aid} from a push button")
+    return {"ok": True, "status": result.get("status") or ("approved" if b.verb == "approve" else "rejected"), "pending": await c.notifier.pending_count()}
+
+
+@R.add("/notify/badge-token", ["GET"])
+async def notify_badge_token(request: Request, c: Any) -> dict:
+    """A token that can only read the waiting count, kept by the installed app so its icon badge can refresh while the app is closed."""
+    return {"token": c.notifier.link_token("badge", 0, 14 * 86400), "ttl": 14 * 86400}
+
+
+@R.add("/notify/badge", ["GET"], public=True)
+async def notify_badge(request: Request, c: Any) -> dict:
+    if c.access.lockdown:
+        raise ApiError("Lockdown is on.", 403, "lockdown")
+    if c.notifier.read_link_token(request.query_params.get("t", ""), "badge") is None:
+        raise ApiError("This link has expired. Open the dashboard once to renew it.", 410, "expired")
+    return {"pending": await c.notifier.pending_count(), "unread": await c.notifier.unread()}

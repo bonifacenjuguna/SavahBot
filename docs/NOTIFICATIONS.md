@@ -55,6 +55,12 @@ Quiet hours use your time zone (`OWNER_TIMEZONE`, editable in Settings). Overnig
 - Security alerts never put their text on a lock screen. You can hide the text of all pushes ("Hide message text").
 - No permission prompt appears on page load, only after you press the button.
 
+## Buttons, the icon badge and signed links (1.4.11)
+- A **moderation approval** push carries two things the others do not: the number of requests waiting (the app icon badge follows it) and a **signed link** for that single request. On Android and desktop Chromium the notification shows **Approve** and **Reject** buttons that use the link. See `POST /api/notify/act`.
+- The link is made by the server (HMAC of the request id and an expiry, with the server's own secret) and lasts as long as an approval request does. It is refused while **lockdown** is on, it cannot decide any other request, and a second press says the request was already decided.
+- `GET /api/notify/badge-token` (signed in) gives the installed app a read-only link for **Periodic Background Sync**; `GET /api/notify/badge?t=...` returns only `{pending, unread}`.
+- iOS does not show notification buttons: tapping the notification opens the Moderation page as before.
+
 ## Limits (honest)
 - Push on iPhone/iPad needs iOS 16.4+ and SavahBot **added to the Home Screen**. See PWA_AND_PUSH_PLATFORMS.md.
 - The Firebase browser library is loaded from Google's CDN when you turn push on, so the dashboard must be able to reach `gstatic.com`.

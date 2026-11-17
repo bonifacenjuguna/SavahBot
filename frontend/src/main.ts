@@ -23,36 +23,43 @@ import { onNotices, openNotifications, refresh as refreshBell, startNotification
 import { initAppearance } from "./appearance.js";
 import { applyTheme, initTheme, installShortcuts, nextTheme, openPalette, setAppContext, themePref, THEME_ICON, type AppContext, type ThemePref } from "./ui.js";
 import { APP_VERSION } from "./version.js";
-import { initPWA, mountInstallButton } from "./pwa.js";
+import { initPWA, mountInstallButton, nudgeInstall } from "./pwa.js";
+import { onSaved } from "./offline.js";
+import { onOutbox } from "./outbox.js";
+import { setBadge, startBridge } from "./swbridge.js";
 import { desk } from "./pages/desk.js";
 import { type LoginReply, passkeyFirst, secondStep } from "./login-flow.js";
-import { bans } from "./pages/bans.js";
-import { backup, restoreForm } from "./pages/backup.js";
-import { security } from "./pages/security.js";
-import { notifications } from "./pages/notifications.js";
-import { weather } from "./pages/weather.js";
-import { weatherSettings } from "./pages/weather-settings.js";
 import { variables } from "./pages/variables.js";
-import { activity } from "./pages/activity.js";
-import { streamSettings } from "./pages/stream-settings.js";
-import { readerSettings } from "./pages/reader-settings.js";
 import { listenForTaps, resumePush } from "./push.js";
 import { loadLayouts } from "./layout.js";
-import { moderation } from "./pages/moderation.js";
-import { commands } from "./pages/commands.js";
-import { notebook } from "./pages/notebook.js";
-import { community } from "./pages/community.js";
-import { insights } from "./pages/insights.js";
-import { demo } from "./pages/demo.js";
 import { more } from "./pages/more.js";
+import { open as openLink, share } from "./pages/share.js";
 import { setup } from "./pages/setup.js";
-import { settings } from "./pages/settings.js";
+import { lazyPage, preloadPages } from "./pages/lazy.js";
 import type { Page } from "./pages/types.js";
 import { current, navigate, onRoute, startRouter } from "./router.js";
 
 export { APP_VERSION };
 
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, variables, activity, streamSettings, readerSettings, backup, insights, demo, setup, settings, more];
+/** 1.4.11: these pages load the first time they are opened (and are fetched quietly in the background once the app is idle). Their name, icon and blurb stay here. */
+const bans = lazyPage({ id: "bans", title: "Enforcement", icon: "ban", blurb: "Lift bans and soften the bot's actions" }, () => import("./pages/bans.js").then((m) => m.bans));
+const security = lazyPage({ id: "security", title: "Security", icon: "shield", blurb: "Sign-in methods, devices and lockdown" }, () => import("./pages/security.js").then((m) => m.security));
+const notifications = lazyPage({ id: "notifications", title: "Notifications", icon: "bell", blurb: "Push, bell, Telegram, quiet hours and history" }, () => import("./pages/notifications.js").then((m) => m.notifications));
+const weather = lazyPage({ id: "weather", title: "Weather", icon: "cloudSun", blurb: "Current weather, hourly and daily forecast" }, () => import("./pages/weather.js").then((m) => m.weather));
+const weatherSettings = lazyPage({ id: "weather-settings", title: "Weather settings", icon: "sliders", blurb: "Places, units, refresh and alerts" }, () => import("./pages/weather-settings.js").then((m) => m.weatherSettings));
+const activity = lazyPage({ id: "activity", title: "Activity log", icon: "checklist", blurb: "What changed, by area and importance" }, () => import("./pages/activity.js").then((m) => m.activity));
+const streamSettings = lazyPage({ id: "stream-settings", title: "Stream alerts", icon: "radio", blurb: "Live stats, subscribers, members and Super Chats" }, () => import("./pages/stream-settings.js").then((m) => m.streamSettings));
+const readerSettings = lazyPage({ id: "reader", title: "Chat reader", icon: "volume", blurb: "Read chat aloud with built-in or neural voices" }, () => import("./pages/reader-settings.js").then((m) => m.readerSettings));
+const moderation = lazyPage({ id: "moderation", title: "Moderation", icon: "shield", blurb: "Approvals, history and blocked phrases" }, () => import("./pages/moderation.js").then((m) => m.moderation));
+const commands = lazyPage({ id: "commands", title: "Commands", icon: "terminal", blurb: "Commands, auto-replies and timers" }, () => import("./pages/commands.js").then((m) => m.commands));
+const notebook = lazyPage({ id: "notebook", title: "Notebook", icon: "notebook", blurb: "Private notes and reminders" }, () => import("./pages/notebook.js").then((m) => m.notebook));
+const community = lazyPage({ id: "community", title: "Community", icon: "users", blurb: "Quotes and trusted regulars" }, () => import("./pages/community.js").then((m) => m.community));
+const insights = lazyPage({ id: "insights", title: "Insights", icon: "chart", blurb: "Charts of chat and moderation" }, () => import("./pages/insights.js").then((m) => m.insights));
+const demo = lazyPage({ id: "demo", title: "Demo", icon: "flask", blurb: "Run simulated chat scenarios" }, () => import("./pages/demo.js").then((m) => m.demo));
+const settings = lazyPage({ id: "settings", title: "Settings", icon: "sliders", blurb: "Every option, searchable" }, () => import("./pages/settings.js").then((m) => m.settings));
+const backup = lazyPage({ id: "backup", title: "Backup & Recovery", icon: "database", blurb: "Encrypted export and restore" }, () => import("./pages/backup.js").then((m) => m.backup));
+
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, variables, activity, streamSettings, readerSettings, backup, insights, demo, setup, settings, more, share, openLink];
 /** The deliberate 404: an address that is not a page. It is drawn inside the signed-in shell, so nothing is revealed to a signed-out visitor. */
 const NOT_FOUND: Page = {
   id: "not-found", title: "Page not found", icon: "alert",
@@ -101,7 +108,7 @@ function restoreLink(): HTMLElement | null {
   const holder = h("div", null);
   void get<{ available: boolean }>("/api/backup/first-run").then((r) => {
     if (!r.available) return;
-    holder.append(h("button", { class: "lc-link", type: "button", onclick: () => { sheet("Restore from a backup", restoreForm({ firstRun: true })); } }, icon("upload", 14), "Restore from a backup"));
+    holder.append(h("button", { class: "lc-link", type: "button", onclick: () => { void import("./pages/backup.js").then((m) => { sheet("Restore from a backup", m.restoreForm({ firstRun: true })); }); } }, icon("upload", 14), "Restore from a backup"));
   }).catch(() => undefined);
   return holder;
 }
@@ -298,8 +305,25 @@ function showShell(): void {
   const moreTab = tabbar.querySelector("#tab-more") as HTMLElement;
 
   const content = h("main", { class: "main", id: "content", tabindex: -1 });
+
+  // ----- 1.4.11: "showing saved data" and "waiting to send" (offline reading and the outbox)
+  const ssText = h("span", { class: "ss-text" });
+  const ssRetry = h("button", { class: "btn small", type: "button", onclick: () => { feed.retryNow(); void refreshStatus(); } }, icon("refresh", 14), "Try now");
+  const strip = h("div", { class: "saved-strip", role: "status", "aria-live": "polite", hidden: true }, icon("wifiOff", 16), ssText, ssRetry);
+  let savedAt: number | null = null;
+  let waitingToSend = 0;
+  const paintStrip = () => {
+    const parts: Node[] = [];
+    if (savedAt !== null) parts.push(h("strong", null, `Showing saved data from ${new Date(savedAt).toLocaleString([], { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" })}`), h("span", null, " The server cannot be reached; it reconnects by itself."));
+    if (waitingToSend) parts.push(h("span", { style: savedAt !== null ? "display:block" : "" }, waitingToSend === 1 ? "1 thing saved on this device will be sent when you are back online." : `${waitingToSend} things saved on this device will be sent when you are back online.`));
+    strip.hidden = parts.length === 0;
+    ssRetry.hidden = savedAt === null && !waitingToSend;
+    mount(ssText, ...parts);
+  };
+  offs.push(onSaved((since) => { savedAt = since; paintStrip(); }));
+  offs.push(onOutbox((n) => { waitingToSend = n; paintStrip(); }));
   const skip = h("a", { class: "skip", href: "#content", onclick: (e: Event) => { e.preventDefault(); content.focus(); } }, "Skip to content");
-  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, content)), tabbar);
+  mount(root, skip, h("div", { class: "app" }, rail, h("div", { class: "stage" }, topbar, strip, content)), tabbar);
 
   // ----- sheets
   function modeCards(close: () => void): HTMLElement {
@@ -403,6 +427,7 @@ function showShell(): void {
     const badge = counts.get("moderation")!;
     badge.hidden = s.pending === 0;
     badge.textContent = String(s.pending);
+    void setBadge(s.pending);                       // 1.4.11: the same number on the app icon
     tabBadge.hidden = s.pending === 0;
     tabBadge.textContent = s.pending > 99 ? "99+" : String(s.pending);
     // the pages were drawn for the previous mode: draw them again so Demo and Live never show each other's data
@@ -437,6 +462,9 @@ function showShell(): void {
     void checkForNewVersion();
   }));
   for (const t of ["mode", "stream", "mod_pending", "mod_resolved"]) offs.push(feed.on(t, () => void refreshStatus()));
+  // 1.4.11: the first time a request is decided is the moment the app has proved itself: offer to install it then (once, and only if it makes sense)
+  offs.push(feed.on("mod_resolved", (e) => { if (["approved", "executed", "rejected"].includes(String(e.data?.status))) nudgeInstall(); }));
+  offs.push(startBridge());
   const syncBell = () => {
     const n = unreadCount();
     bellBadge.hidden = n === 0;
@@ -454,6 +482,7 @@ function showShell(): void {
   offs.push(installShortcuts(ctx));
 
   render();
+  offs.push(preloadPages(PAGES));          // 1.4.11: the other pages are fetched while the app is idle
   void refreshStatus();
   statusTimer = window.setInterval(() => void refreshStatus(), 15000);
   feed.start();

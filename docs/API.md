@@ -218,6 +218,9 @@ Notification Centre: preferences, inbox, devices, test, stats.
 
 | Method | Path | Notes |
 |---|---|---|
+| POST | `/api/notify/act` | public |
+| GET | `/api/notify/badge` | public |
+| GET | `/api/notify/badge-token` |  |
 | GET | `/api/notify/categories` |  |
 | POST | `/api/notify/check` |  |
 | GET | `/api/notify/config` | limited ok |

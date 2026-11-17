@@ -53,3 +53,37 @@
 
 @media (prefers-reduced-motion: reduce) { .pwa-card, .pwa-card.leaving { animation: none; } }
 @media print { .pwa-card { display: none !important; } }
+
+/* ---------- 1.4.11: update bar ---------- */
+.update-bar {
+  position: fixed; z-index: 46; left: 50%; transform: translateX(-50%); top: calc(var(--topbar-h, 56px) + 12px + env(safe-area-inset-top, 0px));
+  width: min(520px, calc(100vw - 24px)); display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px;
+  background: var(--panel); color: var(--ink); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 14px;
+  box-shadow: var(--shadow-2, 0 24px 70px rgba(5, 9, 20, 0.38)); animation: ub-in 0.3s var(--ease, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
+}
+.update-bar .ub-ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); flex: none; }
+.update-bar .ub-text { display: grid; gap: 1px; min-width: 0; flex: 1; font-size: 0.84rem; line-height: 1.35; }
+.update-bar .ub-text span { color: var(--muted); }
+.update-bar .ub-actions { display: flex; gap: 6px; flex: none; }
+@keyframes ub-in { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translateX(-50%); } }
+@media (max-width: 719px) { .update-bar { top: calc(var(--topbar-h, 56px) + 8px + env(safe-area-inset-top, 0px)); flex-wrap: wrap; } .update-bar .ub-actions { margin-left: auto; } }
+
+/* ---------- 1.4.11: "showing saved data" strip and the offline outbox ---------- */
+.saved-strip {
+  position: sticky; top: var(--topbar-h, 56px); z-index: 29; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px clamp(14px, 3vw, 40px); font-size: 0.84rem; color: var(--ink);
+  background: color-mix(in srgb, var(--warn, #e0a100) 14%, var(--bg)); border-bottom: 1px solid color-mix(in srgb, var(--warn, #e0a100) 40%, var(--line));
+}
+.saved-strip[hidden] { display: none; }
+.saved-strip .ss-text { flex: 1 1 220px; min-width: 0; }
+.saved-strip .ss-text span { color: var(--muted); }
+.saved-strip .btn { flex: none; }
+
+/* ---------- 1.4.11: window controls overlay (the installed app on desktop draws into the title bar) ---------- */
+@media (display-mode: window-controls-overlay) {
+  :root { --topbar-h: max(56px, env(titlebar-area-height, 0px)); }
+  .topbar { app-region: drag; -webkit-app-region: drag; padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 12px); }
+  .topbar :is(button, a, input, select, label, [role="button"], .conn-chip, .search) { app-region: no-drag; -webkit-app-region: no-drag; }
+  .rail-brand { app-region: drag; -webkit-app-region: drag; margin-left: env(titlebar-area-x, 0px); }
+  .rail-brand a { app-region: no-drag; -webkit-app-region: no-drag; }
+}

@@ -118,7 +118,12 @@ Event flow, database map, Redis key map, API map, frontend map, state machines, 
 | API | `api/notify_routes.py` (`/api/notify/*`) |
 | Bus tap (server-side listener without a dashboard subscriber) | `events.py` `EventBus.tap` |
 | Tables | `notifications, notify_deliveries, notify_devices`; prefs in kv `notify_prefs` |
-| Service worker push + click | `frontend/public/sw.js` |
+| Service worker push, click, Approve / Reject, badge, Background Sync | `frontend/public/sw.js` |
+| Offline reading, outbox, update bar, badge bridge | `frontend/src/offline.ts`, `outbox.ts`, `swbridge.ts`, `updates.ts`, `idb.ts` |
+| Share target and `web+savahbot:` links | `frontend/src/pages/share.ts`, `route-utils.ts` |
+| Pages that load on first visit | `frontend/src/pages/lazy.ts` |
+| One live connection for several windows | `frontend/src/events.ts` (Web Locks + BroadcastChannel) |
+| Signed links for the service worker | `backend/app/notify/service.py`, `api/notify_routes.py` |
 | Firebase token flow | `frontend/src/push.ts` |
 | Bell (server-backed) | `frontend/src/notifications.ts` |
 | Page | `frontend/src/pages/notifications.ts` |

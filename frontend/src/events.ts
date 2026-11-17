@@ -46,9 +46,18 @@ export function retryNow(): void {
   wake?.();
 }
 
+/** 1.4.11: with several windows open (the Desk popped out, a second tab), only ONE of them holds the connection to the server; it passes every message
+ * to the others over a BroadcastChannel. This is the channel while this window is that one, otherwise null. */
+let relay: BroadcastChannel | null = null;
+const LOCK_NAME = "savahbot-live-feed";
+const CHANNEL_NAME = "savahbot-feed";
+const BEAT_MS = 10_000;
+const FOLLOWER_SILENCE_MS = 45_000;
+
 function setConnected(up: boolean): void {
   if (connected === up) return;
   connected = up;
+  relay?.postMessage({ k: "state", up });
   if (up) {
     attempts = 0;
     const was = downSince ? Date.now() - downSince : 0;
@@ -89,7 +98,38 @@ export function start(): void {
   controller = new AbortController();
   window.addEventListener("online", onWake);
   document.addEventListener("visibilitychange", onVisible);
-  void loop(controller);
+  void elect(controller);
+}
+
+/** One connection for all windows. The window holding the Web Lock keeps the live feed open and relays it; the others listen. If that window closes (or
+ * the browser discards it), the lock passes to the next window at once, which opens the connection. Without Web Locks or BroadcastChannel, every window
+ * connects for itself, exactly as before. */
+async function elect(ctl: AbortController): Promise<void> {
+  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  if (!locks || typeof BroadcastChannel === "undefined") { void loop(ctl); return; }
+  const bc = new BroadcastChannel(CHANNEL_NAME);
+  let leading = false;
+  let lastHeard = Date.now();
+  bc.onmessage = (m: MessageEvent) => {
+    const d = m.data as { k?: string; raw?: string; up?: boolean } | undefined;
+    if (!d) return;
+    if (leading) { if (d.k === "hello") bc.postMessage({ k: "state", up: connected }); return; }
+    lastHeard = Date.now();
+    if (d.k === "frame" && typeof d.raw === "string") dispatch(d.raw);
+    else if (d.k === "state") setConnected(!!d.up);
+  };
+  bc.postMessage({ k: "hello" });
+  const watch = window.setInterval(() => { if (!leading && connected && Date.now() - lastHeard > FOLLOWER_SILENCE_MS) setConnected(false); }, 5000);
+  try {
+    await locks.request(LOCK_NAME, { signal: ctl.signal }, async () => {
+      leading = true;
+      relay = bc;
+      bc.postMessage({ k: "state", up: connected });
+      try { await loop(ctl); } finally { relay = null; leading = false; }
+    });
+  } catch { /* stopped while waiting for the lock */ }
+  window.clearInterval(watch);
+  bc.close();
 }
 
 export function stop(): void {
@@ -119,6 +159,7 @@ async function loop(ctl: AbortController): Promise<void> {
     const abortConn = () => conn.abort();
     ctl.signal.addEventListener("abort", abortConn);
     let lastByte = Date.now();
+    let lastBeat = 0;
     const check = () => { if (Date.now() - lastByte > SILENCE_MS) conn.abort(); };
     const watchdog = window.setInterval(check, 5000);
     stale = check;
@@ -135,10 +176,13 @@ async function loop(ctl: AbortController): Promise<void> {
         const { value, done } = await reader.read();
         if (done) break;
         lastByte = Date.now();
+        if (relay && lastByte - lastBeat > BEAT_MS) { lastBeat = lastByte; relay.postMessage({ k: "beat" }); }     // the server's pings are not messages: tell the other windows we are alive
         buf += decoder.decode(value, { stream: true });
         let i: number;
         while ((i = buf.indexOf("\n\n")) >= 0) {
-          dispatch(buf.slice(0, i));
+          const frame = buf.slice(0, i);
+          dispatch(frame);
+          relay?.postMessage({ k: "frame", raw: frame });
           buf = buf.slice(i + 2);
         }
       }

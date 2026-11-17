@@ -349,3 +349,40 @@ def test_test_notification_opens_itself_and_item_lookup():
         assert [x["id"] for x in one["items"]] == [item["id"]]
         assert (await n.inbox(limit=1, nid=999999))["items"] == []
     run(go())
+
+
+# ------------------------------------------------------------------ 1.4.11: signed links for the service worker
+def test_link_tokens_are_signed_scoped_and_expire():
+    async def go():
+        n = await make()
+        t = n.link_token("act", 42, 600, now=NOON)
+        assert n.read_link_token(t, "act", now=NOON + 599) == 42
+        assert n.read_link_token(t, "act", now=NOON + 601) is None            # expired
+        assert n.read_link_token(t, "badge", now=NOON) is None                # a token only works for its own purpose
+        assert n.read_link_token(t[:-2] + "xx", "act", now=NOON) is None      # tampered
+        parts = t.split(".")
+        forged = ".".join([parts[0], "43", parts[2], parts[3]])               # a different request id with the old signature
+        assert n.read_link_token(forged, "act", now=NOON) is None
+        assert n.read_link_token("garbage", "act") is None and n.read_link_token("", "act") is None
+        other = await make()
+        other._secret_fn = lambda: "another-secret"
+        assert other.read_link_token(t, "act", now=NOON) is None              # signed with the server's own secret
+    asyncio.run(go())
+
+
+def test_approval_push_carries_one_signed_action_link_and_the_waiting_count():
+    async def go():
+        n = await make(mod_pending_ttl_minutes=30)
+        await n.db.execute("CREATE TABLE IF NOT EXISTS mod_actions (id INTEGER PRIMARY KEY, status TEXT)")
+        await n.db.execute("INSERT INTO mod_actions (id, status) VALUES (7, 'pending'), (8, 'pending'), (9, 'executed')")
+        await n.handle({"type": "mod_pending", "data": {"id": 7, "author": "promo", "action": "ban", "score": 9}})
+        await n.drain()
+        sent = n.fcm.sent[-1][1]
+        assert sent["pending"] == 2
+        assert n.read_link_token(sent["atk"], "act") == 7
+        before = len(n.fcm.sent)
+        await n.emit("stream.live", "Stream is live", "x")
+        await n.drain()
+        if len(n.fcm.sent) > before:
+            assert "atk" not in n.fcm.sent[-1][1]                              # other notifications have no buttons
+    asyncio.run(go())

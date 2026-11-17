@@ -90,3 +90,30 @@ export function queryString(q: string | URLSearchParams): string {
   const s = (typeof q === "string" ? q.replace(/^\?/, "") : q.toString());
   return s ? `?${s}` : "";
 }
+
+/** Pages a `web+savahbot:` link may open (1.4.11). Anything else is refused, so a link can only ever open a page of this app. */
+export const PROTOCOL_PAGES: readonly string[] = ["desk", "moderation", "commands", "insights", "notebook", "community", "bans", "weather", "demo", "notifications", "security", "settings", "backup", "more"];
+
+/** Turns what the browser hands over for a registered `web+savahbot:` link into a clean in-app path, or null.
+ *  `web+savahbot:moderation`, `web+savahbot:notebook?compose=1` and `web+savahbot://settings?tab=knowledge` are all accepted; the query is limited to plain words. */
+export function fromProtocol(raw: string): string | null {
+  let u = String(raw ?? "").trim();
+  if (u.length > 200) return null;
+  try { u = decodeURIComponent(u); } catch { return null; }
+  const m = /^web\+savahbot:(?:\/\/)?\/?([a-z-]{1,30})\/?(?:\?([\w=&.%-]{0,120}))?$/i.exec(u);
+  if (!m) return null;
+  const page = m[1].toLowerCase();
+  if (!PROTOCOL_PAGES.includes(page)) return null;
+  const q = m[2] ? queryString(new URLSearchParams(m[2])) : "";
+  return `/${page}${q}`;
+}
+
+/** Joins what another app shared (a title, some text and a link) into one note, without saying the same thing twice. */
+export function sharedText(title: string, text: string, url: string): string {
+  const parts: string[] = [];
+  for (const raw of [title, text, url]) {
+    const t = String(raw ?? "").trim();
+    if (t && !parts.some((p) => p.includes(t))) parts.push(t);
+  }
+  return parts.join("\n").slice(0, 5000);
+}

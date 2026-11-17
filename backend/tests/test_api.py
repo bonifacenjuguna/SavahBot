@@ -329,3 +329,57 @@ async def test_timer_modes_and_auto_replies(api):
     assert st == 200 and len(b["items"]) == 1 and "everyone" in b["levels"]
     assert (await api.call("DELETE", f"/api/triggers/{tid}"))[0] == 200
     assert (await api.call("DELETE", f"/api/triggers/{tid}"))[0] == 404
+
+
+# ------------------------------------------------------------------ 1.4.11: what the service worker may do without a sign-in
+@e2e
+async def test_push_buttons_decide_one_request_and_refuse_when_unsafe(api):
+    st, _ = await api.call("POST", "/api/demo/scenario", {"name": "link_spammer"})
+    assert st == 200
+    pending = []
+    for _ in range(100):
+        st, b = await api.call("GET", "/api/moderation/pending")
+        pending = b["items"]
+        if pending:
+            break
+        await asyncio.sleep(0.1)
+    assert pending, "the link spammer scenario should queue an approval"
+    pid = pending[0]["id"]
+    token = api.c.notifier.link_token("act", pid, 600)
+
+    st, b = await api.call("POST", "/api/notify/act", {"token": "act.1.1.xxxxxxxxxxxxxxxxxxxxxxxx", "verb": "approve"}, auth=False)
+    assert st == 410                                                           # a forged link does nothing
+    st, b = await api.call("POST", "/api/notify/act", {"token": token, "verb": "delete"}, auth=False)
+    assert st == 422                                                           # only approve or reject exist
+    api.c.access.lockdown = True
+    st, b = await api.call("POST", "/api/notify/act", {"token": token, "verb": "approve"}, auth=False)
+    assert st in (401, 403, 423)                                               # lockdown refuses every button
+    api.c.access.lockdown = False
+    st, b = await api.call("POST", "/api/notify/act", {"token": token, "verb": "approve"}, auth=False)
+    assert st == 200 and b["ok"] and isinstance(b["pending"], int)             # no sign-in header, only the signed link
+    st, b = await api.call("POST", "/api/notify/act", {"token": token, "verb": "approve"}, auth=False)
+    assert st == 409                                                           # the same request cannot be decided twice
+    other = api.c.notifier.link_token("badge", pid, 600)
+    st, b = await api.call("POST", "/api/notify/act", {"token": other, "verb": "approve"}, auth=False)
+    assert st == 410                                                           # a badge link is not an action link
+
+
+@e2e
+async def test_badge_link_reads_only_the_waiting_count(api):
+    st, _ = await api.call("GET", "/api/notify/badge-token", auth=False)
+    assert st == 401                                                           # only a signed-in session can mint one
+    st, b = await api.call("GET", "/api/notify/badge-token")
+    assert st == 200 and b["token"].startswith("badge.")
+    t = b["token"]
+    st, b = await api.call("GET", f"/api/notify/badge?t={t}", auth=False)
+    assert st == 200 and set(b) == {"pending", "unread"}
+    st, _ = await api.call("GET", "/api/notify/badge?t=bad", auth=False)
+    assert st == 410
+    st, _ = await api.call("GET", "/api/notify/badge", auth=False)
+    assert st == 410
+    st, _ = await api.call("GET", "/api/status", auth=False)
+    assert st == 401                                                           # the badge link opens nothing else
+    api.c.access.lockdown = True
+    st, _ = await api.call("GET", f"/api/notify/badge?t={t}", auth=False)
+    assert st in (401, 403, 423)
+    api.c.access.lockdown = False

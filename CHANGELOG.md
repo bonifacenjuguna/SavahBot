@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.4.11
+
+A much more capable installed app. Everything is optional and silent where a browser lacks the feature.
+
+### Added
+- **App icon badge.** The home-screen / dock / taskbar icon shows how many moderation requests are waiting. It follows every push and the open app, and refreshes in the background (Periodic Background Sync, installed Chromium apps) using a read-only link that can read nothing but that number.
+- **Approve and Reject on the notification.** An approval push has two buttons that decide that one request without opening the app. They use a short signed link made by the server, never your sign-in; the server refuses it during lockdown, after it expires, or for any other request. New public routes `POST /api/notify/act` and `GET /api/notify/badge`, and `GET /api/notify/badge-token` for the signed-in app.
+- **Works offline.** The installed app opens with no connection (the service worker keeps the app's own hashed files and the last page), and pages show the last data they saw under a strip saying when it was taken ("Showing saved data from ..."). Copies are kept only for read-only pages, expire after a week and are wiped on sign-out.
+- **Saved for later.** A note, a quote or a clock-time reminder written offline waits on the device and is sent when the connection returns, even with the app closed where Background Sync exists. Each is taken out of the queue before it is sent, so nothing is sent twice. Relative reminders ("30m") are not queued, because they would be wrong by the time they are sent; the app says so.
+- **Updates wait for you.** A new version downloads quietly and shows "A new version is ready. Reload" instead of replacing the app under a session.
+- **Share to SavahBot.** The installed app appears in the share menu (Android and desktop Chromium). Shared text arrives on a page where you choose Note or Quote.
+- **`web+savahbot:` links** open a page of the installed app (`web+savahbot:moderation`, `web+savahbot:notebook?compose=1`). Only pages of the app are accepted.
+- **Install offer at the right moment.** After the first request you decide, the install offer appears at once (once ever, and under the usual rules).
+- **Desktop app title bar.** Window Controls Overlay: the installed app draws into its title bar, and launching it again re-uses the open window. More shortcuts (Moderation, Desk, Notebook, Insights, Commands, Notifications) and store-style screenshots in the manifest for the richer install prompt.
+- **Windows of their own.** "Open the Desk in its own window" and "Open this page in a new window" in the command palette. All windows share **one** live connection (Web Locks and BroadcastChannel): one holds it and relays every message; when it closes, the next takes over at once.
+
+### Changed
+- **Faster first screen.** Pages are loaded the first time you open them and fetched quietly while the app is idle (not on Data Saver or a 2G connection), so the first download is about a fifth of what it was and every page still works offline.
+- The service worker no longer takes over the moment a new version arrives, and it now also keeps the app's own files. It still never touches `/api/`, other sites, or any request that carries a sign-in.
+
+### Tests
+- New: 17-step browser run against the real worker (offline shell, saved data, outbox, update bar), worker unit tests for push, badge and the Approve / Reject paths (including forged links), logic tests for the offline allow-list, outbox, protocol links and shared text, and backend tests for the signed links and the two public routes.
+
 ## 1.4.10
 
 ### Fixed

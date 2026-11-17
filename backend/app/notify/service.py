@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import hmac
 import json
 import logging
 import re
@@ -110,6 +111,35 @@ class Notifier:
     @staticmethod
     def thash(token: str) -> str:
         return hashlib.sha256(token.encode()).hexdigest()
+
+    # ------------------------------------------------------------------ signed links for the service worker (1.4.11)
+    # The service worker cannot read the sign-in token (it lives in the page's storage), and it must not be given it. Instead the server signs
+    # two small, narrow tokens: "act" lets one push notification approve or reject exactly one moderation request for a short while, and
+    # "badge" lets the installed app read the number of waiting requests while it is closed. Neither can do anything else, neither is a session.
+    def _sign_key(self) -> bytes:
+        return hashlib.sha256(b"savahbot-swlink|" + str(self._secret_fn()).encode()).digest()
+
+    def link_token(self, kind: str, ref: int, ttl: int, now: float | None = None) -> str:
+        exp = int((now if now is not None else time.time()) + ttl)
+        msg = f"{kind}.{int(ref)}.{exp}"
+        sig = base64.urlsafe_b64encode(hmac.new(self._sign_key(), msg.encode(), hashlib.sha256).digest()[:18]).decode().rstrip("=")
+        return f"{msg}.{sig}"
+
+    def read_link_token(self, token: str, kind: str, now: float | None = None) -> int | None:
+        """The reference inside a token of this kind that is genuine and not expired, else None."""
+        try:
+            k, ref, exp, sig = str(token).split(".")
+            msg = f"{k}.{ref}.{exp}"
+            good = base64.urlsafe_b64encode(hmac.new(self._sign_key(), msg.encode(), hashlib.sha256).digest()[:18]).decode().rstrip("=")
+            if k != kind or not hmac.compare_digest(sig, good) or float(exp) < (now if now is not None else time.time()):
+                return None
+            return int(ref)
+        except (ValueError, TypeError):
+            return None
+
+    async def pending_count(self) -> int:
+        row = await self.db.fetchone("SELECT COUNT(*) AS n FROM mod_actions WHERE status = 'pending'")
+        return int((row or {}).get("n") or 0)
 
     # ------------------------------------------------------------------ public config (safe to show)
     def web_config(self) -> dict[str, Any]:
@@ -393,8 +423,25 @@ class Notifier:
             return None
         c = cats.REGISTRY.get(n["category"])
         hide = prefs["hide_body_locked"] or bool(c and c.sensitive)
-        return {"title": n["title"], "body": "" if hide else n["body"], "route": safe_route(n["route"]), "category": n["category"], "tag": n["dedupe_key"] or f"n{n['id']}",
-                "priority": row["priority"], "nid": str(n["id"]), "kind": n["kind"]}
+        out = {"title": n["title"], "body": "" if hide else n["body"], "route": safe_route(n["route"]), "category": n["category"], "tag": n["dedupe_key"] or f"n{n['id']}",
+               "priority": row["priority"], "nid": str(n["id"]), "kind": n["kind"]}
+        return await self._extras(out, n)
+
+    async def _extras(self, out: dict[str, Any], n: dict[str, Any]) -> dict[str, Any]:
+        """1.4.11: the number of waiting requests (for the app icon badge) and, on an approval request, a signed link for the Approve and Reject buttons."""
+        try:
+            out["pending"] = await self.pending_count()
+        except Exception:
+            logger.debug("Could not count waiting requests for the badge", exc_info=True)       # the notification itself is more important than its extras
+        try:
+            if n["category"] == "moderation.approval":
+                aid = int((json.loads(n.get("data") or "{}") or {}).get("action_id") or 0)
+                if aid:
+                    ttl = max(300, int(self.cfg.get("mod_pending_ttl_minutes")) * 60)
+                    out["atk"] = self.link_token("act", aid, ttl)
+        except Exception:
+            logger.debug("Could not add the action link", exc_info=True)
+        return out
 
     async def purge(self, now: float) -> None:
         cut = now - int(self.cfg.get("notify_retention_days")) * 86400
@@ -466,7 +513,8 @@ class Notifier:
     async def handle(self, ev: dict[str, Any]) -> None:
         t, d = ev.get("type"), ev.get("data") or {}
         if t == "mod_pending" and not d.get("merged"):
-            await self.emit("moderation.approval", "Approval needed", f"{d.get('author', 'Someone')}: {d.get('action', 'action')}" + (f" (score {d['score']})" if d.get("score") else ""), key="pending")
+            await self.emit("moderation.approval", "Approval needed", f"{d.get('author', 'Someone')}: {d.get('action', 'action')}" + (f" (score {d['score']})" if d.get("score") else ""), key="pending",
+                            data={"action_id": d.get("id")} if d.get("id") else None)
         elif t == "mod_resolved" and d.get("status") == "failed":
             await self.emit("moderation.failed", "Moderation action failed", f"{d.get('action', 'Action')} for {d.get('author', 'a chatter')} did not go through.")
         elif t == "mod_expired":
