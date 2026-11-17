@@ -3,6 +3,7 @@
 ## 1.4.12
 
 ### Fixed
+- **Chrome's grey "SavahBot / Tap to copy the URL for this app" notification is gone (for good, this time).** Chrome posts it when no notification of the app is on screen at the moment a push ends. Since 1.4.11 the push handler did two things at once: it closed the silent placeholder left by the previous push, and it showed the new one (same tag) after a database write for the icon badge. When the first finished last, it closed the placeholder that had just been shown, so nothing was on screen. The handler is now one sequence: the notification first, then the badge, then the clean-up of leftovers, which never touches the notification the same push just showed. A failing badge or storage can no longer stop the notification either.
 - **Phone turned sideways: the side bar filled the whole screen.** Between 720 and 999 px wide (most phones in landscape) a layout rule meant for the single-column page also removed the column of the icon side bar, so the bar (logo, Demo / Live switch, menu icons) was stacked full-width on top of the page and pushed the content out of sight. The side bar now keeps its narrow column beside the page. Portrait is unchanged.
 - **Short landscape screens.** When the screen is under 480 px tall the side bar is made more compact (smaller logo, status tile and menu rows) so more of the menu fits without scrolling.
 ### Changed

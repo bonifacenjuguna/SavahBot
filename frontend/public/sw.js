@@ -126,13 +126,16 @@ function readPayload(event) {
 }
 
 self.addEventListener("push", (event) => {
-  // a quiet placeholder left over from the last push is no longer needed
-  event.waitUntil(self.registration.getNotifications({ tag: "savahbot-quiet" }).then((l) => l.forEach((n) => n.close())).catch(() => undefined));
+  // 1.4.12: ONE sequence, and the notification comes first. Before, a second job closed the leftover placeholder at the same time as this one
+  // showed the new one (same tag), and since 1.4.11 added a database write ahead of the notification the two kept landing in the wrong order:
+  // the new placeholder was closed, nothing was on screen when the event ended, and Chrome posted its grey "SavahBot / Tap to copy the URL
+  // for this app" notification. Nothing in this handler closes a notification until another one is on screen, and nothing before the
+  // notification can fail or wait.
   // A push with no readable content still has to show something: if a push handler shows nothing, Chrome adds its own generic
   // "SavahBot" notification (the stray one in the notification shade).
   const p = readPayload(event) || { title: "SavahBot", body: "Something needs a look.", route: "#/notifications", tag: "savahbot-generic", priority: "normal", nid: "", category: "" };
   event.waitUntil((async () => {
-    await setBadge(p.pending);          // the number on the app icon follows the waiting count the server sent
+    let placeholder = false;
     // Chrome requires every push to end in a visible notification. If the worker shows nothing (or throws before it does), Chrome adds its
     // own grey "SavahBot" notification in the Silent section, with "Open in browser" / "Share URL" buttons. So this block ALWAYS shows one.
     let shown = false;
@@ -153,6 +156,7 @@ self.addEventListener("push", (event) => {
         // (closeQuietNotifications in push.ts), and every later push or start-up clears any that were left behind.
         await self.registration.showNotification(p.title, { body: "", tag: "savahbot-quiet", silent: true, icon: "/icon-192.png", badge: "/badge-96.png" });
         shown = true;
+        placeholder = true;
         return;
       }
       await self.registration.showNotification(p.title, {
@@ -164,6 +168,12 @@ self.addEventListener("push", (event) => {
       shown = true;
     } finally {
       if (!shown) await self.registration.showNotification(p.title, { body: p.body, icon: "/icon-192.png", badge: "/badge-96.png", data: { route: p.route, nid: p.nid || "" } });
+      // Only now, with a notification on screen: the number on the app icon follows the waiting count the server sent (it can never stop the
+      // notification above), and a placeholder left over from an earlier push goes (never the one this push just showed: it has the same tag).
+      try { await setBadge(p.pending); } catch { /* the badge is a nicety */ }
+      if (!placeholder) {
+        try { (await self.registration.getNotifications({ tag: "savahbot-quiet" })).forEach((n) => n.close()); } catch { /* the dashboard clears it too */ }
+      }
     }
   })());
 });
@@ -229,7 +239,7 @@ async function setBadge(n) {
     if (n > 0 && self.navigator.setAppBadge) await self.navigator.setAppBadge(n);
     else if (self.navigator.clearAppBadge) await self.navigator.clearAppBadge();
   } catch { /* not installed, or no badge support */ }
-  await kvPut("pending", { n, at: Date.now() });
+  try { await kvPut("pending", { n, at: Date.now() }); } catch { /* storage blocked */ }
 }
 
 // ------------------------------------------------------------------------------------------------ Approve / Reject from the notification

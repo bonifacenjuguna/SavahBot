@@ -101,3 +101,17 @@ def test_the_manifest_declares_the_installed_app_capabilities():
     for s in shots:
         assert (Path(__file__).resolve().parents[2] / "frontend" / "public" / s["src"].lstrip("/")).is_file(), s["src"]
     assert len(m["shortcuts"]) >= 4 and all(s["url"].startswith("/") for s in m["shortcuts"])
+
+
+# ------------------------------------------------------------------ 1.4.12
+def test_the_push_handler_is_one_sequence_that_never_closes_the_notification_it_just_showed():
+    """Chrome posts its own grey "SavahBot / Tap to copy the URL for this app" notification when nothing is on screen as a push event ends.
+    1.4.11 put a database write before the notification and left a second job closing placeholders at the same time (same tag), so the new one
+    was sometimes closed. Now: no separate cleanup job, the notification first, the badge and the cleanup afterwards and never able to stop it."""
+    handler = SW[SW.index('addEventListener("push"'):SW.index('addEventListener("notificationclick"')]
+    assert handler.count("event.waitUntil(") == 1                                               # no second job running alongside
+    assert handler.index("showNotification") < handler.index("setBadge(")                       # the notification first
+    assert handler.index("setBadge(") < handler.index("getNotifications(")                      # then the badge, then the leftover cleanup
+    assert "if (!placeholder)" in handler                                                       # a placeholder is never closed by its own push
+    assert "try { await setBadge(p.pending); } catch" in handler
+    assert 'try { await kvPut("pending"' in SW

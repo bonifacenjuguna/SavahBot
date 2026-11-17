@@ -9,19 +9,26 @@ const SRC = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
 const plain = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 const TOKEN = "act.42.1700000600.AbCdEfGhIjKlMnOpQrStUvWx";
 
-function boot(opts: { fetchImpl?: (url: string, init?: { body?: string }) => Promise<unknown>; visible?: boolean } = {}) {
+function boot(opts: { fetchImpl?: (url: string, init?: { body?: string }) => Promise<unknown>; visible?: boolean; badgeFails?: boolean; slowList?: boolean } = {}) {
   const handlers: Record<string, (e: unknown) => void> = {};
   const shown: { title: string; opts: Record<string, unknown> }[] = [];
   const badge: (number | "clear")[] = [];
   const fetched: { url: string; body: unknown }[] = [];
   const opened: string[] = [];
   const skips = { count: 0 };
+  const screen: { tag: string; title: string }[] = [];
+  const listNow = (f?: { tag?: string }) => screen.filter((s) => !f?.tag || s.tag === f.tag).map((s) => ({ close() { const i = screen.findIndex((x) => x.tag === s.tag); if (i >= 0) screen.splice(i, 1); } }));
   const self = {
     location: { origin: "https://app.test" },
     addEventListener: (t: string, f: (e: unknown) => void) => { handlers[t] = f; },
-    registration: { active: true, showNotification: async (title: string, o: Record<string, unknown>) => { shown.push({ title, opts: o }); }, getNotifications: async () => [] },
+    registration: {
+      active: true,
+      // a small model of the notification shade: a notification with the same tag replaces the old one, and close() removes it
+      showNotification: async (title: string, o: Record<string, unknown>) => { shown.push({ title, opts: o }); const tag = (o.tag as string) || `#${shown.length}`; const i = screen.findIndex((s) => s.tag === tag); if (i >= 0) screen.splice(i, 1); screen.push({ tag, title }); },
+      getNotifications: async (f?: { tag?: string }) => { if (opts.slowList) for (let i = 0; i < 40; i++) await null; return listNow(f); },
+    },
     clients: { matchAll: async () => (opts.visible ? [{ visibilityState: "visible", focused: true, postMessage() {} }] : []), openWindow: async (u: string) => { opened.push(u); } },
-    navigator: { setAppBadge: async (n: number) => { badge.push(n); }, clearAppBadge: async () => { badge.push("clear"); } },
+    navigator: { setAppBadge: async (n: number) => { if (opts.badgeFails) throw new Error("no badge"); badge.push(n); }, clearAppBadge: async () => { badge.push("clear"); } },
     skipWaiting: () => { skips.count++; },
   };
   const ctx = vm.createContext({
@@ -35,7 +42,7 @@ function boot(opts: { fetchImpl?: (url: string, init?: { body?: string }) => Pro
     handlers[type]({ ...event, waitUntil: (x: Promise<unknown>) => { p = Promise.all([p, x]); } });
     await p;
   };
-  return { run, shown, badge, fetched, opened, handlers, skips };
+  return { run, shown, badge, fetched, opened, handlers, skips, screen };
 }
 const push = (data: Record<string, string>) => ({ data: { json: () => ({ data }), text: () => "" } });
 
@@ -116,4 +123,53 @@ test("an update waits: the worker only takes over when the page asks", async () 
   assert.equal(w.skips.count, 0);
   (w.handlers.message as (e: unknown) => void)({ data: { type: "skip-waiting" } });
   assert.equal(w.skips.count, 1);
+});
+
+// ---- 1.4.12: Chrome's grey "SavahBot / Tap to copy the URL for this app" notification must never appear.
+// Chrome posts it when no notification is on screen at the moment a push event ends.
+test("a push while you are looking at the dashboard leaves a silent placeholder on screen when the event ends", async () => {
+  const w = boot({ visible: true });
+  await w.run("push", push({ title: "Request waiting", body: "b", pending: "2" }));
+  assert.equal(w.screen.length, 1);
+  assert.equal(w.screen[0].tag, "savahbot-quiet");
+});
+
+test("a placeholder left by an earlier push is replaced, not closed, by the next placeholder", async () => {
+  const w = boot({ visible: true });
+  await w.run("push", push({ title: "a", body: "b" }));
+  await w.run("push", push({ title: "c", body: "d" }));
+  await w.run("push", push({ title: "e", body: "f", pending: "1" }));
+  assert.equal(w.screen.length, 1);
+});
+
+test("a real notification clears the leftover placeholder, but only after it is on screen", async () => {
+  const w = boot({ visible: true });
+  await w.run("push", push({ title: "a", body: "b" }));
+  const bg = boot({ visible: false });
+  bg.screen.push({ tag: "savahbot-quiet", title: "old" });
+  await bg.run("push", push({ title: "Request waiting", body: "b", tag: "req-1" }));
+  assert.deepEqual(bg.screen.map((s) => s.tag), ["req-1"]);
+});
+
+test("a failing badge or storage can never stop the notification", async () => {
+  const w = boot({ visible: false, badgeFails: true });
+  await w.run("push", push({ title: "Request waiting", body: "b", pending: "5", tag: "req-2" }));
+  assert.deepEqual(w.screen.map((s) => s.tag), ["req-2"]);
+  const q = boot({ visible: true, badgeFails: true });
+  await q.run("push", push({ title: "t", body: "b", pending: "5" }));
+  assert.equal(q.screen.length, 1);
+});
+
+test("a push with no readable content still ends with something on screen", async () => {
+  const w = boot({ visible: true });
+  await w.run("push", { data: null });
+  assert.ok(w.screen.length >= 1);
+});
+
+test("a slow look at the shade can never close the placeholder this push just showed", async () => {
+  // in a real browser getNotifications() takes a while; the old worker asked at the start of the push and closed by tag when the answer came
+  const w = boot({ visible: true, slowList: true });
+  w.screen.push({ tag: "savahbot-quiet", title: "left over" });
+  await w.run("push", push({ title: "Request waiting", body: "b", pending: "2" }));
+  assert.equal(w.screen.length, 1);
 });
