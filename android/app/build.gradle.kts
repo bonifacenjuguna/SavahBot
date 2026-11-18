@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -27,7 +29,7 @@ android {
             // Signing: see android/README.md. Without a keystore.properties file the release build is left unsigned.
             val props = rootProject.file("keystore.properties")
             if (props.exists()) {
-                val p = java.util.Properties().apply { props.inputStream().use { load(it) } }
+                val p = Properties().apply { props.inputStream().use { load(it) } }
                 signingConfig = signingConfigs.create("release") {
                     storeFile = rootProject.file(p.getProperty("storeFile"))
                     storePassword = p.getProperty("storePassword")
