@@ -46,6 +46,7 @@ const bans = lazyPage({ id: "bans", title: "Enforcement", icon: "ban", blurb: "L
 const security = lazyPage({ id: "security", title: "Security", icon: "shield", blurb: "Sign-in methods, devices and lockdown" }, () => import("./pages/security.js").then((m) => m.security));
 const notifications = lazyPage({ id: "notifications", title: "Notifications", icon: "bell", blurb: "Push, bell, Telegram, quiet hours and history" }, () => import("./pages/notifications.js").then((m) => m.notifications));
 const weather = lazyPage({ id: "weather", title: "Weather", icon: "cloudSun", blurb: "Current weather, hourly and daily forecast" }, () => import("./pages/weather.js").then((m) => m.weather));
+const savahlive = lazyPage({ id: "savahlive", title: "SavahLive", icon: "smartphone", blurb: "Pair the Android overlay and choose what it shows" }, () => import("./pages/savahlive.js").then((m) => m.savahlive));
 const weatherSettings = lazyPage({ id: "weather-settings", title: "Weather settings", icon: "sliders", blurb: "Places, units, refresh and alerts" }, () => import("./pages/weather-settings.js").then((m) => m.weatherSettings));
 const activity = lazyPage({ id: "activity", title: "Activity log", icon: "checklist", blurb: "What changed, by area and importance" }, () => import("./pages/activity.js").then((m) => m.activity));
 const streamSettings = lazyPage({ id: "stream-settings", title: "Stream alerts", icon: "radio", blurb: "Live stats, subscribers, members and Super Chats" }, () => import("./pages/stream-settings.js").then((m) => m.streamSettings));
@@ -59,7 +60,7 @@ const demo = lazyPage({ id: "demo", title: "Demo", icon: "flask", blurb: "Run si
 const settings = lazyPage({ id: "settings", title: "Settings", icon: "sliders", blurb: "Every option, searchable" }, () => import("./pages/settings.js").then((m) => m.settings));
 const backup = lazyPage({ id: "backup", title: "Backup & Recovery", icon: "database", blurb: "Encrypted export and restore" }, () => import("./pages/backup.js").then((m) => m.backup));
 
-const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, variables, activity, streamSettings, readerSettings, backup, insights, demo, setup, settings, more, share, openLink];
+const PAGES: Page[] = [desk, moderation, commands, notebook, community, bans, security, notifications, weather, weatherSettings, savahlive, variables, activity, streamSettings, readerSettings, backup, insights, demo, setup, settings, more, share, openLink];
 /** The deliberate 404: an address that is not a page. It is drawn inside the signed-in shell, so nothing is revealed to a signed-out visitor. */
 const NOT_FOUND: Page = {
   id: "not-found", title: "Page not found", icon: "alert",
@@ -72,7 +73,7 @@ const NOT_FOUND: Page = {
 };
 const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Studio", ids: ["desk", "moderation", "commands", "insights"] },
-  { title: "Manage", ids: ["notebook", "community", "bans", "weather", "demo"] },
+  { title: "Manage", ids: ["notebook", "community", "bans", "weather", "savahlive", "demo"] },
   { title: "System", ids: ["notifications", "security", "settings", "backup"] },
 ];
 /** Pages that live under another sidebar item light that item up instead (they are tabs of Settings, or part of Weather). */

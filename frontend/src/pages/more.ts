@@ -16,6 +16,7 @@ const BLURB: Record<string, string> = {
   security: "Sign-in methods, devices and lockdown",
   notifications: "Push, bell, quiet hours and history",
   weather: "Current weather, forecast and weather alerts",
+  savahlive: "Pair the Android overlay and choose what it shows",
   backup: "Encrypted export, restore and reset",
   insights: "Charts of chat and moderation",
   demo: "Run simulated chat scenarios",

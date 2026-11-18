@@ -351,13 +351,27 @@ _f(G, "ai_api_key", "", "Reserved: AI provider API key.")
 _f(G, "ai_model", "", "Reserved: AI model name.")
 
 # ---------------------------------------------------------------------------------------------
+G = "SavahLive"
+_f(G, "savahlive_enabled", True, "Let paired Android phones receive the SavahLive overlay feed. Turn off to pause every phone at once.")
+_f(G, "savahlive_max_devices", 5, "How many phones may be paired at the same time (1 to 20).")
+_f(G, "savahlive_max_feeds", 3, "How many paired phones may be connected to the feed at the same time (1 to 20). Separate from the dashboard limit.")
+_f(G, "savahlive_chat_lines", 40, "How many recent chat lines a phone keeps (10 to 100).")
+_f(G, "savahlive_peek_seconds", 5, "How long the docked overlay slides out when a new chat line arrives, in seconds (2 to 15).")
+_f(G, "savahlive_font_size", 14, "Chat text size in the overlay (11 to 22).")
+_f(G, "savahlive_hide_bots", True, "Leave bot messages (including SavahBot's own replies) out of the overlay chat.")
+_f(G, "savahlive_hide_flagged", True, "Leave messages that moderation flagged out of the overlay chat.")
+_f(G, "savahlive_only_special", False, "Show only members, regulars, moderators and you in the overlay chat.")
+_f(G, "savahlive_rotate_days", 30, "A paired phone quietly gets a new key this often, in days. 0 turns it off (1 to 365).")
+_f(G, "savahlive_idle_unpair_days", 0, "Unpair a phone that has not connected for this many days. 0 keeps phones paired until you remove them.")
+
+# ---------------------------------------------------------------------------------------------
 BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 
 # Settings the dashboard / Telegram may change at runtime. Secrets and infrastructure stay env-only.
 EDITABLE_PREFIXES = (
     "mod_", "command_", "urlfetch_", "demo_", "yt_", "timers_", "reminders_", "scheduler_",
     "telegram_notify_", "intel_", "youtube_expected", "youtube_detect", "youtube_max", "youtube_message",
-    "notify_", "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_", "activity_",
+    "notify_", "youtube_backfill", "youtube_auto", "youtube_target", "youtube_video", "youtube_moderator", "youtube_permission", "chat_", "sse_", "activity_", "savahlive_",
 )
 EDITABLE_KEYS = {"bot_mode", "telegram_mode", "owner_timezone"}
 ENUMS: dict[str, list[str]] = {

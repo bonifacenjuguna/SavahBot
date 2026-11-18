@@ -10,6 +10,7 @@ from typing import Any
 class EventBus:
     def __init__(self) -> None:
         self._subs: set[asyncio.Queue] = set()
+        self._quiet: set[asyncio.Queue] = set()      # 1.5.0: subscribers that are not dashboards (SavahLive phones): delivered to, but not counted against the dashboard limit
         self._taps: list[Any] = []
         self._shared: Any = None
 
@@ -26,17 +27,20 @@ class EventBus:
         if msg.get("origin") != self._shared.instance_id and isinstance(msg.get("event"), dict):
             self._deliver(msg["event"])
 
-    def subscribe(self, maxsize: int = 500) -> asyncio.Queue:
+    def subscribe(self, maxsize: int = 500, counted: bool = True) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
         self._subs.add(q)
+        if not counted:
+            self._quiet.add(q)
         return q
 
     def unsubscribe(self, q: asyncio.Queue) -> None:
         self._subs.discard(q)
+        self._quiet.discard(q)
 
     @property
     def subscriber_count(self) -> int:
-        return len(self._subs)
+        return len(self._subs) - len(self._quiet)
 
     def publish(self, type_: str, data: Any = None) -> None:
         """Non-blocking. Slow subscribers simply miss events instead of stalling the bot."""

@@ -20,6 +20,7 @@ There is no AI in this version. Moderation is a set of explainable algorithms, e
 | Protect sign-in | docs/SECURITY.md |
 | Get push notifications | docs/NOTIFICATIONS.md, docs/PWA_AND_PUSH_PLATFORMS.md |
 | Add weather | docs/WEATHER.md |
+| Float your stream over other apps (Android) | docs/SAVAHLIVE.md, android/README.md |
 | Back up and restore | docs/BACKUP_AND_RECOVERY.md |
 | Fix a problem | docs/TROUBLESHOOTING.md |
 | Everything else | docs/README.md |

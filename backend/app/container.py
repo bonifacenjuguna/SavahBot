@@ -34,6 +34,7 @@ from .variables import CustomVars
 from .activity import ActivityLog
 from .voices import VoiceStore
 from .services.live_extras import LiveExtras
+from .savahlive import SavahLive
 
 logger = logging.getLogger("savahbot")
 
@@ -92,6 +93,8 @@ class Container:
         self.renderer.live = self.extras
         self.access.activity = self.activity
         self.scheduler.hooks.append(self.extras.tick)
+        self.savahlive = SavahLive(self)                       # 1.5.0: the Android overlay companion (pairing, devices, feed)
+        self.scheduler.hooks.append(self.savahlive.tick)
         self.scheduler.hooks.append(self.activity.purge)
         self.scheduler.hooks.append(self.knowledge.tick)        # live data refresh, learning review; runs on the leader only
         self.keeper = StateKeeper(self.shared, self.cfg, self.engine, self.commands, self.hub)

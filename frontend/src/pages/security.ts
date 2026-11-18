@@ -133,13 +133,19 @@ export const security: Page = {
       const nw = h("input", { type: "password", autocomplete: "new-password", placeholder: "New password (10+ characters)", "aria-label": "New password" }) as HTMLInputElement;
       const err = h("p", { class: "lc-err", role: "alert" });
       const go = h("button", { class: "btn primary", type: "submit" }, "Change password") as HTMLButtonElement;
+      const phones = h("input", { type: "checkbox", class: "switch", "aria-label": "Also unpair all SavahLive phones" }) as HTMLInputElement;      // 1.5.0: off unless you tick it
       const s = sheet("Change password", h("form", { class: "k-stack", onsubmit: (ev: Event) => {
         ev.preventDefault();
         void busy(go, async () => {
-          try { const r = await post<{ signed_out_elsewhere: number }>("/api/security/password", { current: cur.value, new: nw.value }); s.close(); toast(r.signed_out_elsewhere ? `Password changed. ${r.signed_out_elsewhere} other device(s) signed out.` : "Password changed", "ok"); await reload(); }
+          try {
+            const r = await post<{ signed_out_elsewhere: number; phones_unpaired: number }>("/api/security/password", { current: cur.value, new: nw.value, unpair_phones: phones.checked });
+            s.close();
+            toast(`Password changed.${r.signed_out_elsewhere ? ` ${r.signed_out_elsewhere} other device(s) signed out.` : ""}${r.phones_unpaired ? ` ${r.phones_unpaired} SavahLive phone(s) unpaired.` : ""}`, "ok"); await reload(); }
           catch (x) { err.textContent = (x as Error).message; }
         });
-      } }, lede("Other devices are signed out when you change it."), cur, nw, err, h("div", { class: "row" }, go)));
+      } }, lede("Other devices are signed out when you change it."), cur, nw,
+      h("label", { class: "row between", style: "gap:12px;align-items:center" }, h("span", null, h("strong", null, "Also unpair all SavahLive phones"), h("div", { class: "muted small" }, "Off by default: your paired phones keep working unless you tick this.")), phones),
+      err, h("div", { class: "row" }, go)));
     }
 
     async function totpSheet(): Promise<void> {

@@ -93,7 +93,7 @@ export function dateRange(opts: { anyLabel?: string; presets?: Preset[]; label?:
 // ------------------------------------------------------------------ areas (Manage and System)
 export interface AreaItem { id: string; title: string; icon: string }
 export const AREAS: Record<string, { title: string; items: AreaItem[] }> = {
-  manage: { title: "Manage", items: [{ id: "notebook", title: "Notebook", icon: "notebook" }, { id: "community", title: "Community", icon: "users" }, { id: "bans", title: "Enforcement", icon: "ban" }, { id: "weather", title: "Weather", icon: "cloudSun" }, { id: "demo", title: "Demo", icon: "flask" }] },
+  manage: { title: "Manage", items: [{ id: "notebook", title: "Notebook", icon: "notebook" }, { id: "community", title: "Community", icon: "users" }, { id: "bans", title: "Enforcement", icon: "ban" }, { id: "weather", title: "Weather", icon: "cloudSun" }, { id: "savahlive", title: "SavahLive", icon: "smartphone" }, { id: "demo", title: "Demo", icon: "flask" }] },
   system: { title: "System", items: [{ id: "notifications", title: "Notifications", icon: "bell" }, { id: "security", title: "Security", icon: "shield" }, { id: "settings", title: "Settings", icon: "sliders" }, { id: "backup", title: "Backup & Recovery", icon: "database" }] },
 };
 export const areaOf = (pageId: string): string | null => Object.keys(AREAS).find((k) => AREAS[k].items.some((i) => i.id === pageId)) ?? null;

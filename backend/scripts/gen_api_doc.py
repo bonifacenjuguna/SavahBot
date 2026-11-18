@@ -16,7 +16,7 @@ AREAS = {
     "auth": "Sign-in (password, passkey, authenticator, recovery) and sessions", "security": "Security & Access Centre: methods, sessions, activity, audit, lockdown",
     "notify": "Notification Centre: preferences, inbox, devices, test, stats", "weather": "Weather: places, forecast, preferences, alert rules", "backup": "Encrypted export, import and restore",
     "settings": "Environment settings and the Settings overview", "system": "Service health and the data inventory", "knowledge": "Knowledge packs, detectors, learning, live lists",
-    "bans": "Bans and timeouts", "history": "Long-term history and charts", "youtube": "YouTube connection and quota", "telegram": "Telegram bot control",
+    "bans": "Bans and timeouts", "savahlive": "SavahLive, the Android overlay companion: pairing codes, paired phones and overlay settings (the phone-side routes are under /api/live)", "history": "Long-term history and charts", "youtube": "YouTube connection and quota", "telegram": "Telegram bot control",
 }
 
 

@@ -369,3 +369,19 @@ Removed in 1.2.0: `NTFY_URL`, `NTFY_TOPIC` (push now uses Firebase), `WEATHER_AP
 | `AI_PROVIDER` | blank (AI is not used in this version) | Reserved: AI provider name. |
 | `AI_API_KEY` **SECRET** | `edit-me` | Reserved: AI provider API key. |
 | `AI_MODEL` | blank (AI is not used in this version) | Reserved: AI model name. |
+
+## SavahLive
+
+| Variable | Default | What it does |
+|---|---|---|
+| `SAVAHLIVE_ENABLED` | `True` | Let paired Android phones receive the SavahLive overlay feed. Turn off to pause every phone at once. |
+| `SAVAHLIVE_MAX_DEVICES` | `5` | How many phones may be paired at the same time (1 to 20). |
+| `SAVAHLIVE_MAX_FEEDS` | `3` | How many paired phones may be connected to the feed at the same time (1 to 20). Separate from the dashboard limit. |
+| `SAVAHLIVE_CHAT_LINES` | `40` | How many recent chat lines a phone keeps (10 to 100). |
+| `SAVAHLIVE_PEEK_SECONDS` | `5` | How long the docked overlay slides out when a new chat line arrives, in seconds (2 to 15). |
+| `SAVAHLIVE_FONT_SIZE` | `14` | Chat text size in the overlay (11 to 22). |
+| `SAVAHLIVE_HIDE_BOTS` | `True` | Leave bot messages (including SavahBot's own replies) out of the overlay chat. |
+| `SAVAHLIVE_HIDE_FLAGGED` | `True` | Leave messages that moderation flagged out of the overlay chat. |
+| `SAVAHLIVE_ONLY_SPECIAL` | `False` | Show only members, regulars, moderators and you in the overlay chat. |
+| `SAVAHLIVE_ROTATE_DAYS` | `30` | A paired phone quietly gets a new key this often, in days. 0 turns it off (1 to 365). |
+| `SAVAHLIVE_IDLE_UNPAIR_DAYS` | `0` | Unpair a phone that has not connected for this many days. 0 keeps phones paired until you remove them. |

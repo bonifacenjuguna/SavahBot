@@ -44,6 +44,7 @@ class StepUp(_In):
 class ChangePassword(_In):
     current: str = Field(min_length=1, max_length=200)
     new: str = Field(min_length=1, max_length=200)
+    unpair_phones: bool = False        # 1.5.0: also unpair every SavahLive phone (off unless ticked)
 
 
 class Code(_In):
@@ -123,7 +124,9 @@ async def step_up(request: Request, c: Any) -> dict:
 @R.add("/security/password", ["POST"], limited_ok=True)
 async def change_password(request: Request, c: Any) -> dict:
     b = await parse(request, ChangePassword)
-    return {"ok": True, "signed_out_elsewhere": await c.access.change_password(request.state.session, b.current, b.new, client_ip(request))}
+    closed = await c.access.change_password(request.state.session, b.current, b.new, client_ip(request))
+    unpaired = await c.savahlive.revoke_all("password changed") if b.unpair_phones else 0
+    return {"ok": True, "signed_out_elsewhere": closed, "phones_unpaired": unpaired}
 
 
 @R.add("/security/totp/begin", ["POST"])

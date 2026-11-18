@@ -92,7 +92,7 @@ export function queryString(q: string | URLSearchParams): string {
 }
 
 /** Pages a `web+savahbot:` link may open (1.4.11). Anything else is refused, so a link can only ever open a page of this app. */
-export const PROTOCOL_PAGES: readonly string[] = ["desk", "moderation", "commands", "insights", "notebook", "community", "bans", "weather", "demo", "notifications", "security", "settings", "backup", "more"];
+export const PROTOCOL_PAGES: readonly string[] = ["desk", "moderation", "commands", "insights", "notebook", "community", "bans", "weather", "savahlive", "demo", "notifications", "security", "settings", "backup", "more"];
 
 /** Turns what the browser hands over for a registered `web+savahbot:` link into a clean in-app path, or null.
  *  `web+savahbot:moderation`, `web+savahbot:notebook?compose=1` and `web+savahbot://settings?tab=knowledge` are all accepted; the query is limited to plain words. */

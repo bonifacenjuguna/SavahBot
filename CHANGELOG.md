@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0
+
+### Added: SavahLive, the Android floating overlay (see docs/SAVAHLIVE.md)
+- **SavahLive app** (`android/`): a small native Android app (plain Kotlin, no third-party libraries) that floats your livestream's viewers, likes and chat above any other app. A pill you can drag anywhere and dock on the left, right or top edge, new chat that slides out and tucks away, a bigger chat window on tap, and Solid / Glass / Ghost (no background) looks. It only displays what SavahBot already produced: no YouTube sign-in, no moderation and no dashboard on the phone.
+- **Manage > SavahLive** (new page): pair a phone with a QR code and a one-time code (valid 5 minutes), see which phones are paired and connected, rename them, set or change how long each stays paired (until removed, 30, 7 or 1 day), remove one or all, and choose what the overlay shows (hide bots, hide flagged messages, members and moderators only, lines kept, peek time, text size). Changes reach connected phones within seconds. It also holds the SavahLive on/off switch, the phone limits (separate from the dashboard's connection limit), key renewal and optional unpair-when-idle.
+- **Pair once.** A phone stays paired until you remove it or an expiry you chose passes. Its key is renewed quietly in the background, and a bad connection never unpairs it.
+- **Backend** (new tables and routes only; nothing existing changed): `POST /api/live/pair`, `GET /api/live/feed` (a Server-Sent Events stream built from the data SavahBot already has), `POST /api/live/rotate`, `GET /api/live/pair/open` and the `/api/savahlive` management routes. Device keys are separate from dashboard sign-ins and only a hash is stored. Pairing is rate-limited, you get a Telegram alert when a phone is paired, and lockdown pauses every phone.
+- **Change password** has an optional tickbox, **Also unpair all SavahLive phones** (off by default).
+- New settings `SAVAHLIVE_*` (listed in docs/ENVIRONMENT.md). The chat-deleted event now also carries the message id (an extra field; nothing else reads it differently).
+
+### Notes
+- The Android code could not be compiled or run where this version was written (no Android SDK there). Build it with `android/README.md`, and expect to fix small things on the first run.
+- In-app QR scanning is not included (it would need a library); the phone's camera opens the pairing page instead.
+
 ## 1.4.12
 
 ### Fixed

@@ -181,6 +181,10 @@ Knowledge packs, detectors, learning, live lists.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/live/events` |  |
+| GET | `/api/live/feed` | public |
+| POST | `/api/live/pair` | public |
+| GET | `/api/live/pair/open` | public |
+| POST | `/api/live/rotate` | public |
 | GET | `/api/live/stats` |  |
 | GET | `/api/live/streams` |  |
 | GET | `/api/live/streams/{video_id}` |  |
@@ -271,6 +275,19 @@ Notification Centre: preferences, inbox, devices, test, stats.
 | GET | `/api/reminders` |  |
 | POST | `/api/reminders` |  |
 | DELETE | `/api/reminders/{id:int}` |  |
+
+## savahlive
+
+SavahLive, the Android overlay companion: pairing codes, paired phones and overlay settings (the phone-side routes are under /api/live).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/savahlive` |  |
+| POST | `/api/savahlive/devices/revoke-all` |  |
+| DELETE | `/api/savahlive/devices/{did}` |  |
+| PATCH | `/api/savahlive/devices/{did}` |  |
+| POST | `/api/savahlive/pair-code` |  |
+| POST | `/api/savahlive/settings` |  |
 
 ## security
 
