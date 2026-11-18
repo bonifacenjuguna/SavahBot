@@ -19,32 +19,79 @@ This guide is written with **Windows 10/11 + PowerShell + VS Code** as the prima
 
 Install these tools once:
 
-1. **JDK 17 or newer.** JDK 17 is the project target; JDK 21 is also supported by this setup.
-2. **Android SDK command-line tools.** Android Studio is not required.
+1. **JDK 17 or JDK 21.** JDK 17 is the minimum for this Android Gradle Plugin setup; JDK 21 is also supported and is the version used for the tested Windows build.
+2. **Android SDK command-line tools.** Android Studio is not required. The installation steps below show how to install the tools manually.
 3. **Git** to clone or update the source.
 4. **Visual Studio Code** (or another editor) to edit Kotlin and Gradle files.
 5. **Gradle 8.7** only for the initial wrapper-generation step if the Gradle wrapper scripts/JAR are missing.
 
 You do not need an Android emulator. A physical Android phone with USB debugging is sufficient and is often lighter on lower-spec computers.
 
-### 1.1 Install Android SDK packages
+### 1.1 Install Android SDK command-line tools and packages
 
-After installing the Android command-line tools, open PowerShell and set the SDK location. Replace the path if your SDK is elsewhere:
+Android Studio is optional. To install the SDK without it:
+
+1. Open the official Android Studio download page:
+   `https://developer.android.com/studio#command-line-tools-only`
+2. Under **Command line tools only**, download the **Windows** ZIP.
+3. Rename the downloaded ZIP to `commandlinetools-win-latest.zip` and leave it in your Downloads folder.
+4. Open PowerShell and run the following. If you saved the ZIP somewhere else, change `$Zip`.
+
+```powershell
+$Sdk = "$env:LOCALAPPDATA\Android\Sdk"
+$Zip = "$env:USERPROFILE\Downloads\commandlinetools-win-latest.zip"
+$TempTools = Join-Path $env:TEMP "android-command-line-tools"
+
+if (-not (Test-Path $Zip)) {
+    throw "Command-line tools ZIP not found: $Zip"
+}
+
+New-Item -ItemType Directory -Force -Path $Sdk | Out-Null
+if (Test-Path $TempTools) {
+    Remove-Item $TempTools -Recurse -Force
+}
+Expand-Archive -LiteralPath $Zip -DestinationPath $TempTools
+New-Item -ItemType Directory -Force -Path "$Sdk\cmdline-tools\latest" | Out-Null
+Copy-Item "$TempTools\cmdline-tools\*" "$Sdk\cmdline-tools\latest" -Recurse -Force
+
+Write-Host "Android command-line tools installed under $Sdk\cmdline-tools\latest"
+```
+
+The final folder layout must contain:
+
+```text
+%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat
+```
+
+### 1.2 Set Android SDK environment variables and PATH
+
+Run this PowerShell block once. It sets the SDK variables permanently for your Windows user and adds the required folders to User PATH without adding duplicate entries:
 
 ```powershell
 $Sdk = "$env:LOCALAPPDATA\Android\Sdk"
 [Environment]::SetEnvironmentVariable("ANDROID_HOME", $Sdk, "User")
 [Environment]::SetEnvironmentVariable("ANDROID_SDK_ROOT", $Sdk, "User")
+
+$RequiredPaths = @(
+    "$Sdk\platform-tools",
+    "$Sdk\cmdline-tools\latest\bin"
+)
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$PathEntries = @($UserPath -split ";" | Where-Object { $_ })
+
+foreach ($Entry in $RequiredPaths) {
+    if ($PathEntries -notcontains $Entry) {
+        $PathEntries += $Entry
+    }
+}
+
+[Environment]::SetEnvironmentVariable("Path", ($PathEntries -join ";"), "User")
+$env:ANDROID_HOME = $Sdk
+$env:ANDROID_SDK_ROOT = $Sdk
+$env:Path = "$env:Path;$($RequiredPaths -join ';')"
 ```
 
-Add these folders to your **User PATH** (through Windows Environment Variables, or your preferred PowerShell method):
-
-```text
-%LOCALAPPDATA%\Android\Sdk\platform-tools
-%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin
-```
-
-Close and reopen PowerShell after changing environment variables. Confirm the SDK manager is available:
+Close and reopen PowerShell so the permanent User PATH is loaded. Confirm the SDK manager is available:
 
 ```powershell
 sdkmanager.bat --version
@@ -61,13 +108,14 @@ Read and accept the SDK licence prompts. Confirm the required platform exists:
 
 ```powershell
 Test-Path "$env:ANDROID_HOME\platforms\android-34"
+Test-Path "$env:ANDROID_HOME\build-tools\34.0.0"
 ```
 
-It should return `True`.
+Both commands should return `True`.
 
 > Keep the SDK packages aligned with this project's `compileSdk = 34` and `buildToolsVersion = 34.0.0`. Installing newer Android platforms does not automatically change this project's compile SDK.
 
-### 1.2 Configure Java
+### 1.3 Configure Java
 
 Set `JAVA_HOME` to the JDK installation directory (not its `bin` folder). Example:
 
@@ -85,15 +133,32 @@ javac --version
 
 The project compiles Java/Kotlin source to JVM target 17. A JDK 21 installation can compile for target 17.
 
-### 1.3 Install Gradle for the first-time wrapper setup only
+### 1.4 Install Gradle for the first-time wrapper setup only
 
-The project uses the Gradle Wrapper pinned to **Gradle 8.7**. If `gradlew.bat`, `gradlew`, or `gradle/wrapper/gradle-wrapper.jar` is missing (for example, in a source archive that omits the wrapper JAR), install Gradle 8.7 once.
+The project uses the Gradle Wrapper pinned to **Gradle 8.7**. You normally do not need to install Gradle separately: use the committed wrapper files and continue to section 3.
 
-After installing Gradle and adding its `bin` directory to PATH, verify:
+Only install system Gradle if the wrapper launcher or `gradle/wrapper/gradle-wrapper.jar` is missing and you need to regenerate it.
+
+For Windows:
+
+1. Open the official Gradle releases page: `https://gradle.org/releases/`.
+2. Download the **binary-only ZIP** for Gradle **8.7**.
+3. Extract it so the resulting folder is `C:\Gradle\gradle-8.7\` (the `bin` folder should be `C:\Gradle\gradle-8.7\bin\`).
+4. Add that `bin` folder to User PATH and verify:
 
 ```powershell
+$GradleBin = "C:\Gradle\gradle-8.7\bin"
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$PathEntries = @($UserPath -split ";" | Where-Object { $_ })
+if ($PathEntries -notcontains $GradleBin) {
+    $PathEntries += $GradleBin
+}
+[Environment]::SetEnvironmentVariable("Path", ($PathEntries -join ";"), "User")
+$env:Path = "$env:Path;$GradleBin"
 gradle --version
 ```
+
+The output should report Gradle 8.7. On macOS/Linux, install Gradle 8.7 using the official instructions at `https://gradle.org/install/`.
 
 You only need the system `gradle` command to generate the wrapper. Normal builds should use `gradlew.bat` on Windows or `./gradlew` on macOS/Linux. The wrapper downloads and uses the exact Gradle version configured in `gradle/wrapper/gradle-wrapper.properties`.
 
