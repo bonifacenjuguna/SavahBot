@@ -1,0 +1,183 @@
+/* 1.3.2 polish: layers, tab rails, spacing, figures, and cards that must never be wider than the screen. Loaded last on purpose. */
+
+/* ---- layers: one order for everything that can sit over the page ----------------------------------------------------
+   page 0 · top bar 30 · tab bar 40 · progress 60 · expanded chat 65-70 · sheets and menus 90+ · toasts 100
+   Sheets (person card, message actions, "Why was this flagged") used to be 60, under the expanded chat (70): they opened behind it. */
+.overlay { z-index: 90; }
+.popover { z-index: 95; }
+.palette, .palette-overlay { z-index: 96; }
+.toasts { z-index: 100; }
+
+/* ---- tab rails ------------------------------------------------------------------------------------------------------
+   The edge fade is a mask on the row itself: nothing is painted on top of the selected tab, so the dark smudge beside it is gone. */
+[data-rail] { scroll-snap-type: none; overscroll-behavior-x: contain; }
+[data-rail][data-edge="l"]  { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px); mask-image: linear-gradient(90deg, transparent 0, #000 28px); }
+[data-rail][data-edge="r"]  { -webkit-mask-image: linear-gradient(270deg, transparent 0, #000 28px); mask-image: linear-gradient(270deg, transparent 0, #000 28px); }
+[data-rail][data-edge="lr"] { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
+.an-items > a { scroll-snap-align: none; }
+.an-fade { display: none; }
+.an-wrap { overflow: hidden; }
+
+/* ---- breathing room under a row of tabs: the first card never touches it -------------------------------------------- */
+.tab-row { margin: 0 0 16px; min-width: 0; }
+.tab-row > .seg-control { max-width: 100%; }
+.area-nav { margin-bottom: 16px; }
+.area-nav + .page-head, .page-head + .area-nav { margin-top: 0; }
+.seg-control + .k-stack, .pane-tabs + * { margin-top: 0; }
+.k-top { margin-bottom: 16px; }
+.pane-tabs { margin-bottom: 16px; }
+
+/* ---- figures are small cards, not loose text ------------------------------------------------------------------------ */
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px; margin: 0 0 16px; }
+.fig { margin: 0; padding: 12px 14px; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-1); min-width: 0; position: relative; overflow: hidden; }
+.fig::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--line); }
+.fig.ok::before { background: var(--ok); }
+.fig.warn::before { background: var(--demo, #f59e0b); }
+.fig.bad::before { background: var(--bad); }
+.fig b { overflow-wrap: anywhere; }
+.kn-figs .fig { padding: 0; margin: 0; background: none; border: 0; box-shadow: none; border-radius: 0; overflow: visible; }
+.kn-figs .fig::before { display: none; }
+
+/* ---- nothing is wider than the screen -------------------------------------------------------------------------------
+   A grid column written as "1fr" will not shrink below its content, so one long row pushed whole cards off the right edge.
+   minmax(0, 1fr) lets it shrink; the cards then wrap or scroll inside themselves. */
+@media (max-width: 999px) {
+  .cols, .cols.even, .cols.three { grid-template-columns: minmax(0, 1fr); }
+  /* the icon rail keeps its own column between 720 and 999px (a phone turned sideways); without it the rail was stacked full-width above the page */
+  .app { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+}
+@media (max-width: 719px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .cards-grid, .when-grid, .mode-cards, .scn-grid, .pack-grid, .det-grid, .sh-dets { grid-template-columns: minmax(0, 1fr); }
+  .setting { grid-template-columns: minmax(0, 1fr); }
+}
+.cols > *, .stack > *, .k-stack > *, .page > * { min-width: 0; }
+.block, .sp-card, .k-card { max-width: 100%; }
+.mt-card .mt-body, .mt-add, .mt-opts, .mt-panel { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.mt-add > *, .mt-opts > *, .mt-panel > * { min-width: 0; }
+.mt-add input, .mt-add select, .mt-add textarea, .mt-panel input, .mt-panel textarea { min-width: 0; max-width: 100%; }
+.mt-add-row > input { flex: 1 1 0; min-width: 0; }
+.mt-add .seg-control, .mt-opts .seg-control { max-width: 100%; }
+.mt-card, .ph-row, .ph-main { min-width: 0; }
+.ph-text { overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
+.table-wrap { max-width: 100%; }
+.table-wrap > table { max-width: 100%; }
+.daterange, .dr-chips { min-width: 0; max-width: 100%; }
+.block > .body, .block > header { min-width: 0; }
+.block > header h2 { min-width: 0; overflow-wrap: anywhere; }
+
+/* ---- the Read chat control ----------------------------------------------------------------------------------------- */
+.reader-btn { flex: none; gap: 6px; }
+.reader-btn.on { border-color: var(--accent); color: var(--accent); }
+.reader-note { padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--raised); }
+.reader-note[hidden] { display: none; }
+@media (max-width: 719px) { .reader-btn .hide-narrow { display: none; } .reader-btn { padding-left: 10px; padding-right: 10px; } }
+.chat-card:not(.zoomed) .chat-tools { flex-wrap: nowrap; }
+
+/* ---- expanded chat header on a phone (1.3.2): everything fits, so Read chat is no longer pushed out of sight -------------
+   The rate moves out (it is on the Desk cards), T- and T+ become one joined pair, Read chat comes first and keeps its place. */
+@media (max-width: 719px) {
+  .chat-card.zoomed > header { gap: 8px; padding-left: 12px; padding-right: 12px; }
+  .chat-card.zoomed > header h2 { font-size: 1.05rem; }
+  .chat-card.zoomed .rate-pill { display: none; }
+  .chat-card.zoomed .chat-actions { gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .chat-card.zoomed .chat-tools { overflow: visible; flex: 0 0 auto; gap: 6px; padding-bottom: 0; }
+  .chat-card.zoomed .chat-tools > * { flex: none; }
+  .chat-card.zoomed .reader-btn { order: -1; width: 40px; height: 40px; padding: 0; justify-content: center; }
+  .chat-card.zoomed .chat-tools .icon-btn.zoom-only { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 40px; padding: 0; gap: 0; border-radius: 0; margin: 0; border-color: var(--line); background: var(--raised); }
+  .chat-card.zoomed .chat-tools .icon-btn.zoom-only:nth-of-type(1) { border-radius: 10px 0 0 10px; margin-right: -6px; }   /* T- */
+  .chat-card.zoomed .chat-tools .icon-btn.zoom-only:nth-of-type(2) { border-radius: 0 10px 10px 0; }                       /* T+ */
+  .chat-card.zoomed .chat-tools .icon-btn.zoom-only svg { width: 15px; height: 15px; }
+  .chat-card.zoomed .chat-tools .icon-btn.zoom-only .sz { margin-left: 0; font-size: 0.85rem; }
+  .chat-card.zoomed .expand-btn { flex: none; }
+}
+
+/* expand / close button: icon only, a square like its neighbours */
+.chat-card.zoomed .expand-btn { width: 40px; height: 40px; padding: 0; }
+.chat-card.zoomed .close-label { display: none; }
+
+/* ---- pop-up notices (1.3.3) -----------------------------------------------------------------------------------------
+   Position comes from Settings → Appearance (html[data-toast-pos]). Each toast can be swiped sideways, so it must not let the browser
+   take over horizontal drags (touch-action: pan-y), and the empty space around the stack must not block taps on the page. */
+.toasts { pointer-events: none; }
+.toast { pointer-events: auto; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; animation: toast-in .18s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+html[data-toast-pos="top"] .toast { animation-name: toast-in-top; }
+@keyframes toast-in-top { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+html[data-motion="reduce"] .toast { animation: none; }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+html[data-toast-pos="top"] .toasts { top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px) + 8px); bottom: auto; }
+@media (max-width: 719px) { html[data-toast-pos="top"] .toasts { top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px) + 8px); bottom: auto; } }
+
+/* ---- 1.3.7: the page heading is only for screen readers; the top bar says where you are ---- */
+.sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.page-head.bare { margin: 0; height: 0; min-height: 0; }
+.page-head { justify-content: flex-end; }
+@media (max-width: 719px) { .page-head .ph-actions { justify-content: flex-end; } }
+
+/* ---- 1.3.7: on a phone the pause button shares the row with search, history and dates instead of wrapping onto a row of its own ---- */
+@media (max-width: 719px) {
+  .chat-card .toolbar { gap: 8px; }
+  .chat-card .toolbar .input-icon { flex: 1 1 120px; min-width: 0; }
+  .chat-card .toolbar > .btn { flex: none; padding-left: 0; padding-right: 0; width: 44px; justify-content: center; }
+}
+
+/* ---- 1.3.7: status chips in a settings row (Developer: "connected", "ok", "available"). A small soft pill that keeps its own size, never a full-width outlined bar ---- */
+.n-row > .chip, .n-row-main .chip { align-self: center; padding: 2px 10px; font-size: 0.78rem; font-weight: 600; line-height: 1.5; border-color: transparent; }
+.n-row > .chip.ok, .n-row-main .chip.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.n-row > .chip.warn, .n-row-main .chip.warn { background: color-mix(in srgb, var(--warn) 17%, transparent); color: var(--warn); }
+.n-row > .chip.bad, .n-row-main .chip.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+@media (max-width: 719px) { .n-row:not(:has(> .switch)) > .chip { align-self: flex-start; width: auto; } }
+
+/* Settings tiles and "Recently opened": the tag sits on top of each card so the title and text keep the full width */
+a.set-hit, a.set-tile { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic tag" "ic main"; align-items: start; column-gap: 12px; row-gap: 4px; }
+a.set-hit > .set-ic, a.set-tile > .set-ic { grid-area: ic; align-self: center; }
+a.set-hit > svg { grid-area: ic; align-self: center; }
+a.set-hit > .set-main, a.set-tile > .set-main { grid-area: main; }
+a.set-hit > .chip, a.set-tile > .chip { grid-area: tag; justify-self: start; align-self: start; max-width: 100%; font-size: .72rem; line-height: 1.5; padding: 0 9px; letter-spacing: .01em; }
+a.set-hit > .chip:empty, a.set-tile > .chip:empty { display: none; }
+a.set-hit:not(:has(> .chip)), a.set-tile:not(:has(> .chip)) { grid-template-areas: "ic main"; }
+a.set-tile { padding: 14px; }
+
+/* Live stats: the trend line gets a box of its own, so it can never run over the text below it */
+.live-spark { height: 64px; overflow: hidden; border-radius: 10px; margin: 6px 0 10px; }
+.live-spark .spark { width: 100%; height: 100%; }
+
+/* Cards that sit one after another in a plain container (no gap of their own) never touch: Insights' Past streams, Bans' Ledger and Be gentler, and any page like them */
+.ins-streams:not(:empty) { margin-top: 20px; }
+:is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 16px; }
+:is(.stack, .k-stack, .cols, .masonry, .grid) > :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 0; }
+@media (min-width: 720px) { .page:has(> .block, > .sp-card) > :is(.block, .sp-card) + :is(.block, .sp-card) { margin-top: 0; } }
+
+/* Live stats: three even tiles, each with a proper icon badge lined up with its label */
+.ls-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ls-stat { display: grid; grid-template-rows: auto auto auto; gap: 2px; min-width: 0; padding: 10px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.ls-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ls-ic { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.ls-ic svg { display: block; width: 16px; height: 16px; }
+.ls-label { font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ls-value { font-size: 1.35rem; font-weight: 650; line-height: 1.25; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ls-sub { font-size: .74rem; color: var(--muted); min-height: 1em; }
+@media (max-width: 380px) { .ls-label { font-size: .72rem; } .ls-value { font-size: 1.2rem; } }
+/* the label gets the whole tile width under its icon, so "Watching" and "Subscribers" are never cut short */
+.ls-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+.ls-label { font-size: .8rem; white-space: normal; max-width: 100%; }
+
+/* "Insert $(variable)" row under a text box: one tidy line of small chips that scrolls sideways instead of wrapping into a mess */
+.var-chips { display: flex; align-items: center; gap: 8px; flex: none; padding: 8px 14px 12px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.var-chips::-webkit-scrollbar { display: none; }
+.var-chips:empty { display: none; }
+.chat-main > .var-chips { border-top: 1px solid var(--line, rgba(255,255,255,.08)); }
+.vc-label { flex: none; font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.vc-chip { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 0; border-radius: 999px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; transition: background .15s ease, transform .1s ease; }
+.vc-chip:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.vc-chip:active { transform: scale(.96); background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.vc-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- Insights number cards: every card is the same size (1.4.12) -------------------------------------------------------
+   Each card now carries a value, a comparison or note, and a trend line, so they fill the same space; the rows are also held to the
+   tallest card, and the trend line sits at the bottom of every card. */
+.ins .kpis { grid-auto-rows: 1fr; }
+.ins .kpis .kpi { display: flex; flex-direction: column; align-content: normal; }
+.ins .kpis .kpi .spark { margin-top: auto; }

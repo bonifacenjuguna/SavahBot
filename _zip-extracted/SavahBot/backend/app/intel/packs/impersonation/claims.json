@@ -1,0 +1,67 @@
+{
+ "id": "impersonation.claims",
+ "category": "impersonation",
+ "kind": "phrases",
+ "title": "Messages that claim to be staff",
+ "description": "'I am the admin', 'this is YouTube support', 'the streamer asked me to tell you'.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "impersonation",
+ "weight": 35,
+ "fuzzy": true,
+ "default_mode": "live",
+ "entries": [
+  "i am the streamer",
+  "i'm the streamer",
+  "i am the owner",
+  "i'm the owner",
+  "i am the admin",
+  "i am an admin",
+  "i'm the admin",
+  "i am a moderator",
+  "i'm a moderator",
+  "i am the moderator",
+  "i am the head mod",
+  "i work for youtube",
+  "i am from youtube",
+  "i'm from youtube",
+  "i am youtube",
+  "this is youtube support",
+  "this is the official",
+  "this is an official",
+  [
+   "official announcement",
+   30
+  ],
+  [
+   "official notice",
+   35
+  ],
+  "we are youtube",
+  "message from youtube",
+  "streamer is giving",
+  "the streamer asked me",
+  "the streamer told me to",
+  [
+   "mod here",
+   25
+  ],
+  [
+   "admin here",
+   30
+  ],
+  [
+   "official here",
+   30
+  ],
+  "i am from the support",
+  "i am support",
+  "i am from binance",
+  "i am from paypal",
+  "i am from safaricom",
+  "i work at safaricom",
+  "i work for safaricom"
+ ]
+}

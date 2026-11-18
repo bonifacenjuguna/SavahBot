@@ -1,0 +1,648 @@
+# Changelog
+
+## 1.5.0
+
+### Added: SavahLive, the Android floating overlay (see docs/SAVAHLIVE.md)
+- **SavahLive app** (`android/`): a small native Android app (plain Kotlin, no third-party libraries) that floats your livestream's viewers, likes and chat above any other app. A pill you can drag anywhere and dock on the left, right or top edge, new chat that slides out and tucks away, a bigger chat window on tap, and Solid / Glass / Ghost (no background) looks. It only displays what SavahBot already produced: no YouTube sign-in, no moderation and no dashboard on the phone.
+- **Manage > SavahLive** (new page): pair a phone with a QR code and a one-time code (valid 5 minutes), see which phones are paired and connected, rename them, set or change how long each stays paired (until removed, 30, 7 or 1 day), remove one or all, and choose what the overlay shows (hide bots, hide flagged messages, members and moderators only, lines kept, peek time, text size). Changes reach connected phones within seconds. It also holds the SavahLive on/off switch, the phone limits (separate from the dashboard's connection limit), key renewal and optional unpair-when-idle.
+- **Pair once.** A phone stays paired until you remove it or an expiry you chose passes. Its key is renewed quietly in the background, and a bad connection never unpairs it.
+- **Backend** (new tables and routes only; nothing existing changed): `POST /api/live/pair`, `GET /api/live/feed` (a Server-Sent Events stream built from the data SavahBot already has), `POST /api/live/rotate`, `GET /api/live/pair/open` and the `/api/savahlive` management routes. Device keys are separate from dashboard sign-ins and only a hash is stored. Pairing is rate-limited, you get a Telegram alert when a phone is paired, and lockdown pauses every phone.
+- **Change password** has an optional tickbox, **Also unpair all SavahLive phones** (off by default).
+- New settings `SAVAHLIVE_*` (listed in docs/ENVIRONMENT.md). The chat-deleted event now also carries the message id (an extra field; nothing else reads it differently).
+
+### Notes
+- The Android app has been built and run on a real phone. Some design polish is still planned. Build it with `android/README.md`.
+- In-app QR scanning is not included (it would need a library); the phone's camera opens the pairing page instead.
+
+## 1.4.12
+
+### Fixed
+- **Chrome's grey "SavahBot / Tap to copy the URL for this app" notification is gone (for good, this time).** Chrome posts it when no notification of the app is on screen at the moment a push ends. Since 1.4.11 the push handler did two things at once: it closed the silent placeholder left by the previous push, and it showed the new one (same tag) after a database write for the icon badge. When the first finished last, it closed the placeholder that had just been shown, so nothing was on screen. The handler is now one sequence: the notification first, then the badge, then the clean-up of leftovers, which never touches the notification the same push just showed. A failing badge or storage can no longer stop the notification either.
+- **Phone turned sideways: the side bar filled the whole screen.** Between 720 and 999 px wide (most phones in landscape) a layout rule meant for the single-column page also removed the column of the icon side bar, so the bar (logo, Demo / Live switch, menu icons) was stacked full-width on top of the page and pushed the content out of sight. The side bar now keeps its narrow column beside the page. Portrait is unchanged.
+- **Short landscape screens.** When the screen is under 480 px tall the side bar is made more compact (smaller logo, status tile and menu rows) so more of the menu fits without scrolling.
+### Changed
+- **Insights: all six number cards are the same size.** Instead of shrinking the big cards, the small ones now carry the same kind of content: **Chatters** shows how many messages each person sent on average and a trend line of people per time slot; **Actions** shows what share of flagged messages the bot acted on, a comparison with the period before and a trend line; **Waiting** shows its share of all actions and when the requests came in; **Peak rate** shows when the busiest moment was, a comparison with the period before and the chat rate over time. Trend lines sit at the bottom of every card, and all rows are held to the tallest card.
+- The analytics timeline (`GET /api/analytics`) gained `chatters`, `actions` and `pending` per time slot. The existing fields are unchanged.
+
+## 1.4.11
+
+A much more capable installed app. Everything is optional and silent where a browser lacks the feature.
+
+### Added
+- **App icon badge.** The home-screen / dock / taskbar icon shows how many moderation requests are waiting. It follows every push and the open app, and refreshes in the background (Periodic Background Sync, installed Chromium apps) using a read-only link that can read nothing but that number.
+- **Approve and Reject on the notification.** An approval push has two buttons that decide that one request without opening the app. They use a short signed link made by the server, never your sign-in; the server refuses it during lockdown, after it expires, or for any other request. New public routes `POST /api/notify/act` and `GET /api/notify/badge`, and `GET /api/notify/badge-token` for the signed-in app.
+- **Works offline.** The installed app opens with no connection (the service worker keeps the app's own hashed files and the last page), and pages show the last data they saw under a strip saying when it was taken ("Showing saved data from ..."). Copies are kept only for read-only pages, expire after a week and are wiped on sign-out.
+- **Saved for later.** A note, a quote or a clock-time reminder written offline waits on the device and is sent when the connection returns, even with the app closed where Background Sync exists. Each is taken out of the queue before it is sent, so nothing is sent twice. Relative reminders ("30m") are not queued, because they would be wrong by the time they are sent; the app says so.
+- **Updates wait for you.** A new version downloads quietly and shows "A new version is ready. Reload" instead of replacing the app under a session.
+- **Share to SavahBot.** The installed app appears in the share menu (Android and desktop Chromium). Shared text arrives on a page where you choose Note or Quote.
+- **`web+savahbot:` links** open a page of the installed app (`web+savahbot:moderation`, `web+savahbot:notebook?compose=1`). Only pages of the app are accepted.
+- **Install offer at the right moment.** After the first request you decide, the install offer appears at once (once ever, and under the usual rules).
+- **Desktop app title bar.** Window Controls Overlay: the installed app draws into its title bar, and launching it again re-uses the open window. More shortcuts (Moderation, Desk, Notebook, Insights, Commands, Notifications) and store-style screenshots in the manifest for the richer install prompt.
+- **Windows of their own.** "Open the Desk in its own window" and "Open this page in a new window" in the command palette. All windows share **one** live connection (Web Locks and BroadcastChannel): one holds it and relays every message; when it closes, the next takes over at once.
+
+### Changed
+- **Faster first screen.** Pages are loaded the first time you open them and fetched quietly while the app is idle (not on Data Saver or a 2G connection), so the first download is about a fifth of what it was and every page still works offline.
+- The service worker no longer takes over the moment a new version arrives, and it now also keeps the app's own files. It still never touches `/api/`, other sites, or any request that carries a sign-in.
+
+### Tests
+- New: 17-step browser run against the real worker (offline shell, saved data, outbox, update bar), worker unit tests for push, badge and the Approve / Reject paths (including forged links), logic tests for the offline allow-list, outbox, protocol links and shared text, and backend tests for the signed links and the two public routes.
+
+## 1.4.10
+
+### Fixed
+- **Computers: cards that belong side by side are now the same size.** Pages used to pour their cards down CSS columns, which left holes under short cards (Notifications "This device", Enforcement, Backup) and gave paired cards different heights. Cards now sit in rows of two with equal heights, and a card with no partner takes the whole row.
+- **Insights: the number cards were at the bottom of the page**, below Past streams, because of a rule left over from an older layout. They are back at the top, and the sixth card (Peak rate) no longer sits alone on a second row: six cards are 3 + 3, or one row of six on wide screens.
+- **Number cards never leave one on its own.** The column count now follows the number of cards (Security check showed 2 + 1, Insights 5 + 1).
+- **Notebook and Community: the two input cards (New note / New reminder, Add a quote / Add a regular) are the same height**, and the empty "Coming up" and "Regulars" boxes fill the room under them so both sides end on one line.
+- **Notebook: a single pinned note takes the whole row** instead of half of it.
+- **Notifications:** "This device" is a slim full row and the Switches sit in two columns; in Categories the quick presets are a slim full row above Moderation and System.
+- **Backup & Recovery:** "Make a backup" is a full row with its checklist in two columns; Restore and Reset share the row under it.
+- **Security:** cards of a similar height are paired (check + devices, sign-in + activity) and Emergency lockdown has its own row.
+- Phones and tablets (under 1100px) are unchanged. Nothing in the server changed.
+
+## 1.4.9
+
+### Changed
+- **Expanded chat on a computer now works like the phone.** The chat takes the whole width and stays long and tidy. The **Waiting** button in the header (with the count on it) slides the waiting list in from the right; the cross or the button again slides it back out. It used to be a fixed column that took a third of the screen. The panel is closed when you expand, and the phone view is unchanged.
+- **More messages fit in the expanded chat on a computer** (about 24 where there were 11, on a 1366 x 768 screen). The DEMO / LIVE tag and clock moved up into the header row, the INSERT chips share the row with the message box, the frame around the chat is thinner, and message rows are tighter. T- and T+ still change the text size.
+- **Chrome's grey "SavahBot" notification is gone again** (it came back while you were on the app). The service worker's quiet placeholder was closed after 50 ms, and Chrome posts its own notification when none is on screen at the end of a push. The placeholder now stays up until the push finishes, and the open dashboard removes it a moment later; leftovers are cleared on the next push and at start-up.
+- **Phones: cards that scroll inside themselves no longer freeze the page** (the Enforcement ledger, Activity log, Blocked phrases and the like). They hand scrolling to the page at the end of their list, and are capped at about 75% of the screen so a strip of page always stays showing.
+- **The sidebar's first group is now Studio** (Desk, Moderation, Commands and Insights). Insights moved out of Manage, so on a phone it shows only in the bottom bar and no longer a second time in More.
+- **Bans is now called Enforcement** (page title, sidebar, More, Settings search, docs). It also holds the rules that keep the bot fair. The link `/bans` and the `b` shortcut did not change.
+
+## 1.4.8
+
+System is now the bot's own pages: Notifications, Security, Settings and Backup & Recovery.
+
+### Changed
+- **More, System lists Notifications, Security, Settings and Backup & Recovery** (in that order). Notifications, Security and Backup & Recovery moved out of Manage, which keeps Notebook, Community, Bans, Weather, Insights and Demo. All four pages share one section switcher at the top. Their links (`/notifications`, `/security`, `/backup`) did not change, and Setup stays a tab inside Settings. **The sidebar (computers and tablets) follows the same grouping:** System lists Notifications, Security, Settings and Backup & Recovery, and Setup, Chat reader, Stream alerts, Activity log and Variables light up Settings, since they are its tabs.
+
+## 1.4.7
+
+Everything that is a setting now lives under Settings, and Backup has its full name.
+
+### Changed
+- **Chat reader, Stream alerts, Activity log, Variables and Setup are now tabs under Settings.** One strip runs across the top of all of them: Appearance, Privacy & data, Device & app, (Shortcuts on a computer), Intelligence, Chat reader, Stream alerts, Activity log, Variables, Setup, Developer. Appearance, Privacy, Device, Intelligence and Developer open inside Settings; the others open as their own page with the same strip on top. Their links (`/reader`, `/stream-settings`, `/activity`, `/variables`, `/setup`) did not change.
+- **More, System now lists only Settings.** The four pages added there in 1.4.6 are reached through Settings.
+- **Backup is called Backup & Recovery** everywhere: the More tile, the page title and the Settings search group.
+
+## 1.4.6
+
+No more Settings Overview: the pages that had no other way in are now in More, and search and "Needs a look" moved.
+
+### Changed
+- **The Overview tab is gone.** Settings opens on Appearance (old `/settings` and `?tab=overview` links land there). The tabs are Appearance, Privacy & data, Device & app, Developer and Intelligence (plus Shortcuts on a computer).
+- **Chat reader, Stream alerts, Activity log and Variables are now in More, System**, next to Setup and Settings, and each shows the same section switcher at the top as Setup and Settings.
+- **Search sits above every Settings tab.** While you type, results replace the tab; clear the box to come back.
+- **"Needs a look" moved to the top of Developer** (or "All clear").
+- Recently opened was removed with the Overview.
+
+## 1.4.5
+
+Technical setup moves to Developer, and the Settings Overview stops repeating places you already know.
+
+### Changed
+- **Firebase setup moved to Settings, Developer** (the variables checklist and "Check the service account"). Notifications keeps a one-line pointer to it.
+- **The Variables panel in Setup moved to Settings, Developer** as "Railway variables" (what the app expects, which are set, "Only what is missing"). Setup's "still unset" note now opens it. Setup is now Overview, Addresses, YouTube and Telegram. Your own `$(names)` page is unchanged.
+- **Settings Overview shows only pages that have no other way in:** Chat reader, Stream alerts, Activity log and Variables. The cards that just repeated a page from the bottom bar, More, or the tabs above (Security, Notifications, Integrations, Telegram, Moderation, Weather, Appearance, Privacy, Backup, Device, Developer) are gone. "Needs a look", search and Recently opened are unchanged.
+- Search finds Firebase push setup and Railway variables in Developer.
+
+## 1.4.4
+
+Developer holds the technical settings, and Backup gets a Reset card.
+
+### Changed
+- **"All settings" now lives inside Developer.** The separate All settings tab is gone from the Settings strip. Developer & advanced shows Configuration check and Service health first, then **All environment settings** (search, "Changed from default only", edit, reset to default) in its own card. Old links keep working: `?tab=all` opens Developer, and the Overview's "Search every environment setting too" lands there with the search filled in. Appearance, Privacy & data, Device & app and Intelligence stay where they were.
+- **Chat handle on Desk shows a clock.** The OFF AIR / DEMO / LIVE tag is unchanged; the stream name next to it (which the drawer already shows) is replaced by the time on air as `HH:MM:SS`, counting every second (`00:00:00` off air). Viewing a past stream still shows its name.
+- Backup page is now "Backup, restore & reset".
+
+### Added
+- **Reset card on Backup.** Three separate resets, each with a confirmation and none touching chat history, bans, commands or sign-in: settings changed in the dashboard (back to default), card layouts (desktop and mobile), and what the bot learned from you (knowledge packs stay). Also findable from Settings search.
+
+## 1.4.3
+
+Taller scrolling cards with footers that are never cut off.
+
+### Changed
+- **"Knowledge" in Settings is now called Intelligence.** The page covers everything the bot uses to spot spam, scams and abuse, and its first section is still called Knowledge (the packs), so the two names no longer collide. The icon is unchanged. Old links (`?tab=knowledge`) keep working, `?tab=intelligence` works too, and search, the command palette, help text and docs use the new name.
+
+### Added
+- **Moderation, Blocked phrases is now a fixed-height card** like History: it no longer grows without end as you add phrases. The list scrolls inside the card, the filters and the search stay pinned at the top of the list while you scroll, and a footer keeps the count in view ("26 phrases, 26 on", or "Showing 3 of 26" when filtered) with a "Scroll for more" hint and a soft fade.
+- **Edit a blocked phrase (pencil on every row).** The row opens into an editor right where it is: change the words, switch between phrase and pattern (regex), and change what a match does (Standard, Flag, Delete, Time out; a custom weight set elsewhere is kept unless you pick another). Enter saves, Esc cancels, and an Undo appears after saving. It refuses an empty phrase, an invalid pattern, or a copy of another entry, and the server checks the same things.
+- **The profile opens from everywhere a person appears:** tap a name in the chat (or choose "About ..." on a message), a name in Insights top chatters, a name on a Moderation card or in its history, or "Open profile" on a ban, timeout, unban or delete entry in the Activity log. It is the same sheet as the Bans ledger and works for anyone: for a viewer nothing was done to it shows who they are, their messages and notes, and says so; for someone sanctioned it explains why. If they have a different ban or timeout active right now, a button jumps to it.
+- New API: `GET /api/people/profile`. Activity log entries about a person now record who it was (two new columns added automatically).
+- **Person profile from the Bans ledger.** Tap anyone who is banned or timed out (the whole row, or the arrow) to open their profile: who they are (messages stored, how many were flagged, first seen, regular, notes), **why it happened** (the reason, the bot's score and the signals that flagged them, and the exact message or messages that caused it), **the chat around it** (everyone's lines from just before to just after, theirs highlighted and the offending lines marked), their full history of bans, timeouts and moderation log entries, and their latest messages. You can lift the ban, add a note to the Notebook, or copy their ID from there. For a ban you chose by hand no single message is recorded, so it shows their latest lines before it and says so.
+- New API: `GET /api/bans/{id}/profile`.
+- **Live progress for restoring a backup.** "Add from this backup" / "Replace with this backup" now opens a progress card: a ring and bar with the real percentage, what it is doing right now (making the safety copy, each part of the backup with its own row count, checking, reloading), and a running clock. When it ends the card turns green with how many rows were added (and how many were already there), or red with the reason.
+- **Controls when something goes wrong:** **Try again** and **Back to options** on a failed restore, and **Cancel restore** while it runs (everything is put back as it was). If your connection drops while the server is still working, the card keeps watching and shows how it ended. A "still working" note appears if nothing moves for 30 seconds.
+- **Show / hide eye on the passphrase boxes** when making a backup and when restoring one (including the first-run restore on the sign-in screen).
+- New API: `GET /api/backup/progress`, `POST /api/backup/cancel`.
+
+### Fixed
+- **A restore can no longer sign you out, and Merge no longer gives up on everything because of one table.** The progress check answers "not allowed" in its body instead of with a 401, which the dashboard reads as "your session ended". In Merge, a table that fails is reported by name with the database's own message while the remaining tables are still restored; Replace still stops at the first problem and puts everything back. A problem resetting an id counter is now only a warning on the finished card.
+- **Failed restores show their reason in full:** a "Technical details" box with a **Copy details** button (which part failed, the server's exact words, the mode and time).
+- **Restoring was slow and could look frozen:** rows are now written in batches of 400 instead of one by one, which is many times faster on Postgres.
+- **Merge and Replace on Postgres no longer trip on column types.** Values from a backup are converted to the column's type (a whole number for a decimal column, text for a number, and so on). In Merge, one bad row used to be skipped silently; now it costs only itself and the card reports how many rows could not be added and why. Replace stays all or nothing and rolls back on any problem.
+- **Backup import ("Add from this backup" / "Replace") failed with "Something went wrong"** on Postgres (a Railway deployment). After writing the rows, the restore moves each table's id counter forward, and it did that for tables whose id is text (Knowledge packs and feeds, Insights stream sessions), which Postgres refuses. Any restore that included Knowledge or History therefore failed, and the automatic roll-back failed the same way. Counters are now only touched for tables that have one. SQLite was never affected.
+- **Clearer backup errors:** if a restore step does fail, the message now names the cause instead of a bare server error, a failed roll-back says so and points to "Undo the last restore", and a problem writing the log entry or alert after a successful restore no longer makes the restore look failed.
+- **Activity log:** on a computer the log list spilled out of its card and was drawn over the "Keeping and alerts" card below it. The log is now a full-width card that clips and scrolls its own list, with the settings card cleanly underneath.
+- **Commands, Auto-replies and Timers** were short and their bottom edge looked cut off. They are now full-width cards that open at a comfortable height (at least about 480 px) and grow up to nearly the whole visible screen, then scroll inside themselves exactly as before. The search bar on Commands stays at the top while you scroll, and the last row has room to breathe.
+- **Every other card that scrolls inside itself** (Bans ledger, Activity log, Insights past streams, the long lists in Knowledge, and History on Moderation) uses the same, taller limit instead of about two thirds of the screen, with space under the last row.
+
+### Added
+- **Keyboard shortcut for Edit layout:** press **Shift + E** (not while typing) on Desk, Moderation, Insights, Notifications or Weather to start arranging, and **Shift + E** again to save (Done). Esc cancels. It is listed under Settings, Shortcuts and in the **?** list.
+- **Pinned footer** on Commands, Auto-replies and Timers: a one-line summary (for example "12 custom commands · 14 built in", or how many are switched on) that always stays in view under the list.
+- **"Scroll for more" hint:** a soft fade and a small bobbing arrow appear at the bottom of a scrolling card while there is more below, and go away at the end. Scrolling itself is unchanged.
+
+## 1.4.2
+
+### Added
+- **Moderation can be arranged** like Desk, Insights, Notifications and Weather: press the grid button at the top right (or search "Edit layout"), then drag the Waiting for you card, the rules column and History into the order you like, and the two rule tools inside the rules column. Desktop and Mobile layouts are kept separately and can be reset or exported under Settings, Appearance. The Mode card stays at the top.
+
+### Fixed
+- **Desk, "Waiting for you"** is a fixed-height card the same size as the Chat card on a computer, and the list scrolls inside it (mouse wheel and touch). It no longer sticks.
+- **Moderation, History:** the old "Load more" button is gone. History loads up to 500 actions at once and scrolls inside its card.
+- **Edit layout button** is now hidden completely when a page opens (no white sliver under the top bar); scroll up a little and it appears as before.
+- **Expanded chat:** the waiting list beside the chat is exactly as it was in 1.4.1. The Moderation page is unchanged.
+
+## 1.4.1
+
+A taller chat, a hidden edit button, and cards that scroll inside themselves. (Fixed before release: the Desk drew a blank page because the chat controls handle was read before it was set up.)
+
+### Changed
+- **The Edit layout button is tucked away.** Desk, Insights, Notifications and Weather now open scrolled just past the row that holds the button, so the cards start right under the top bar. Scroll up a little to reach the button (or use search, "Edit layout").
+- **Chat controls live in a drawer (phone, tablet and computer).** The filters (All, Flagged, Blocked), the search box, Streams, Dates and Pause, and the stream strip (name, Live / Demo / Off air, stream link) are folded away. One slim handle above the chat shows the stream name and state; tap it and the controls slide down, tap again to put them away. The handle shows a pulsing dot while a filter, search, date range or pause is on, and remembers whether it was open. The chat itself is now taller and shows many more lines at once.
+- **"Waiting for you" on the Desk has a fixed height, equal to the Chat card.** Approvals scroll inside the card, and "Approve all / Reject all" stays at the top while you scroll. On phones and tablets the Chat card is a fixed box of the same height too.
+- **Moderation, "Waiting for you"** is a fixed-height card on phones and tablets as well (a computer already had it), and **History** scrolls inside its card on phones and tablets.
+- **Other cards that could grow without limit now scroll inside themselves** after about two thirds of the screen: Commands, Auto-replies, Timers, Bans (Ledger), Activity log, Insights (Past streams) and the long lists in Knowledge (Entries, Suggestions, Help it where it is unsure, Everything it has learned, Changes it made). A short list takes only the room it needs.
+
+## 1.4.0
+
+Arrange your pages: drag cards into the order you like.
+
+### Added
+- **Drag and arrange cards** on Desk, Insights, Notifications and Weather. Press the small grid button at the far right of the page's title row (or search "Edit layout" with Ctrl or Cmd + K, or press and hold a card's title on a touch screen), drag a card by its handle or title, and the others slide out of the way. Cards snap into place and never overlap. **Done** saves, **Cancel** puts everything back, **Reset** returns to the default order (kept when you press Done).
+  - **Desk:** the chat and the side column can swap sides, and the side cards (Waiting for you, Live stats, Bot status) can be reordered.
+  - **Insights:** the charts are now one grid, so any chart can go next to any other. Past streams is a card you can move too.
+  - **Keyboard:** focus a handle and use the arrow keys, Home or End. Escape cancels.
+  - **Touch:** dragging is on the handle and title only, so scrolling a page never moves a card.
+- **Two layouts per page, saved on the server:** Desktop (a keyboard and a wide screen) and Mobile (phones and tablets). Arranging one never changes the other, and both survive clearing the browser or signing in on a new device. A card that is new in a later version appears at the end; a saved layout can never hide a card.
+- **Settings, Appearance, Page layouts:** reset only what you pick (which pages, Desktop, Mobile or both) with a preview of what will change, **Export layouts** to a file with both layouts, and **Import layouts** to restore it.
+- New API: `GET /api/layouts`, `POST /api/layouts/save`, `POST /api/layouts/reset`, `GET /api/layouts/export`, `POST /api/layouts/import`. Only card ids and their order are stored.
+
+### Changed
+- **Expanded chat on a computer (Desk):** it now fills the whole window with an equal margin on every side, so it is bigger and sits in the centre (before, it was sized from the area beside the side menu and drifted to the left, partly because the page scrollbar disappeared after it was measured). The chat and "Waiting for you" are two separate panels with a gap between them, the waiting list is wider (about 30% of the width, 340 to 480 px) so a request can be read without opening it, and messages are slightly larger. Phones are unchanged.
+- Insights keeps its numbers as they are while you are arranging, and refreshes when you finish.
+
+## 1.3.9
+
+Faster push on phones, and a Shortcuts tab in Settings on desktops.
+
+### Fixed
+- **Push notifications arrived 30 seconds to a minute late on phones** (on time on a computer). Messages were sent with "normal" urgency unless they were high priority, and a phone in battery saving holds those back. Every push is now sent with high urgency (web, Android and Apple).
+- **Push is sent the moment a notification is created.** It used to wait for the next scheduler tick (up to 3 seconds), and devices were sent to one after another. Delivery now starts at once and reaches all devices in parallel. Retries and held messages still go through the scheduler.
+
+- **Chrome's grey "SavahBot" notification** (Silent section, with "Open in browser" and "Share URL") is gone. Chrome posts it whenever a push arrives and the service worker shows nothing, which happened every time you had the dashboard open and focused. The worker now always shows a notification: in that case a silent one that is removed after a fraction of a second, so only the dashboard's own pop-up is seen.
+
+### Added
+- **Settings, Shortcuts tab (desktops and laptops only):** the full list of keyboard shortcuts (`?`, `/`, Ctrl or Cmd + K, and every `g` then letter jump) in one place. The `?` pop-up shows the same list. Phones and tablets do not show shortcuts anywhere (More row, Settings tab and search entry are hidden).
+
+## 1.3.8
+
+A fix for notifications on phones, and the pie charts done properly.
+
+### Fixed
+- **Push and in-app notifications on phones.** 1.3.7 made the service worker hide the system alert whenever the dashboard was merely visible, and on some phones that hid it while the app was open in the background. The rule is back to "visible and focused", and the page's own pop-up now uses exactly the same test, so you get one alert: the pop-up when you are looking at the dashboard, the system push when you are not. A test pins this.
+- A repeat of an existing notification is always counted in the bell; only a brand-new notification delivered twice within two seconds is ignored.
+- **Pie charts rebuilt.** Slices are real ring segments that slide straight out from the centre and back with a smooth transition, with no gap, shadow or leftover ring behind them. The tapped legend row takes the colour of its slice.
+- **Insert variables row** under the chat box is one tidy line of small chips that scrolls sideways, instead of a wrapped, boxed row.
+
+## 1.3.7
+
+A tidier top of every page, a usable pinned message, and a calmer stream strip.
+
+### Changed
+- **The connection pill at the top shows only the signal icon.** The glowing dot is gone; the colour and the icon still say live, reconnecting or offline.
+- **No page title block.** The big icon, page name and description above the cards are gone, so the cards start right under the top bar with a small margin. A page's own buttons (for example "Run a scenario" on the Desk) are still shown. The heading stays for screen readers and for "On this page".
+- **No breadcrumb row** ("More › Manage › Insights") under the top bar.
+- **The stream strip in the Chat card was redesigned.** The stream name is on top and may use two lines, with a Live / Demo / Off air tag and the time it has run underneath, so nothing is cut off. The glowing dot is gone. The stream-link button is there in every state (it used to be missing in demo and while streaming).
+- **On a phone the pause button sits on the same row** as the filter, history and date buttons.
+
+- **More page redesigned.** The "More" heading and its subtitle are gone, and so are both search boxes (the top bar already has search, on phones and on desktop). The old gradient "Demo mode" card, which did not match the rest of the app, is replaced by a plain card in the app's own panel colours, with the same Demo / Live switch used by the chat filters: stacked on a phone, one slim row on desktop. The count pills (notes, quotes, setup progress) now sit under each tile's description instead of squeezing the text, and show on phones too.
+
+- **More, on desktop:** the status card is hidden (the sidebar already has the same status and Demo / Live switch). It stays on phones.
+- **More, on phones and tablets:** the "Keyboard shortcuts" row is hidden, since it needs a keyboard.
+- **Developer page status chips** ("ok", "connected", "available", "not set up") are small soft pills again. On a phone they were stretched full width with a heavy coloured outline.
+
+### Added (second batch)
+- **Backups never carry Demo-mode data.** Export leaves out every sample row, import skips any that an older file holds, and a Replace swaps only your real rows (the demo sample stays untouched). The counts on the Backup page show real rows only, and the import report says how many demo rows were skipped.
+- **Most active chatters: top 10, clickable, with medals.** Each row opens that person's profile with the messages they sent (with "Show more"). People are told apart by their ID, so two people with the same name are two rows. The top three wear a small gold, silver and bronze shield.
+- **Busiest hours: hold and drag** across the bars; the bar under your finger lights up and shows its hour and message count.
+- **Pie charts:** tap a slice (or its row) and it grows outward and the centre shows its share and name. Tap again to put it back.
+- **Progress line option** in Settings, Appearance: follows your scrolling (default), always full, or off.
+
+### Fixed (third batch)
+- **The "×2" / "×4" counter on pop-ups is gone.** A repeated message keeps the one pop-up and restarts its timer.
+- **Chat follows the newest line.** At the bottom it keeps following without scrolling up, even when old lines are trimmed off the top, and opens at the newest line. "Latest" appears only when you have scrolled up yourself, and after tapping it you stay following.
+- **Pie charts:** the tapped slice now pops outward, and no grey tap box appears around the circle.
+- **Busiest hours:** bars are sharp (no glow or stretching), and the bar you pick stays lit after you let go until you tap elsewhere or leave the page.
+- **Live stats:** three even tiles, each with an aligned icon badge above its label, on phone and desktop.
+
+### Changed (second batch)
+- **Selecting several messages ends by itself.** After Copy or Delete (or Done) nothing stays ticked, and deleted messages leave the screen at once.
+- **Recently opened and the Settings tiles:** the tag sits on top of each card, so the title and text keep the full width.
+- **Live stats:** the trend line has a box of its own and can no longer run over the "Updated ... ago" text.
+- **Cards no longer touch** on Insights (Past streams), Bans (Ledger and Be gentler) and any page that stacks cards the same way.
+
+### Fixed
+- **Pinned messages had no options.** Each pin is now its own row: tap it (or long-press or right-click) for the same options sheet as any chat line, and the new cross unpins it at once. Every pin is reachable (the bar scrolls instead of hiding all but three), long-pressing a pin no longer starts a text selection, and the pin and selection bars stay above the chat in the expanded view. Pins now remember the details the sheet needs (older pins still open with the basic options).
+
+### Tests
+- Backup tests for Demo-mode rows (export, import, replace, counts); an analytics test for the top-10 list. 456 backend and 33 frontend tests pass; the one known failure (`test_timer_modes_and_auto_replies`) is unchanged.
+- `frontend/tests/pins.test.ts`. `npm test` runs 33 tests.
+
+## 1.3.6
+
+Clean URLs. The dashboard no longer uses `/#/desk`; every page has a real address.
+
+### Changed
+- **Real paths instead of hash routes.** `/desk`, `/moderation`, `/security`, `/settings?tab=appearance` and so on, on the browser History API (a small router in `src/router.ts`, no library). Back, forward, refresh, bookmarks and shared links all work on the real path. The same page opened twice in a row does not add history entries.
+- **Old links still work.** `/#/security`, `/#/moderation?tab=rules`, `/#/dashboard` and similar are rewritten to the clean address on load (and if one appears while the app is open), without adding a history entry. Query strings are kept; `token`, `password`, `key` and similar parameters are dropped. A plain `#fragment` is left alone.
+- **A real "Page not found" page** for an address that is not a page, instead of silently showing the Desk.
+- **Only pages of this app can be navigated to.** Addresses are checked against the list of registered pages, so `//host`, `https://…` and `javascript:` can never be a destination.
+- **Vercel:** `vercel.json` rewrites page paths to `index.html`, and leaves `api/`, `assets/` and anything with a file extension alone.
+- **YouTube sign-in return** now goes to `/setup?youtube=…` (old `/#/setup?…` links still convert).
+- Installed-app shortcuts and push-notification taps open clean paths. The backend still stores notification routes as `#/route` tokens; the dashboard converts them.
+
+### Added
+- `npm test` runs the routing rules (`frontend/tests/routes.test.ts`, Node's built-in test runner, no new dependencies).
+
+### Fixed (engineering audit of the clean-URL release)
+- **Sign out now closes the session on the server.** It used to forget the token only in the browser, so a copied token kept working until it expired. `POST /api/auth/logout` is now called (best effort) with the token being signed out.
+- **A late "401" can no longer sign you out of a newer sign-in**, and a request that carried no token no longer reports "Your session ended". When the session really does end, several requests failing together give one notice and one redraw (the page behind is torn down first, so it no longer re-requests data with no token).
+- **The sign-in lockout could be dodged.** The client address was read from the *first* `X-Forwarded-For` value, which a caller can invent for every request. It is now read from the right, counting `TRUSTED_PROXY_HOPS` proxies (default 1, Railway). Set `0` if the server is reached directly with no proxy. The restore-token lockout and the audit log use the same address.
+- **Reflected markup in the Google sign-in callback page.** When `FRONTEND_URL` is not set, the small page the callback shows printed the `error` parameter unescaped. It is escaped now and the page carries a locked-down `Content-Security-Policy`.
+- **API answers are `Cache-Control: no-store`** (plus `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`) so signed-in data is never kept by a browser or proxy. Routes that choose their own caching (live feed, public voice files) are left alone.
+- **Vercel:** added `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` and a `Permissions-Policy` that turns off camera, microphone, payment and USB.
+- **Router:** a `#fragment` is kept when an unusual spelling (`/Security#keys`) is rewritten to the canonical path; a back or forward step that only moves the `#fragment` no longer redraws the page; the "Page not found" page no longer lights up the More tab.
+- **Test:** `test_a_protected_user_refusal...` expected an older wording of the "stream has ended" message; it now checks the message the code gives.
+
+### Tests
+- Frontend: `tests/api.test.ts` (sign-out and 401 handling), `tests/router.test.ts` (history, legacy links, back/forward, fragments), `tests/vercel.test.ts` (rewrite and headers). `npm test` now runs 30 tests.
+- Backend: `tests/test_hardening.py` (client address, lockout with forged headers, response headers, server-side sign-out, escaped callback page).
+
+## 1.3.5
+
+One chat per livestream, a stream history, and a dashboard that reconnects by itself.
+
+### Fixed
+- **Going live again continued the old chat.** Every livestream is now its own session. A new stream starts on an empty Desk; the Desk never shows lines from an earlier stream. When a stream ends its last lines stay readable until the next one starts.
+- **Overlapping dates in saved chat.** The date was printed on every line and ran into the author's name. Saved chat now shows one small heading per day ("Today", "Yesterday", "Mon, Nov 9") and a fixed-width time on each line. The date filter chips wrap instead of being cut off ("Cust...").
+- **Refreshing after the backend or the connection dropped.** The live feed now notices a dead connection within 40 seconds (and straight away when the tab wakes up or the network returns), retries every 0.5 to 10 seconds, and tells you why: "Offline" (no internet) or "Reconnecting (n)" (server not answering). Tap the chip to retry now. When it is back, the Desk fetches the lines it missed, other pages redraw themselves, and if the dashboard itself was updated meanwhile it reloads.
+
+### Changed
+- **Connection chip redesigned** (same behaviour: tap to retry now). A soft pill with a glowing status dot: green and gently pulsing when live, amber and blinking while reconnecting, red when the device has no internet. On phones it is just the dot and the signal icon so the top bar stays uncrowded; on wider screens it also says "Live" / "Reconnecting (n)" / "Offline". This also removes the grey box 1.3.5 first showed around it on phones.
+
+### Added
+- **Streams** (button on the Desk chat): every stream with its date, start and end time, duration, lines, chatters, flagged lines, deletes, timeouts and bans, busiest minute and most active chatters. Open a stream to read its chat, rename it, export it as a .txt file, or delete it.
+- **Stream strip** under the chat toolbar: what is on air, for how long, and a Stream link shortcut.
+- **Stream link shortcut:** the YouTube row in Bot status is now tappable (and so is the Stream link button). It opens a small sheet to paste the live video link, with the video ID checked as you type, plus the auto-search switch. It saves through the same endpoint as Setup.
+- API: `GET /api/streams`, `/api/streams/last`, `/api/streams/{id}`, `/api/streams/{id}/chat`, `/api/streams/{id}/export`, `PATCH` and `DELETE /api/streams/{id}`. `GET /api/chat/recent` returns only the current stream.
+
+### Notes
+- A stream that drops and comes back within 10 minutes (same video, or a backend restart) resumes its own session instead of starting a new one. A session with no chat that lasted under 2 minutes is not kept.
+- New table `stream_sessions` and column `chat_messages.session_id`, added automatically on start. Chat lines made before 1.3.5 have no stream and do not appear in Streams (they still appear in Dates).
+- Chat lines follow the retention setting; each stream's numbers are kept.
+- New files: `backend/app/sessions.py`, `backend/app/api/stream_routes.py`, `frontend/src/pages/streams.ts`, `frontend/src/pages/stream-link.ts`, `frontend/src/streams.css`. Tests in `backend/tests/test_sessions.py`.
+- Checked here: backend tests, TypeScript, and a browser run against the real backend (history, saved chat, link sheet, backend killed and restarted with no refresh). Not checked: `vite build`, a real YouTube stream.
+
+## 1.3.4
+
+Desktop layout. Phones and tablets are unchanged (checked pixel for pixel against 1.3.3); everything new applies only at 1100px wide and up.
+
+### Changed (desktop only)
+- **Cards flow into balanced columns** instead of one long full-width column: Security, Bans, Backup, Notifications, Moderation and Community use two columns (three on screens 1700px and wider). Cards never split across columns, and cards with a table span the full width.
+- **Desk:** the chat fills the height of the screen and stays in place while the side cards scroll.
+- **Weather:** now and the 7-day forecast sit side by side, the next 24 hours run across the page.
+- **Insights:** charts no longer grow to a huge height; "What stood out" and "Busiest hours" sit side by side; the paired cards are the same height.
+- **Settings and More tiles:** the status chip sits under the text instead of squeezing it.
+- **Card finish:** soft shadows, a tinted header, a coloured top edge on figure cards, a small lift on hover.
+- Moderation history keeps its buttons and times on one line in a half-width card (icon-only review button; the Why column is hidden between 1100 and 1299px).
+
+### Notes
+- New file `frontend/src/desktop.css`, imported last in `main.ts`. To undo everything, remove that import.
+- Checked with screenshots of a build against sample data at 390, 820, 1100, 1440 and 1920px, light and dark. Not checked: Knowledge pages, Setup tabs and live data. `vite build` and `pytest` could not be run here; run them before deploying.
+
+## 1.3.3
+
+Notification switches, pop-up notices you can control, and a much faster chat reader.
+
+### Fixed
+- **"Unknown item: categories" on every Notifications switch.** Flipping Notifications, Push to devices, In-app bell or Telegram saved the setting and then failed, because the activity-log line was built from a `categories` key that a plain switch does not send. The switches now save and answer normally (regression test added). The red errors you saw were this bug, one per tap.
+
+### Added
+- **Pop-up notices are yours to control** (Settings → Appearance → Pop-up notices, also linked from Notifications): show **All**, **Errors only** or **Off**; put them at the **top** or **bottom**; choose how long they stay (1 to 15 seconds, errors stay twice as long). Saved on the device. "Show a sample" previews it.
+- **Swipe a notice left or right to dismiss it** (or tap it). A finger on a notice keeps it from disappearing under you.
+- **The same message no longer stacks.** Four identical errors become one with a ×4 counter.
+- **Faster mode for the neural voice** (Chat reader settings): tries the phone's graphics chip (WebGPU) and falls back to the processor by itself. Off by default because it downloads a larger file (about 300 MB, one time).
+
+### Performance
+- **Chat reader: many more lines per minute.** Before, one line was made into sound, played to the end, and only then the next was started, so the processor sat idle during every playback. Now the next clips are made while the current one plays (two ahead), lines that pile up are joined into one clip (up to 3, same voice), the silent edges of each clip are trimmed, playback speeds up slightly (10 to 20 %) while a queue builds, and up to 12 lines wait instead of 4. If the neural voice fails, every waiting line goes to the built-in voice instead of being lost.
+- Stopping or clearing the reader while a line is playing can no longer leave the player waiting forever.
+
+### Notes
+- Backend tests and `vite build` could not be run in the build environment (no packages). `py_compile` passes, `tsc --noEmit` passes, and the new reader logic was exercised in Node with a simulated worker and audio. Run `pytest` and `npm run build` before deploying.
+- Real speed depends on the phone. If one line is still slower than it is spoken, the neural voice cannot keep up on that device: turn on Faster mode, or use the built-in voice.
+
+## 1.3.2
+
+Fixes from phone testing: tab rows, layers, cut-off cards, the stream-ended bug and a freezing chat reader.
+
+### Fixed
+- **Tab rows keep their place.** Settings views, Notification sections, the Manage/System switcher, Knowledge, Commands and the Moderation tabs now open with the current tab in the middle and remember where they were, instead of jumping back to the first tab after every tap. Only the row scrolls, never the page.
+- **The dark spot beside the selected tab is gone.** The edge fades were drawn on top of the row; they are now a mask on the row itself and only appear on an edge that still hides tabs.
+- **Sheets open above the expanded chat.** Person cards, message actions and "Why it was flagged" used to open behind the expanded chat the second time. Layers now have one order (sheets 90, menus 95, toasts 100, expanded chat 70).
+- **Cards cut off at the side.** Blocked phrases, History and other cards were wider than the screen because a single-column grid (`1fr`) would not shrink below its content. Grids now use `minmax(0, 1fr)`, long phrases wrap, and the form controls stay inside the card.
+- **Cards no longer touch the tab row** in Notifications and the other Manage/System pages.
+- **Figures are cards.** "43 unread / 2 push devices / active" and the other figure rows are small cards with a status edge instead of plain text.
+- **Read chat has its own place.** The button moved into the chat header (icon only on a phone); loading and error messages show on a thin line under the toolbar and take no room when empty. It no longer sits on top of chat lines.
+- **Stream ended, bot still "On air".** The bot now notices the end of a stream from YouTube's own offline marker, from a send or delete that YouTube refuses with "chat ended", and from a quiet chat check (one cheap `videos.list` call, at most every 90 seconds, only while the chat is quiet). The Desk then returns to Standby, and a send attempt says plainly that the stream has ended.
+
+- **Read chat read only the test sentence.** Real lines were judged "too old" by YouTube's publish time (behind by the polling gap and any clock difference), so they were skipped. Age is now counted from when the dashboard received the line, and lines loaded from history are never read.
+- **Expanded chat:** the Close button is icon only.
+
+### Performance
+- **The neural voice runs in a Web Worker.** Downloading and running Kokoro no longer blocks the page, so scrolling, taps and the live chat stay smooth while it loads and speaks. The worker reports download progress, and the reader keeps only the newest 4 lines waiting for the neural voice so it never falls behind.
+- The reader control redraws at most once per frame, releases its listener when you leave the Desk, and stops cleanly if Read chat is switched off while a line is being made.
+
+### Not changed
+- Existing backend tests could not be run in the build environment (no Python packages available). `py_compile` passes for the changed files, and the dashboard typechecks with `tsc --noEmit`. Run `pytest` and `npm run build` once before deploying.
+
+## 1.3.1
+
+Finishes the items 1.3.0 left partial.
+
+- **Chat actions:** lift a ban or timeout from the person card, "Always allow links to this site", a fuller "Why it was flagged" sheet, single-message deletes are logged.
+- **Activity log:** retention days and "notify me about sensitive entries" are controls on the page; notification-setting changes are now logged.
+- **Insights:** click a past stream to see its viewers and likes graph.
+- **Long lists:** timers, auto-replies, commands and regulars show the first few with "Show all", and Recent deliveries too.
+- **Notifications:** quick presets (Essentials only, No push, Everything on) and mute for 15 min / 1 h / 8 h / until morning.
+- **Demo:** "Add sample history" fills chat, a flagged message and bans in different states; past streams and their graphs have labelled sample data; "Clear demo data" now also removes demo bans.
+
+Not changed: the stray Chrome notification could not be reproduced here. The service worker is unchanged except its version; see REPORT.md.
+
+## 1.3.0
+
+A bug-fix and polish release with several new features. Guides are in `docs/`.
+
+### Fixes
+- Appearance and other setting rows no longer cut off on phones; cards no longer touch; the notification panel filter bar no longer overlaps.
+- One refined SVG status icon set replaces emoji-looking marks everywhere.
+- Notifications: the status-bar white square is fixed (proper monochrome badge); tapping a notification opens what it was for (a test notification opens inside Notifications showing it); foreground push is no longer suppressed (`if (watching && p.category !== "test.test") return;`, with a regression test); a payload-less push now shows our own notification instead of the browser's generic one; new count-badge design; "Stop these" in the notification detail sheet.
+- Sheets can be closed by dragging the grip, not only the X.
+- `/tgmode` switch from inside polling no longer leaves the webhook unregistered or the bot silent.
+- Signing in always lands on the Desk. Tab strips keep their position and centre the active tab.
+- Database start-up on PostgreSQL: tables, then missing columns, then indexes (fixes `column "dedupe_key" does not exist` on older databases).
+
+### New
+- **Navigation:** "On this page" jump chip, "Show all" sheets for long lists, back-to-top, progress line, breadcrumbs, quick switcher with recents and actions, tab strips with fades and an all-pages grid.
+- **YouTube source:** auto-search switch, paste a stream link or ID, calm quota notice, falls back to the configured source after a stream ends.
+- **Telegram control centre:** on/off, link/unlink, rotate secret, shutdown, activity log.
+- **Custom variables:** `$(TikTok)` in commands, timers, auto replies and messages you send as the bot; types text/link/number; Settings > Variables; insert chips; included in backups.
+- **Activity log** (Settings): sorted by importance and area, before/after for ordinary settings, never secrets or message text, search, dates, export, retention, optional notification for sensitive entries.
+- **Chat actions:** hold (or tap / double tap, per device) a chat line for copy, reply as the bot, dashboard-only pins, person card, notes, teach spam/fine, block phrase, delete / timeout presets / ban with quota cost and 10-second Undo, multi-select.
+- **Chat reader:** built-in browser voices and a neural voice (Kokoro, free, downloads once) with automatic fallback; who-to-read rules, per-person always/never/own voice, name first, skip links and emoji, shorten, collapse repeats, drop backlog, pronunciation dictionary; voice-pack upload card and self-hosted link.
+- **Stream alerts:** members, Super Chat, Super Sticker and membership gifts recognised in chat; best-effort new-subscriber detection and subscriber-count milestones; settings for intervals and thank-you messages.
+- **Live stats:** likes, viewers, likes per minute, peak and milestone alerts on the Desk; `$(likes)`, `$(viewers)`, `$(subs)`; per-stream history in Insights.
+- **Moderation levels:** Basic, Balanced, Strict presets for the auto thresholds.
+- **Demo mode:** zoomed charts show labelled sample history instead of zeros; live card shows sample stats.
+- Long lists (Telegram log, Security activity, Recent deliveries) end in a "Show all" sheet.
+
+### Known limits
+Not testable in the build environment: real FCM/browser push, Telegram, PostgreSQL, YouTube (subscriber list, likes, member events), voices (sound), and the neural model download. Subscriber detection is best effort (public subscribers only). Voice packs need a Railway Volume to survive redeploys. Service worker version 1.3.0.
+
+## 1.2.0
+
+One coordinated release. Guides for everything are in `docs/` (start at `docs/README.md`).
+
+### Notification Centre (Firebase Cloud Messaging)
+- Push to phones and computers through Firebase, an in-app bell and history that now live on the server, and Telegram, all through one pipeline. ntfy is gone.
+- 17 notification kinds, each raised by real code. Per category: on/off, channels, priority. Duplicate folding, quiet hours (hold-and-summarise or silent), pause, hourly cap, critical alerts that break through, retries with growing delays, dead tokens cleaned up automatically, leader-only sending.
+- Seven-tab Notifications page. Service worker handles push and opens the right page on tap. Device tokens are encrypted and never shown. Guide with a Firebase console walkthrough: `docs/NOTIFICATIONS.md`; platform limits: `docs/PWA_AND_PUSH_PLATFORMS.md`.
+
+### Weather (Open-Meteo)
+- Provider interface with Open-Meteo, normalization, retries and backoff, memory + Redis cache, stale data clearly labelled, one provider call for simultaneous requests.
+- Places (search, coordinates, device-location button only on press), units, dashboard, settings page, alert rules through the Notification Centre, Telegram `/weather /forecast /hourly /locations`. No API key; attribution shown. See `docs/WEATHER.md`.
+
+### Security & Access Centre
+- Password, passkeys and authenticator app: any two once two are set up. Recovery codes, sessions and devices, sign-in activity, audit log, step-up checks, lockdown. See `docs/SECURITY.md`. **Everyone is signed out once on upgrade.**
+
+### Settings & Control Centre
+- Settings is now a hub: verified status cards, a "needs a look" list, search, Appearance (theme, accent, density, text size, motion), Privacy & data, Device & app, Developer (health, config check). See `docs/SETTINGS.md`.
+
+### Backup & recovery
+- Encrypted `.svbak` export and import with a key shown once, dry-run, merge or replace, safety snapshot with undo, first-run restore. `docs/BACKUP_AND_RECOVERY.md`.
+
+### Also
+- Knowledge: transplanted tools, packs and learning 2.0 (`docs/KNOWLEDGE.md`). Ban management with unban and limits (`docs/BANS.md`). Interactive charts and long history (`docs/HISTORY.md`).
+- GIPHY removed. Docs split into per-subsystem guides; `ENVIRONMENT.md` and `API.md` are generated from the code and checked by tests. README is short.
+- Removed variables: `NTFY_URL`, `NTFY_TOPIC`, `WEATHER_API_KEY`, `GIPHY_API_KEY`. New: `FIREBASE_*`, `NOTIFY_*`, `WEATHER_*` (see ENVIRONMENT.md).
+- Service worker version 1.2.0.
+
+## 1.1.9
+
+### Install SavahBot as an app (PWA)
+The dashboard can now be installed on a phone, tablet or computer and opens in its own window, with no browser bars.
+
+- **A calm install card** appears at the bottom of the signed-in dashboard, only when installing makes sense. It uses the dashboard's own colours, shows the app icon, says what you get, and has **Install** and **Not now**. It never shows on the sign-in screen, while a dialog is open, or while the tab is in the background, and it waits a few seconds after the dashboard opens.
+- **The browser's own install prompt is never shown automatically.** It is held until you press Install.
+- **Not now is remembered, but never final.** The card returns after 3 days, then 14, then 60. An **Install app** button stays in the sidebar, on the **More** page and in the command palette (Ctrl K), so you can install whenever you like. It disappears once the app is installed.
+- **iPhone and iPad get their own steps** (Share, then Add to Home Screen), written for Safari, for other iOS browsers (iOS 16.4 and later), and for apps with a built in browser, where it asks you to open the page in Safari. Android steps are never shown on iOS. Safari 17 on a Mac gets Add to Dock.
+- **Browsers without an install prompt** (for example Firefox on Android) get menu steps. Browsers that cannot install web apps see nothing.
+- **Detection:** `beforeinstallprompt`, `appinstalled`, `display-mode` (standalone, minimal-ui, window-controls-overlay), iOS `navigator.standalone`, and Android app launches. Changes made in another tab are followed.
+- **Home screen shortcuts** (long press the app icon): Desk, Moderation queue, Commands. The manifest also gained a stable `id`, `lang` and `categories`. Existing name, colours and icons are unchanged.
+- **Offline page.** Opening the installed app with no connection shows a branded "You are offline" page instead of a browser error.
+
+### Safety
+- The new service worker (`public/sw.js`) caches **one static page** (`/offline.html`) and nothing else. It only handles page loads, tries the network first, and never touches POST requests, other origins (your backend, fonts), `/api/` paths, requests with an Authorization header, or addresses with a token. Sign-in, the API and the live feed behave exactly as before.
+- The only thing stored by the install card is the dismissal count and time (`savahbot.pwa` in local storage).
+
+### Code
+- New `frontend/src/pwa.ts` (`initPWA()`, called once from `main.ts`) and `pwa.css`. The sidebar button, More tile and palette action read the same state. Two small icons (`share`, `plusSquare`) were added.
+- `vercel.json` adds headers for `sw.js` (never cached), the manifest (correct type) and the offline page.
+
+## 1.1.8
+
+### Optional Redis
+Set `REDIS_URL` and the bot uses Redis for six things; leave it empty and nothing changes. Guide: `docs/REDIS.md`.
+
+1. **Moderation memory survives restarts.** Message rates, repeats, near-identical raids, strikes and posting rhythm are saved every 10 seconds and on shutdown, and restored on start.
+2. **Login lockout is shared and restart-proof** (dashboard and Telegram `/claim`).
+3. **Live dashboard events across instances** through Redis pub/sub.
+4. **One leader instance** polls YouTube, runs timers and reminders and polls Telegram; another takes over within about 30 seconds if it stops.
+5. **Short shared cache** for heavy dashboard queries (Insights).
+6. **Restart-proof cooldowns and duplicate protection**: command and auto-reply cooldowns, "just punished" markers, and each live message id is handled once.
+
+- Redis is never required. If it is missing or unreachable, the bot carries on in memory and reconnects by itself.
+- The Redis client is built in (no new package). `REDIS_URL` is no longer "reserved"; new optional variables: `REDIS_PREFIX`, `REDIS_TIMEOUT_SECONDS`, `REDIS_SNAPSHOT_SECONDS`, `REDIS_LEADER_TTL_SECONDS`, `SHARED_CACHE_SECONDS`. `.env.example` regenerated.
+- `/api/status` and `/api/health` report the Redis state. The Desk "Status" panel shows a Redis row right under Database (Off, Connecting, Unreachable, Leader or Standby, and when the moderation memory was last saved).
+- 16 new tests (`tests/test_redis.py`) run against a small stand-in Redis server, so the real wire client is exercised.
+
+## 1.1.7
+
+### Bottom navigation (phone)
+- The grey highlight behind the selected tab is gone, along with the tap flash.
+- A white bar now sits on the top edge of the footer, above the active tab.
+- Tab icons pop (zoom out, then settle) when you select them, and shrink slightly while pressed. Reduced-motion settings turn this off.
+
+### Sign-in page, redesigned
+- Matches the dashboard theme (colours, accent, light and dark), with a branded card, a show/hide password button and a clear loading state.
+- No more setup hints: the page no longer names the `OWNER_PASSWORD` variable or the Railway logs, and the backend address is no longer printed. It is asked for only when none is set, or under "Connection settings" (leave it empty to keep the current connection).
+- Wrong-password and unreachable-server messages are now plain and friendly.
+- Phone: full-width card. Tablet: centred card. Desktop: brand panel beside the card. Short landscape phones are handled too.
+
+## 1.1.6
+
+### Intelligence without AI services
+The bot can now recognise spam and scams well beyond a phrase list, using plain algorithms and data files that run on your own server. No AI model, no outside API. Full guide: `docs/KNOWLEDGE.md`.
+
+- **Knowledge, split by category.** `backend/app/intel/knowledge/packs/` holds one JSON file per category: promo and sub-for-sub, crypto fraud, fake prizes, account phishing, contact lures, adult-link bots, Kenya and East Africa scams (English, Swahili and Sheng), scam message shapes, risky links, disguise maps, official-sounding names, and training examples in English and Swahili/Sheng. Each pack has a version, date and sources (researched November 2026 from current reports on live-chat spam, crypto-doubling streams, abused link endings and M-Pesa fraud). An empty **abusive language** pack ships for you to fill; nothing is shipped there.
+- **Nine detectors**, each Off, Shadow or Active, with its own sensitivity and maximum points: Knowledge packs (disguise-proof exact matching), Fuzzy matching (trigram index and edit distance, plus a consonant skeleton for dropped vowels), Learning filter (Naive Bayes over words, pairs and fragments, in English and Swahili), Link intelligence (shorteners, abused endings, brand lookalikes, brand-in-subdomain, the @ trick, raw IPs), Viewer reputation (trust discount, repeat offenders, blocked text returning on a new account), Scam patterns (shapes combined as independent hints), Bot shape (keyboard-mashing, template spam, channel waves), Evasion tricks, Lookalike names.
+- **Safe by design.** Every new detector starts in **Shadow**: it runs and is logged but never changes what happens in chat. Agreeing detectors count for less each time, and intelligence alone can never reach the timeout score, so it cannot time out or ban anyone by itself. A failing detector is skipped, never fatal. With everything in shadow, verdicts are identical to 1.1.5 (tested).
+- **It learns from you.** Approve teaches "spam", Reject teaches "fine", "Teach the bot" gives a deliberate lesson, and ordinary messages from trusted chatters teach "fine" slowly. Every lesson is stored and can be forgotten; accuracy is measured honestly (each message is guessed before it is learned). Demo decisions never teach it unless you allow it.
+
+### Dashboard: Settings, Knowledge
+- **Overview**: the state of the bot's mind and the one most useful next step.
+- **Packs**: browse and search every pack, switch packs on or off, add your own entries, mute entries you do not want, see where each pack's knowledge came from.
+- **Detectors**: mode, sensitivity and most points for each, and **Try it here**, which shows every detector's opinion on any message, even ones that are Off.
+- **Learning**: lessons, accuracy over time, the words it distrusts and trusts, teach by pasting a message, forget one lesson or all of them, and what it may learn from.
+- **Shadow report**: what detectors would have done, how often your own decisions agreed, and a one-tap "Switch to Active" when one is mostly right.
+- **Moderation, History**: "Why and teach" explains why a message was flagged, shows what each detector thinks, and lets you teach the bot.
+- Command palette: Open Knowledge, Shadow report, Teach the bot, Knowledge packs.
+
+### API
+New under `/api/intel/`: `overview`, `packs`, `packs/{id}/enable`, `packs/{id}/entries` (GET, POST, DELETE), `packs/{id}/mute`, `test`, `learning`, `examples`, `examples/{id}` (DELETE), `learning/reset`, `teach`, `shadow`. Verdicts gain a `shadow` list. New tables: `intel_examples`, `intel_shadow`, `intel_packs`, `intel_user`.
+
+### Settings
+New `INTEL_*` settings (editable in the dashboard). `.env.example` regenerated.
+
+### Technical
+- New `app/intel/` package: `text.py`, `knowledge/`, `detectors/` (one file each), `service.py`, `store.py`. About 0.7 ms per message with every detector on.
+- 25 new tests (`tests/test_intel.py`, plus two API tests). Version bumped to 1.1.6.
+
+## 1.1.5
+
+### Quota
+- **Resets on Pacific Time, shown in your time.** YouTube resets the daily quota at midnight Pacific, which moves with daylight saving. The backend now sends the exact reset moment (`quota.resets_at`) and the Desk shows it on your own clock, e.g. "11:00 AM Nairobi time (in 5h 12m)". It is 11:00 in Nairobi while the US is on standard time and 10:00 in summer. The count drops to 0 by itself: the dashboard refreshes the moment the reset passes.
+- **"Fix count" removed** from Bot status. (`POST /api/youtube/quota` still exists for scripts.) The side-bar quota meter now says when it resets.
+
+### Moderation tools, rebuilt
+- **Try a message** is now a test lab. It scores as you type, shows a verdict (Allowed, Flagged, Would be deleted, timed out or banned), a score ladder with your flag, delete, timeout and ban limits, and each check that fired in plain words. It says what would happen in your current moderation mode, lets you pick who sent it (viewer, member, regular, mod), has example messages, and offers **Block this phrase** when a message slips through.
+- **Blocked phrases**: one clear add box, phrase or pattern, and what a match should do (Standard, Flag, Delete, Time out). **Add several at once**, two **starter packs** of common spam lines, filters (All, On, Off, Patterns), search, a switch per phrase, **Undo** after removing, and **Copy every phrase**.
+- API: `GET /api/blacklist` and `POST /api/moderation/test` now include `thresholds` (and `mode` on the test).
+
+### Manage
+- **Notebook**: a real composer (auto-growing, tag suggestions, Ctrl+Enter), templates (Stream plan, Ideas, Shout-outs), **checklists** (start a line with `[ ]`; tick boxes save instantly with a progress bar), links become clickable, **edit in place**, **Undo** after delete, pinned notes in their own section, tags filter, date filter behind one button. Reminders get a **Next up** card, live countdowns, and sit in their own tab on phones.
+- **Community**: a quote spotlight with **Another**, one-tap copy of `!quote N`, avatars for regulars, **Add several regulars at once**, a two-tap confirm for deletes (quote numbers are used in chat, so they have no Undo), counts, and real search.
+- **Insights**: change versus the period before on Messages and Flagged, **What stood out** (plain sentences), **Busiest hours**, ranked chatters with avatars and share, and readable names everywhere ("Blocked phrase", "Viewers", "What the bot did").
+- **Demo**: scenarios grouped by what they test, each with what you should see and how long it takes, a running indicator, an "Open Desk" shortcut, a calmer background-chat switch, and a confirmed Clean up. The page no longer flickers while it polls.
+- **Command palette** gains New note, Set a reminder, Add a quote and Test a message.
+
+### Technical
+- New: `pages/widgets.ts`, `pages/modtools.ts`, `manage.css`. `toastAction` (a toast with Undo) in `dom.ts`.
+- Tests added for the reset moment (including the clock-change night) and for the new API fields.
+- Version bumped to 1.1.5.
+
+## 1.1.4
+
+### Fixes
+- **YouTube quota that never reset.** The number shown could stay at yesterday's total whenever the bot was idle, because the daily roll-over only happened inside the live loop. It is now worked out from the current Pacific-time day every time it is read, so it drops to 0 at the reset. The Desk status card shows "Resets in 5h 12m".
+- **Quota used with no stream.** While live mode waited for a stream, SavahBot kept looking for it. The search budget for other channels was kept only in memory, so every restart gave it a fresh allowance. It is now stored in the database. Defaults are gentler: own-channel check every 180s (was 90s), search for another channel every 900s (was 600s) and at most 10% of the daily quota (was 25%). Set `YOUTUBE_VIDEO_ID` to skip searching completely. The YouTube loop only runs in live mode, so Demo never adds to the count.
+- **Quota is an estimate, and now says so.** YouTube gives apps no way to read the real remaining quota (only the Google Cloud Console shows it), so SavahBot counts what it spends. The card says "(estimate)" and has a **Fix count** button to type the number from the Console, or start again from 0. API: `POST /api/youtube/quota {"used": n}`.
+- **Chat no longer shows the bot's internals.** Moderated lines used to print the verdict, the score and the exact rule matches (including blacklist words). The feed now shows a small label such as "Blocked · banned phrase, link". Full details stay on the Moderation page.
+- **More tab icon** is now the three-line menu instead of the same grid as Desk.
+
+## 1.1.3
+
+### Fixes
+- **Expand no longer lags or freezes the phone.** The chat card used to animate its size and position while live chat kept arriving, forcing a re-layout every frame, and blurred the whole screen behind it. It now appears with a short fade and slide (no blur, no size animation), and chat auto-scroll is batched to once per frame.
+- **One tap to close.** The expand/collapse button works on a single tap in both directions. The hidden double-click on the title bar is removed, and a quick re-tap during the animation can no longer leave the card stuck.
+- **Close button always visible.** On phones the tool row could scroll the expand/close button off the right edge. It is now pinned outside the scrolling tools and reads "Close" when expanded.
+- **Expanded chat now really closes.** Closing tried to move the waiting list inside itself, which throws and stopped the card from closing (the icon flipped but the card stayed). Fixed, and closing can no longer be blocked by an error. The Close button keeps its icon and label side by side on phones.
+- **Chat card polish.** Rounder, calmer card with a clearer header and input bar, softer rows and larger touch targets for the expand button.
+
+## 1.1.2
+
+### Redesign
+- **More is now a real page.** On phones the More tab opens a full hub instead of a small sheet: a live status card with the Demo/Live switch, searchable Manage and System sections with live counts (notes, reminders, quotes, regulars, setup progress), theme, search, shortcuts and sign out. It works on tablets and desktops too (`#/more`, shortcut `g` then `o`).
+- **Manage and System feel like one place.** Notebook, Community, Insights and Demo (Manage) and Setup and Settings (System) share a switcher at the top, so you can move between them in one tap on any screen size.
+- **Setup rebuilt as a guided stepper.** Overview with a progress ring and a "Next up" button, then Addresses, YouTube, Telegram and Variables as separate steps with their own navigation (a side list on desktop, a scrolling step bar on phones), done/needs-attention marks, Back and Next buttons, and links that open a given step (`#/setup?step=youtube`). The two checks on the YouTube step (Verify access, Run check) sit where they are needed. A "only what is missing" filter was added to Variables.
+- **Desk chat zooms to fill the screen.** Click the chat title bar, the expand button, or press `F`: the card grows from where it sits to fill the workspace (the whole screen on phones) and shrinks back to the same spot with Esc. Expanded, it adds text size controls, a live messages-per-minute pill and the waiting-for-you list beside the chat (a slide-in panel on narrow screens). Respects reduced motion.
+- Notebook: grid or list view, newest/oldest order, copy a note, show when it was written.
+- Community: one search box for quotes and regulars.
+
+### Search and dates
+- **Date filters** (Any time, Today, Yesterday, 7 days, 30 days, or a custom From/To) now exist in: Moderation history, the Desk chat (searches the saved chat for that range, with a Back to live button), Notifications and Notebook.
+- Moderation history is filtered on the server (outcome, text, dates) and has Load more, so older actions are reachable. New API: `GET /api/moderation/history?since=&until=&q=&status=&offset=` and `GET /api/chat/search?q=&since=&until=&verdict=`. Times are epoch seconds; `until` is exclusive.
+
+### Telegram
+- Rich cards: bold headings, status meters, quoted chat lines, icons. Approval requests, stream start/end, flags and reminders were restyled.
+- **Tap menu.** `/menu` (or `/start`) opens buttons for Status, Waiting, Stats, Modes, Notes, Reminders, Recent actions and Help. Buttons edit the same message in place, so the chat stays tidy. Demo/Live and Off/Suggest/Auto switch with one tap.
+- New `/find <text> [date]` searches saved chat and `/history [date] [outcome]` lists what the bot did. Date words: `today`, `yesterday`, `week`, `month`, `3d`, `12h`, `2026-11-05`, `2026-11-01..2026-11-05` (in your timezone).
+- Formatting never loses a message: if Telegram rejects the formatted version it is resent as plain text. Anything typed by viewers is escaped.
+- Approve/Reject buttons now read "✅ Approve" and "❌ Reject".
+
+### Technical
+- Version is defined once in `frontend/src/version.ts` and `backend/app/__init__.py`.
+- New styles live in `frontend/src/redesign.css` (palette unchanged). No database changes.
+
+## 1.1.1
+
+### Fixes
+- **Sheets open at the top.** The More sheet (and other sheets) no longer scroll to the middle when opened.
+- **Flagged filter.** Flagged on the Desk now shows everything moderation reacted to (it matches the Flagged number); Blocked shows the part that needed action. Both show counts.
+- **Demo and Live no longer mix.** Pages redraw when you switch mode. Chat, waiting approvals, history and the "waiting" count now belong to the mode you are in (backend and dashboard). The chat-line counter restarts on a mode switch.
+- Removed the duplicate theme button from the top bar (it stays in the sidebar and in More).
+
+### New
+- **Notification center.** The bell now opens its own panel (stream start and end, reminders, failed actions, expired approvals, YouTube and Telegram problems, quota warnings) with unread badge, filters, mark all read and clear. Moderation approvals stay under Moderation.
+- **Timers rebuilt.** A time and a number of chat lines are each optional (at least one is required). When both are set choose "both must happen" or "whichever comes first". Repeat, post once, or post a set number of times. Presets, a plain-language summary, "Post now", and timers that finish switch themselves off. Existing timers keep working unchanged; the database is upgraded automatically on start.
+- **Auto-replies (new foundation).** When a viewer sends an exact phrase, or a message containing a word, the bot answers. Commands always win. Per-rule user level, cooldowns, optional @mention and $(variables). API: `/api/triggers`. Settings: `TRIGGERS_ENABLED`, `TRIGGER_DEFAULT_COOLDOWN`, `TRIGGER_USER_COOLDOWN`.
+- **New status card** with a distinct icon for Demo, Standby and Live (no more orange lamp) and a redesigned Demo / Live switch; the phone status pill matches.
+- Commands page is now tabs: Commands, Auto-replies, Timers.
+
+Version bumped to 1.1.1.
+
+## 1.1.0
+
+### Dashboard redesign (frontend only, no API or database changes)
+
+- **Adaptive layout.** Full sidebar on desktop, icon rail on tablets, and on phones a top bar with a bottom tab bar plus a "More" sheet. Safe-area aware, 44 px touch targets, 16 px inputs (no iOS zoom), tables turn into cards on phones, forms open as bottom sheets.
+- **New logo** (transparent background, SVG, inline and as app icons), favicon, Apple touch icon and an installable web app manifest ("Add to Home Screen"). Logo files are also in `branding/`.
+- **All emoji and glyph icons replaced** by a built-in SVG icon set.
+- **Charts and graphs.** Insights now has KPI cards with trend lines, an interactive area chart (hover or touch), donut charts (chatter levels, moderation outcomes), bar charts, peak and average rate, and CSV export. The Desk shows a live chat-rate trend and a YouTube quota ring.
+- **Desk:** KPI strip, chat filters (all, flagged, blocked), chat search, pause and resume, "Latest" jump button, and a bot status card (YouTube, Telegram, database).
+- **Moderation:** mode picker cards, history filters, search and CSV export, phrase search, and a tester that shows each signal as a weighted bar.
+- **Commands:** search, inline on/off switches, tap-to-insert variables, editor in a sheet.
+- **Notebook:** note cards, pinned first, search and tag filter, quick reminder presets.
+- **Setup:** progress checklist. **Settings:** "changed from default only" filter and remembered open groups.
+- **Command palette** (Ctrl or Cmd + K, or `/`): jump to any page, switch mode, change theme, run demo scenarios. Shortcuts: `g` then `d m c n u i x s t`, `?` for help.
+- **Theme switch:** auto, light or dark, remembered, no flash on load. Colours and accent unchanged; no glows.
+- Sign-in screen redesigned.
+
+Version bumped to 1.1.0 (backend `__version__`, dashboard `package.json`).
+
+## 1.0.0
+
+### YouTube safety fixes on top of the account / target-channel work
+
+- **Moderator identity fails closed.** When `YOUTUBE_MODERATOR_ACCOUNT` is set, SavahBot no longer monitors a chat or performs any action unless the signed-in account has been confirmed to match. A failed, skipped or empty identity lookup used to be treated as a pass. It is re-checked every 30 s while blocked, and also when the setting is changed mid-stream (the stream is released).
+- **Sign-in is verified before it is kept.** The OAuth callback asks Google which account signed in and only then saves the login. A wrong or unconfirmable account is not saved and a previous working connection is left unchanged. Changing to a different account is explicit and releases the attached stream, learned permissions and cooldowns.
+- **Refresh tokens are never mixed between accounts.** A sign-in that returns no refresh token is refused (it used to keep the new account's access token with the old account's refresh token). A token refresh that was in flight when the login changed is discarded.
+- **Deletion safeguards restored.** A permission refusal stops a batch of deletes (and the ban that follows), and starts a five-minute cooldown per kind of action (`YOUTUBE_PERMISSION_RETRY_SECONDS`) with no requests and no quota spent. Protected-user refusals (owner or another moderator) are not treated as permission denials.
+- **`chatEndedEvent`** now ends monitoring immediately.
+- **Exponential backoff** (30 s up to 5 min) for repeated unexpected errors, reset on success.
+- **Verify access**: `POST /api/youtube/verify` and a Setup page button. It never searches (100 units) and never moderates; delete and ban are reported as unverified until YouTube answers a real action.
+- Unchanged on purpose: `@handle` targets, pinned video links, the search budget cap, and livestream discovery.
+
+New setting: `YOUTUBE_PERMISSION_RETRY_SECONDS` (default 300). No database changes.

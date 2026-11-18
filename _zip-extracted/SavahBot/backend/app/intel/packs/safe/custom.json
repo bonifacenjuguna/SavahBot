@@ -1,0 +1,13 @@
+{
+ "id": "safe.custom",
+ "category": "safe",
+ "kind": "phrases",
+ "title": "Your own safe phrases",
+ "description": "Add phrases that must never be flagged by the intelligence layer (inside jokes, game terms, names).",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "default_mode": "live",
+ "entries": []
+}

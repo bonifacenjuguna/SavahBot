@@ -1,0 +1,144 @@
+{
+ "id": "scams.contact",
+ "category": "scams",
+ "kind": "phrases",
+ "title": "Off-platform contact bait (WhatsApp, Telegram, DM)",
+ "description": "Lines that pull viewers out of the chat to a private number or channel, where the real scam happens.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "scam",
+ "weight": 40,
+ "fuzzy": true,
+ "default_mode": "live",
+ "entries": [
+  "whatsapp me",
+  "whatsapp us",
+  "message me on whatsapp",
+  "text me on whatsapp",
+  "chat me on whatsapp",
+  "dm me on whatsapp",
+  "contact me on whatsapp",
+  "contact on whatsapp",
+  "reach me on whatsapp",
+  "add me on whatsapp",
+  [
+   "my whatsapp",
+   20
+  ],
+  [
+   "whatsapp number",
+   30
+  ],
+  "telegram me",
+  "message me on telegram",
+  "text me on telegram",
+  "dm me on telegram",
+  "contact me on telegram",
+  "add me on telegram",
+  "join my telegram",
+  "join our telegram",
+  [
+   "join telegram",
+   30
+  ],
+  [
+   "my telegram",
+   20
+  ],
+  [
+   "telegram channel",
+   25
+  ],
+  [
+   "telegram group",
+   25
+  ],
+  "signal me",
+  "text me at",
+  "call me on",
+  "email me at",
+  "contact me at",
+  [
+   "contact me for",
+   30
+  ],
+  [
+   "reach out to me",
+   25
+  ],
+  [
+   "write me on",
+   30
+  ],
+  "wickr me",
+  [
+   "dm me",
+   15
+  ],
+  [
+   "dm for",
+   30
+  ],
+  [
+   "dm to",
+   25
+  ],
+  [
+   "pm me",
+   15
+  ],
+  [
+   "inbox me",
+   30
+  ],
+  [
+   "inbox for",
+   30
+  ],
+  "check my bio",
+  "check my profile",
+  "check my about",
+  "click my profile",
+  "click my name",
+  "click on my profile",
+  "link in my bio",
+  "link in bio",
+  "link in description",
+  "link in my channel",
+  "visit my profile",
+  "see my profile",
+  [
+   "my profile for",
+   40
+  ],
+  "text me for",
+  "message me for",
+  "contact me now",
+  "contact us now",
+  "chat me up",
+  "whatsapp for",
+  "telegram for",
+  "whatsapp to",
+  "telegram to",
+  "on whatsapp now",
+  "on telegram now",
+  [
+   "re:(?:whatsapp|telegram|signal)\\s*[:\\-]?\\s*\\+?\\d[\\d\\s\\-]{7,}",
+   55
+  ],
+  [
+   "re:\\+\\d{2,3}[\\s\\-]?\\d{2,3}[\\s\\-]?\\d{3}[\\s\\-]?\\d{3,4}",
+   35
+  ],
+  [
+   "re:\\b0[17]\\d{2}[\\s\\-]?\\d{3}[\\s\\-]?\\d{3}\\b",
+   30
+  ],
+  [
+   "re:\\b(?:wa\\.me|t\\.me|telegram\\.me)/[\\w+\\-]+",
+   50
+  ]
+ ]
+}

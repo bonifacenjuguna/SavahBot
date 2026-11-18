@@ -1,0 +1,26 @@
+{
+ "id": "links.scam_patterns",
+ "category": "links",
+ "kind": "domain_regex",
+ "title": "Scam-looking web addresses",
+ "description": "Patterns in the address itself: robux-gift, free-nitro, btc-doubler, elon-giveaway and friends.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "role": "pattern",
+ "weight": 45,
+ "default_mode": "live",
+ "entries": [
+  "re:(?:free|get|claim)[-_.]?(?:robux|vbucks|v-bucks|nitro|skins|gems|coins)",
+  "re:(?:robux|vbucks|nitro|skins)[-_.]?(?:gen|generator|free|gift|claim|hack)",
+  "re:(?:claim|get|win)[-_.]?(?:prize|reward|gift|giveaway)",
+  "re:(?:double|doubler|multiply)[-_.]?(?:btc|eth|bitcoin|crypto|usdt)",
+  "re:(?:btc|eth|bitcoin|crypto|usdt)[-_.]?(?:giveaway|doubler|double|airdrop|bonus)",
+  "re:(?:elon|musk|tesla|spacex|mrbeast)[-_.]?(?:giveaway|btc|crypto|live|gift|bonus)",
+  "re:(?:youtube|google|paypal|binance|coinbase|metamask|discord|steam|roblox)[-_.]?(?:support|verify|secure|login|signin|giveaway|gift|bonus|rewards?|wallet|help|team|official)",
+  "re:(?:verify|secure|login|signin|account|support)[-_.]?(?:youtube|google|paypal|binance|coinbase|metamask|discord|steam|roblox)",
+  "re:(?:airdrop|wallet)[-_.]?(?:connect|claim|verify|validate|sync)",
+  "re:(?:aviator|betting|jackpot)[-_.]?(?:hack|predictor|signals?|bot|tips)"
+ ]
+}

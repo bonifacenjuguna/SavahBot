@@ -1,0 +1,49 @@
+name: Protect releases
+
+# Releases are write-once. A new version folder under releases/<product>/<version>/ can be ADDED, but a file in an
+# existing version folder can never be changed, deleted or renamed. Make this check required (docs/RELEASING.md,
+# "Turn on the protection") and Git will refuse to merge anything that tampers with a published APK.
+
+on:
+  pull_request:
+    paths: ['releases/**']
+  push:
+    branches: [main, master]
+    paths: ['releases/**']
+  workflow_dispatch:
+
+jobs:
+  immutable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Existing release files must not change
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="origin/${{ github.base_ref }}...HEAD"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "New branch: nothing to compare."; exit 0
+            fi
+            RANGE="$BEFORE..${{ github.sha }}"
+          else
+            echo "Manual run: only the checksum check below applies."; exit 0
+          fi
+          # M = modified, D = deleted, T = type changed. --no-renames makes a rename show as delete + add, so it is caught too.
+          BAD=$(git diff --name-status --no-renames --diff-filter=MDT "$RANGE" -- releases/ | awk -F'\t' '$2 ~ /^releases\/[^\/]+\/[^\/]+\//' || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::Published releases are write-once. These changes are not allowed:"
+            echo "$BAD"
+            echo "To ship a fix, release a NEW version (new folder). See docs/RELEASING.md."
+            exit 1
+          fi
+          echo "OK: only additions under releases/."
+
+      - name: Checksums and layout
+        run: python3 scripts/check_releases.py

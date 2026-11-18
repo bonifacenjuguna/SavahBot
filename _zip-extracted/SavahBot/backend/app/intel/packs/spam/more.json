@@ -1,0 +1,125 @@
+{
+ "id": "spam.more",
+ "category": "spam",
+ "kind": "phrases",
+ "title": "More spam phrases",
+ "description": "Extra bait for adult-link bots, sub-for-sub and self-promotion.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in (merged from the 1.1.9 knowledge packs)",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "spam",
+ "weight": 40,
+ "fuzzy": true,
+ "default_mode": "live",
+ "entries": [
+  [
+   "hot girls in my profile",
+   85
+  ],
+  [
+   "18 link",
+   60
+  ],
+  [
+   "adult content in my profile",
+   85
+  ],
+  [
+   "click here for 18",
+   70
+  ],
+  [
+   "single girl looking",
+   70
+  ],
+  [
+   "hook up tonight",
+   75
+  ],
+  [
+   "onlyfans leak",
+   80
+  ],
+  [
+   "leaked photos",
+   65
+  ],
+  [
+   "private pics",
+   65
+  ],
+  [
+   "pics in my profile",
+   70
+  ],
+  [
+   "come see my",
+   35
+  ],
+  [
+   "my profile",
+   25
+  ],
+  [
+   "see my private",
+   65
+  ],
+  [
+   "promo for promo",
+   50
+  ],
+  [
+   "come watch my stream",
+   40
+  ],
+  [
+   "support me back",
+   40
+  ],
+  [
+   "follow me back",
+   30
+  ],
+  [
+   "view my profile",
+   40
+  ],
+  [
+   "free followers",
+   70
+  ],
+  [
+   "buy viewers",
+   80
+  ],
+  [
+   "primes and viewers",
+   85
+  ],
+  [
+   "bigfollows",
+   85
+  ],
+  [
+   "gain subscribers fast",
+   75
+  ],
+  [
+   "youtube growth service",
+   70
+  ],
+  [
+   "seo services",
+   50
+  ],
+  [
+   "i can promote your channel",
+   70
+  ],
+  [
+   "grow your audience",
+   45
+  ]
+ ]
+}

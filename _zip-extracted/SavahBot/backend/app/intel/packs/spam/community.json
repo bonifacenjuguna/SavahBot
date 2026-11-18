@@ -1,0 +1,16 @@
+{
+ "id": "spam.community",
+ "category": "spam",
+ "kind": "phrases",
+ "title": "Community phrases (live data)",
+ "description": "Phrases brought in by a live-data feed that carries phrase lists. Empty until you add one.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "spam",
+ "weight": 45,
+ "fuzzy": false,
+ "default_mode": "live",
+ "entries": []
+}

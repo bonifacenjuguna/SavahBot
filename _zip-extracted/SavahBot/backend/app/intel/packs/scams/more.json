@@ -1,0 +1,381 @@
+{
+ "id": "scams.more",
+ "category": "scams",
+ "kind": "phrases",
+ "title": "More scam phrases",
+ "description": "Extra scam and fraud wording: crypto doubling, Kenya and East Africa money tricks, account phishing, fake prizes and contact lures. Each phrase has its own strength.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in (merged from the 1.1.9 knowledge packs)",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "scam",
+ "weight": 50,
+ "fuzzy": true,
+ "default_mode": "live",
+ "entries": [
+  [
+   "text me on",
+   40
+  ],
+  [
+   "message me on",
+   35
+  ],
+  [
+   "add me on snapchat",
+   55
+  ],
+  [
+   "my snap is",
+   50
+  ],
+  [
+   "send btc get double",
+   90
+  ],
+  [
+   "send eth get double",
+   90
+  ],
+  [
+   "scan the qr code",
+   55
+  ],
+  [
+   "scan qr code",
+   55
+  ],
+  [
+   "qr code on screen",
+   60
+  ],
+  [
+   "giveaway wallet",
+   70
+  ],
+  [
+   "only valid during this stream",
+   80
+  ],
+  [
+   "only valid during this livestream",
+   80
+  ],
+  [
+   "limited time giveaway",
+   55
+  ],
+  [
+   "pump group",
+   60
+  ],
+  [
+   "claim your airdrop",
+   70
+  ],
+  [
+   "wallet recovery",
+   70
+  ],
+  [
+   "crypto recovery expert",
+   85
+  ],
+  [
+   "investment manager",
+   55
+  ],
+  [
+   "verified by tesla",
+   90
+  ],
+  [
+   "nft giveaway",
+   60
+  ],
+  [
+   "whitelist spot",
+   45
+  ],
+  [
+   "please reverse",
+   55
+  ],
+  [
+   "reverse the money",
+   65
+  ],
+  [
+   "m pesa reversal",
+   55
+  ],
+  [
+   "sent to wrong number",
+   70
+  ],
+  [
+   "safaricom customer care",
+   60
+  ],
+  [
+   "safaricom offer",
+   45
+  ],
+  [
+   "double your mpesa",
+   90
+  ],
+  [
+   "mpesa hack",
+   85
+  ],
+  [
+   "mpesa generator",
+   85
+  ],
+  [
+   "increase your fuliza",
+   75
+  ],
+  [
+   "fuliza limit increase",
+   75
+  ],
+  [
+   "fuliza boost",
+   75
+  ],
+  [
+   "loan without collateral",
+   65
+  ],
+  [
+   "instant loan no crb",
+   75
+  ],
+  [
+   "kra refund",
+   75
+  ],
+  [
+   "kra tax refund",
+   75
+  ],
+  [
+   "government grant",
+   55
+  ],
+  [
+   "hustler fund limit",
+   65
+  ],
+  [
+   "daily odds",
+   45
+  ],
+  [
+   "work from home earn",
+   60
+  ],
+  [
+   "job vacancy whatsapp",
+   70
+  ],
+  [
+   "join our whatsapp group",
+   60
+  ],
+  [
+   "join whatsapp group",
+   50
+  ],
+  [
+   "join telegram group",
+   50
+  ],
+  [
+   "tuma pesa upate",
+   85
+  ],
+  [
+   "tuma kwa hii number",
+   85
+  ],
+  [
+   "tuma kwa namba hii",
+   85
+  ],
+  [
+   "nimetuma pesa kimakosa",
+   85
+  ],
+  [
+   "nimekutumia pesa kimakosa",
+   85
+  ],
+  [
+   "rudisha pesa",
+   60
+  ],
+  [
+   "tafadhali rudisha",
+   50
+  ],
+  [
+   "bonyeza kiungo",
+   60
+  ],
+  [
+   "jiunge whatsapp",
+   55
+  ],
+  [
+   "jiunge telegram",
+   55
+  ],
+  [
+   "pesa bure",
+   65
+  ],
+  [
+   "bundles bure",
+   60
+  ],
+  [
+   "ofa ya safaricom",
+   55
+  ],
+  [
+   "mikopo ya haraka",
+   55
+  ],
+  [
+   "policy violation notice",
+   70
+  ],
+  [
+   "account recovery",
+   40
+  ],
+  [
+   "reset your password",
+   40
+  ],
+  [
+   "send your password",
+   90
+  ],
+  [
+   "send me your password",
+   95
+  ],
+  [
+   "give me your otp",
+   95
+  ],
+  [
+   "share your otp",
+   95
+  ],
+  [
+   "otp code",
+   35
+  ],
+  [
+   "log in to verify",
+   70
+  ],
+  [
+   "security alert",
+   35
+  ],
+  [
+   "unusual activity",
+   35
+  ],
+  [
+   "monetization removed",
+   60
+  ],
+  [
+   "channel verification",
+   45
+  ],
+  [
+   "partner program",
+   25
+  ],
+  [
+   "2fa code",
+   60
+  ],
+  [
+   "discord nitro giveaway",
+   80
+  ],
+  [
+   "robux giveaway",
+   80
+  ],
+  [
+   "free v bucks",
+   80
+  ],
+  [
+   "gift card giveaway",
+   75
+  ],
+  [
+   "steam gift",
+   45
+  ],
+  [
+   "free steam",
+   55
+  ],
+  [
+   "amazon gift card",
+   50
+  ],
+  [
+   "xbox gift card",
+   55
+  ],
+  [
+   "psn code",
+   45
+  ],
+  [
+   "iphone giveaway",
+   70
+  ],
+  [
+   "winner announced",
+   40
+  ],
+  [
+   "dm to claim",
+   75
+  ],
+  [
+   "message me to claim",
+   75
+  ],
+  [
+   "free premium",
+   55
+  ],
+  [
+   "free spotify",
+   60
+  ],
+  [
+   "free netflix",
+   60
+  ],
+  [
+   "limited giveaway",
+   45
+  ]
+ ]
+}
