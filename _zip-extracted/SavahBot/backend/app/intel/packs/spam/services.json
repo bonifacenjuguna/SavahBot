@@ -1,0 +1,219 @@
+{
+ "id": "spam.services",
+ "category": "spam",
+ "kind": "phrases",
+ "title": "Selling followers, views and services",
+ "description": "Growth sellers, view-bot ads and 'we offer' service spam.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "spam",
+ "weight": 45,
+ "fuzzy": true,
+ "default_mode": "live",
+ "entries": [
+  "buy subscribers",
+  "buy followers",
+  "buy views",
+  "buy likes",
+  "buy subs",
+  "cheap subscribers",
+  "cheap followers",
+  "cheap views",
+  "cheap likes",
+  "boost your channel",
+  "grow your channel",
+  "grow your stream",
+  "promote your channel",
+  "promote your stream",
+  "viewbot",
+  "view bot",
+  "view botting",
+  "sell followers",
+  "sell subscribers",
+  "sell views",
+  "social media growth",
+  "smm panel",
+  "increase your followers",
+  "increase your subscribers",
+  "increase your views",
+  "get more subs",
+  "get more views",
+  "get more followers",
+  "get more subscribers",
+  "get more likes",
+  "gain followers",
+  "gain views",
+  [
+   "organic growth",
+   25
+  ],
+  [
+   "real subscribers",
+   25
+  ],
+  [
+   "real followers",
+   25
+  ],
+  [
+   "real views",
+   25
+  ],
+  "high quality followers",
+  "instant followers",
+  "instant views",
+  "instant subscribers",
+  [
+   "watch hours",
+   25
+  ],
+  "4000 watch hours",
+  [
+   "monetization service",
+   40
+  ],
+  [
+   "monetize your channel",
+   35
+  ],
+  [
+   "channel monetization",
+   35
+  ],
+  [
+   "we sell",
+   30
+  ],
+  [
+   "we offer",
+   25
+  ],
+  [
+   "we provide",
+   25
+  ],
+  [
+   "our services",
+   30
+  ],
+  [
+   "our products",
+   30
+  ],
+  [
+   "i am selling",
+   30
+  ],
+  [
+   "for sale",
+   20
+  ],
+  [
+   "cheap prices",
+   30
+  ],
+  [
+   "best prices",
+   30
+  ],
+  [
+   "discount code",
+   25
+  ],
+  [
+   "promo code",
+   25
+  ],
+  [
+   "use my code",
+   30
+  ],
+  [
+   "coupon code",
+   30
+  ],
+  [
+   "limited offer",
+   35
+  ],
+  [
+   "limited time offer",
+   35
+  ],
+  [
+   "special offer",
+   30
+  ],
+  [
+   "order now",
+   35
+  ],
+  [
+   "buy now",
+   30
+  ],
+  [
+   "shop now",
+   35
+  ],
+  "click to buy",
+  "sale ends",
+  "while stocks last",
+  [
+   "dropshipping",
+   25
+  ],
+  [
+   "wholesale",
+   25
+  ],
+  "bulk order",
+  [
+   "cash on delivery",
+   30
+  ],
+  "whatsapp to order",
+  "dm to order",
+  [
+   "visit our website",
+   35
+  ],
+  [
+   "visit our site",
+   35
+  ],
+  [
+   "visit my website",
+   35
+  ],
+  [
+   "visit my site",
+   35
+  ],
+  [
+   "check our website",
+   35
+  ],
+  [
+   "check my website",
+   35
+  ],
+  [
+   "our website",
+   25
+  ],
+  [
+   "free trial",
+   20
+  ],
+  "free consultation",
+  "youtube promotion",
+  "promotion services",
+  "promotion service",
+  "channel promotion",
+  "video promotion",
+  "stream promotion"
+ ]
+}

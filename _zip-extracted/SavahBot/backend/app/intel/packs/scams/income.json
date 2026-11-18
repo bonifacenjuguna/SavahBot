@@ -1,0 +1,228 @@
+{
+ "id": "scams.income",
+ "category": "scams",
+ "kind": "phrases",
+ "title": "Get-rich and fake-job pitches",
+ "description": "Work-from-home offers, 'earn daily' pitches, trading mentors and loan offers.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "scam",
+ "weight": 40,
+ "fuzzy": true,
+ "default_mode": "live",
+ "entries": [
+  [
+   "work from home",
+   35
+  ],
+  [
+   "earn money online",
+   45
+  ],
+  "earn from home",
+  "make money online",
+  "make money from home",
+  "make money fast",
+  "make money easily",
+  "make quick money",
+  [
+   "get rich",
+   30
+  ],
+  "get rich quick",
+  [
+   "easy money",
+   30
+  ],
+  [
+   "online job",
+   35
+  ],
+  [
+   "online jobs",
+   35
+  ],
+  [
+   "part time job",
+   30
+  ],
+  [
+   "job offer",
+   25
+  ],
+  [
+   "hiring now",
+   30
+  ],
+  [
+   "earn daily",
+   40
+  ],
+  "earn per day",
+  "earn per hour",
+  "earn weekly",
+  [
+   "earn up to",
+   35
+  ],
+  [
+   "earn extra",
+   30
+  ],
+  [
+   "no experience required",
+   40
+  ],
+  [
+   "no experience needed",
+   40
+  ],
+  [
+   "side hustle",
+   25
+  ],
+  "dm for details",
+  "dm to learn",
+  [
+   "i can teach you",
+   35
+  ],
+  [
+   "i will teach you",
+   35
+  ],
+  [
+   "i teach",
+   25
+  ],
+  [
+   "mentorship program",
+   35
+  ],
+  [
+   "re:\\b(?:made|earned|make|earn|earning|making)\\s+\\$\\s?\\d",
+   40
+  ],
+  [
+   "quick loan",
+   40
+  ],
+  [
+   "instant loan",
+   40
+  ],
+  [
+   "fast loan",
+   40
+  ],
+  "loan offer",
+  "loan approved",
+  "no collateral loan",
+  "loan without",
+  "get a loan",
+  [
+   "need a loan",
+   25
+  ],
+  "urgent loan",
+  [
+   "personal loan",
+   30
+  ],
+  [
+   "business loan",
+   30
+  ],
+  "credit repair",
+  "debt relief",
+  "pay off your debt",
+  "investment opportunity",
+  "business opportunity",
+  [
+   "network marketing",
+   35
+  ],
+  [
+   "multi level marketing",
+   40
+  ],
+  [
+   "referral bonus",
+   35
+  ],
+  [
+   "register and get",
+   40
+  ],
+  [
+   "sign up and get",
+   40
+  ],
+  [
+   "sign up bonus",
+   35
+  ],
+  [
+   "welcome bonus",
+   30
+  ],
+  [
+   "deposit bonus",
+   40
+  ],
+  [
+   "first deposit",
+   35
+  ],
+  [
+   "minimum deposit",
+   40
+  ],
+  [
+   "make money while you sleep",
+   45
+  ],
+  [
+   "re:\\b(?:earn|make|making|earning)\\s+\\$?\\d[\\d,]*\\s*(?:usd|dollars|ksh|kes|bob|\\$)?\\s*(?:a|per|every|each)\\s+(?:day|week|hour|month)",
+   50
+  ],
+  [
+   "dollars a day",
+   35
+  ],
+  [
+   "dollars per day",
+   35
+  ],
+  [
+   "dollars a week",
+   35
+  ],
+  [
+   "dollars every week",
+   35
+  ],
+  [
+   "dollars daily",
+   35
+  ],
+  [
+   "trading method",
+   35
+  ],
+  [
+   "simple method",
+   30
+  ],
+  [
+   "this method",
+   25
+  ],
+  [
+   "i will show you how",
+   30
+  ]
+ ]
+}

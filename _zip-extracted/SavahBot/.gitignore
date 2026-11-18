@@ -1,0 +1,14 @@
+# Repo-wide. backend/, frontend/ and android/ have their own .gitignore files as well.
+.DS_Store
+Thumbs.db
+*.log
+
+# Signing material and local build output must never be committed.
+*.jks
+*.keystore
+keystore.properties
+local.properties
+
+# Loose APKs are build output. The only APKs that belong in Git are the signed releases under releases/.
+*.apk
+!releases/**/*.apk

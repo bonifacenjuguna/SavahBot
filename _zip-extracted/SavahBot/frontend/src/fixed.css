@@ -1,0 +1,247 @@
+/* SavahBot 1.4.3 - the chat controls drawer, equal-height Waiting card, and cards that scroll inside themselves (taller, with pinned footers). Loaded last. */
+
+/* ------------------------------------------------------------------ one height for the chat card and the Waiting card
+ * --desk-h is the height of the Chat card. The Waiting card uses the same number, so the two always match and a long list
+ * scrolls inside its card instead of stretching the page. */
+:root { --desk-h: max(420px, calc(100dvh - var(--topbar-h) - var(--tabbar-h) - 120px)); }
+@media (min-width: 720px) { :root { --desk-h: max(500px, calc(100dvh - var(--topbar-h) - 120px)); } }
+@media (min-width: 1000px) { :root { --desk-h: clamp(520px, calc(100dvh - var(--topbar-h) - 40px), 920px); } }
+
+/* phones and tablets: the chat card is a fixed box too (on a computer desktop.css already does this with the same height) */
+@media (max-width: 999px) {
+  .cols > .chat-card:not(.zoomed):not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); }
+  .cols > .chat-card:not(.zoomed) > header { flex: none; }
+  .cols > .chat-card:not(.zoomed) .chat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .chat-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .feed-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .cols > .chat-card:not(.zoomed) .feed { height: auto; flex: 1; min-height: 0; }
+  .cols > .chat-card:not(.zoomed) .say, .cols > .chat-card:not(.zoomed) .chips { flex: none; }
+}
+
+/* Waiting for you (Desk card beside the chat): a fixed box the same size as the Chat card, the header stays put and the list scrolls inside it.
+ * The expanded chat (zoom) moves the same .q-scroll list into its own panel and is not touched by these rules.
+ * Note: the page marks every card that is not the open tab with data-hidden="true", but that mark only hides a card below 1000px (styles.css),
+ * so on a computer the rules must not skip a card because of it (that was why this card grew without end). */
+@media (max-width: 999px) {
+  .block.desk-queue:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); max-height: var(--desk-h); min-height: 0; }
+}
+@media (min-width: 1000px) {
+  /* the very same height the Chat card has on a computer (desktop.css) */
+  .block.desk-queue { display: flex !important; flex-direction: column; height: clamp(520px, calc(100dvh - var(--topbar-h) - 40px), 920px) !important; min-height: 520px; max-height: 920px; }
+}
+.desk-queue > header { flex: none; }
+.desk-queue > .q-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: auto; scrollbar-width: thin; }
+.desk-queue > header .chip[hidden] { display: none; }
+.q-scroll .ap-bulk { position: sticky; top: 0; z-index: 1; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+
+/* Waiting for you (Moderation) and History below a computer-width screen (a computer already had this) */
+@media (max-width: 999px) {
+  .mod-grid > .mod-queue:not([data-hidden="true"]) { display: flex; flex-direction: column; height: var(--desk-h); }
+  .mod-queue > header { flex: none; }
+  .mod-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .ap-bulk { position: sticky; top: 0; z-index: 1; box-shadow: 0 1px 0 var(--line); }
+  .mod-history .table-wrap { max-height: var(--fs-max); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+}
+
+/* ------------------------------------------------------------------ any other card that can grow without limit (class: fixed-scroll)
+ * 1.4.3: these cards were too short (about 70% of the screen, 640px at most) and their last lines sat hard against the bottom edge.
+ * Now a card may use nearly the whole visible height (--fs-max), a short list still takes only the room it needs, the body keeps its own scroll,
+ * and the last row has breathing room. A card with a footer keeps it pinned under the scrolling body so it is never cut off. */
+:root { --fs-max: clamp(420px, calc(100dvh - var(--topbar-h, 56px) - var(--tabbar-h, 0px) - 28px), 960px); }
+.block.fixed-scroll:not([hidden]):not([data-hidden="true"]) { display: flex !important; flex-direction: column; max-height: var(--fs-max); position: relative; }
+.block.fixed-scroll > header { flex: none; }
+.block.fixed-scroll > :not(header):not(footer):not(.arr-handle) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; scroll-padding-bottom: 12px; }
+/* 1.4.3 Activity log: on a computer the column layout (desktop.css) forced these cards to display: block, so the list spilled out of the card and
+ * drew over the "Keeping and alerts" card below it. display: flex is now forced, the card clips what is inside it, and it takes the whole row. */
+.sp-card.sp-scroll { display: flex !important; flex-direction: column; gap: 10px; max-height: var(--fs-max); min-height: min(420px, var(--fs-max)); overflow: hidden; column-span: all !important; break-inside: avoid; }
+.sp-card.sp-scroll > :first-child { flex: none; }
+.sp-card.sp-scroll > :not(:first-child) { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; }
+
+/* a taller card for the lists people work in (Commands, Auto-replies, Timers): a comfortable minimum, the whole row on a computer */
+.block.tall:not([hidden]) { column-span: all !important; min-height: min(480px, var(--fs-max)); }
+.block.tall > .empty, .block.tall .empty { min-height: 200px; justify-content: center; }
+.block.tall .toolbar { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.block.tall .table-wrap { padding-bottom: 4px; }
+.block.tall .cards-grid { padding-bottom: 18px; align-items: start; }
+
+/* the pinned footer: a one-line summary on the left, a "scroll for more" hint on the right while there is more below */
+.block > .card-foot {
+  flex: none; position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 9px 16px; min-height: 40px; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 2.5%, var(--panel));
+}
+.card-foot .cf-more { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--accent); opacity: 0; transform: translateY(-2px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.block[data-more="true"] > .card-foot .cf-more { opacity: 1; transform: none; }
+.block[data-more="true"] > .card-foot .cf-more svg { animation: cf-bob 1.6s ease-in-out infinite; }
+@keyframes cf-bob { 50% { transform: translateY(3px); } }
+/* a soft fade over the bottom of the scrolling body while more is hidden below it; it never takes clicks */
+.block.fixed-scroll > .card-foot::before, .block.fixed-scroll:not(:has(> .card-foot))::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 30px; pointer-events: none; opacity: 0; transition: opacity .2s;
+  background: linear-gradient(to bottom, transparent, var(--panel));
+}
+.block.fixed-scroll > .card-foot::before { bottom: 100%; }
+.block.fixed-scroll:not(:has(> .card-foot))::after { bottom: 0; }
+.block.fixed-scroll[data-more="true"] > .card-foot::before, .block.fixed-scroll[data-more="true"]:not(:has(> .card-foot))::after { opacity: 1; }
+@media (max-width: 719px) { .block > .card-foot { padding: 8px 14px; } }
+@media (prefers-reduced-motion: reduce) { .card-foot .cf-more, .block.fixed-scroll > .card-foot::before { transition: none; } .block[data-more="true"] > .card-foot .cf-more svg { animation: none; } }
+
+/* ------------------------------------------------------------------ the chat controls drawer */
+.chat-handle {
+  position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 10px 14px 6px;
+  background: color-mix(in srgb, var(--raised, var(--panel)) 55%, transparent); color: var(--ink); font: inherit; text-align: left;
+  border: 0; border-bottom: 1px solid var(--line); cursor: pointer; flex: none; -webkit-tap-highlight-color: transparent;
+}
+.chat-handle:hover { background: color-mix(in srgb, var(--raised, var(--panel)) 90%, transparent); }
+.chat-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cd-grip { position: absolute; top: 4px; left: 50%; width: 34px; height: 4px; border-radius: 4px; transform: translateX(-50%);
+  background: color-mix(in srgb, var(--ink) 24%, transparent); transition: width .28s cubic-bezier(.2, .8, .2, 1), background .2s; }
+.chat-handle:hover .cd-grip, .chat-handle[aria-expanded="true"] .cd-grip { width: 54px; background: var(--accent); }
+.cd-tag { flex: none; padding: 1px 8px; border-radius: 999px; font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.chat-handle[data-state="live"] .cd-tag { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
+.chat-handle[data-state="demo"] .cd-tag, .chat-handle[data-state="past"] .cd-tag { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.cd-name { font-variant-numeric: tabular-nums; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: .9rem; }
+.cd-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); animation: cd-pulse 2s ease-out infinite; }
+@keyframes cd-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.cd-chev { flex: none; display: inline-flex; color: var(--muted); transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+.chat-handle[aria-expanded="true"] .cd-chev { transform: rotate(180deg); color: var(--accent); }
+
+/* the drawer slides open by animating its row from 0 to its natural height, so nothing is measured in script */
+.chat-drawer { display: grid; grid-template-rows: 0fr; opacity: 0; flex: none; transition: grid-template-rows .34s cubic-bezier(.2, .8, .2, 1), opacity .22s ease; }
+.chat-drawer[data-open="true"] { grid-template-rows: 1fr; opacity: 1; border-bottom: 1px solid var(--line); }
+.cd-inner { min-height: 0; overflow: hidden; transform: translateY(-10px); transition: transform .34s cubic-bezier(.2, .8, .2, 1); }
+.chat-drawer[data-open="true"] .cd-inner { transform: none; }
+.chat-drawer .toolbar { border-bottom: 1px solid var(--line); }
+.chat-drawer .stream-strip { border-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .chat-drawer, .cd-inner, .cd-chev, .cd-grip { transition: none; } .cd-dot { animation: none; } }
+html[data-motion="reduce"] .chat-drawer, html[data-motion="reduce"] .cd-inner, html[data-motion="reduce"] .cd-chev { transition: none; }
+
+/* ------------------------------------------------------------------ the page opens with the layout-button row tucked above the top: scroll up to see it */
+.main.peek { min-height: calc(100dvh + var(--peek, 0px)); }
+
+/* ------------------------------------------------------------------ Moderation: arranging (1.4.2)
+ * Below a computer-width screen the rules column has no box of its own (display: contents, each tool is a tab), so it cannot be dragged there:
+ * its grab bar and outline stay out of the way. The two tools inside it, and the queue and History, can still be arranged. */
+@media (max-width: 999px) {
+  .mod-rules.arr-item { outline: 0; }
+  .mod-rules > .arr-colbar { display: none; }
+}
+
+/* ------------------------------------------------------------------ Backup: restore progress and the passphrase eye (1.4.3) */
+.pw-reveal { position: relative; display: block; }
+.pw-reveal > input { width: 100%; padding-right: 46px; }
+.pw-eye { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 10px;
+  background: transparent; color: var(--muted); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pw-eye:hover, .pw-eye[aria-pressed="true"] { color: var(--accent); }
+.pw-eye:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.rs-panel { --rs: var(--accent); display: grid; gap: 14px; padding: 16px; border: 1px solid color-mix(in srgb, var(--rs) 35%, var(--line)); border-radius: 16px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--rs) 9%, var(--panel)), var(--panel) 60%); animation: rs-in .35s cubic-bezier(.2, .8, .2, 1); }
+.rs-panel[data-state="done"] { --rs: var(--ok, #1fa971); }
+.rs-panel[data-state="failed"] { --rs: var(--bad, #d64545); }
+@keyframes rs-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.rs-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.rs-headtext { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.rs-title { font-size: 1.05rem; }
+.rs-stage { font-size: .9rem; color: var(--ink); overflow-wrap: anywhere; }
+.rs-time { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rs-ring { --p: 0; flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; position: relative; color: var(--rs);
+  background: conic-gradient(var(--rs) calc(var(--p) * 1%), color-mix(in srgb, var(--ink) 10%, transparent) 0); transition: background .4s; }
+.rs-ring::before { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--panel); }
+.rs-ring > * { position: relative; }
+.rs-pct { font-weight: 800; font-size: .95rem; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rs-panel[data-state="running"] .rs-ring { animation: rs-breathe 2.2s ease-in-out infinite; }
+@keyframes rs-breathe { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--rs) 14%, transparent); } }
+.rs-panel:not([data-state="running"]) .rs-ring > svg { animation: rs-pop .45s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes rs-pop { from { transform: scale(0); } }
+.rs-bar { height: 10px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.rs-fill { height: 100%; width: 0; border-radius: inherit; transition: width .5s cubic-bezier(.2, .8, .2, 1);
+  background: linear-gradient(90deg, var(--rs), color-mix(in srgb, var(--rs) 55%, #fff), var(--rs)); background-size: 200% 100%; animation: rs-shine 1.6s linear infinite; }
+@keyframes rs-shine { to { background-position: -200% 0; } }
+.rs-list { display: grid; gap: 8px; }
+.rs-list[hidden], .rs-bar[hidden], .rs-note[hidden] { display: none; }
+.rs-item { display: grid; grid-template-columns: 22px 1fr auto; grid-template-areas: "m l c" ". b b"; align-items: center; column-gap: 10px; row-gap: 5px; opacity: .55; transition: opacity .25s; }
+.rs-item.run, .rs-item.done { opacity: 1; }
+.rs-mark { grid-area: m; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--line); color: #fff; }
+.rs-item.run .rs-mark { border-color: transparent; }
+.rs-item.done .rs-mark { background: var(--ok, #1fa971); border-color: var(--ok, #1fa971); animation: rs-pop .35s cubic-bezier(.34, 1.56, .64, 1); }
+.rs-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--rs) 25%, transparent); border-top-color: var(--rs); animation: rs-turn .8s linear infinite; }
+@keyframes rs-turn { to { transform: rotate(360deg); } }
+.rs-label { grid-area: l; font-size: .88rem; min-width: 0; overflow-wrap: anywhere; }
+.rs-count { grid-area: c; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rs-mini { grid-area: b; height: 4px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.rs-mini > span { display: block; height: 100%; background: var(--rs); border-radius: inherit; transition: width .4s; }
+.rs-item.done .rs-mini > span { background: var(--ok, #1fa971); }
+.rs-note { margin: 0; font-size: .8rem; color: var(--muted); }
+.rs-warn { display: flex; gap: 4px; align-items: flex-start; margin-top: 6px; color: var(--warn, #b7791f); font-size: .86rem; overflow-wrap: anywhere; }
+.rs-actions { gap: 8px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .rs-panel, .rs-ring, .rs-fill, .rs-spin, .rs-item.done .rs-mark, .rs-panel .rs-ring > svg { animation: none !important; } .rs-fill, .rs-mini > span { transition: none; } }
+html[data-motion="reduce"] .rs-panel, html[data-motion="reduce"] .rs-ring, html[data-motion="reduce"] .rs-fill, html[data-motion="reduce"] .rs-spin { animation: none !important; }
+.rs-details { font-size: .82rem; }
+.rs-details summary { cursor: pointer; color: var(--muted); }
+.rs-details pre { margin: 8px 0; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 6%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+.rs-warn + .rs-warn { margin-top: 2px; }
+
+/* ------------------------------------------------------------------ Bans: tap a person for their profile (1.4.3) */
+.row-open { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 4px; margin: -4px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.row-open > div { flex: 1 1 auto; min-width: 0; }
+.row-open > svg { flex: none; margin-left: auto; color: var(--muted); transition: transform .15s; }
+.row-open:hover strong { text-decoration: underline; }
+.row-open:hover > svg { transform: translateX(3px); color: var(--accent); }
+.row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sheet.profile-sheet { width: min(760px, 100%); }
+.pf { display: grid; gap: 16px; }
+.pf-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.pf-who { display: grid; gap: 4px; min-width: 0; }
+.pf-name { font-size: 1.2rem; overflow-wrap: anywhere; }
+.pf-actions { gap: 8px; }
+.pf-sec { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pf-sec > h3 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: .95rem; }
+.pf-sec p { margin: 0; }
+.pf-reason { padding: 8px 12px; border-left: 3px solid var(--warn, #a35f00); border-radius: 4px 10px 10px 4px; background: color-mix(in srgb, var(--warn, #a35f00) 9%, transparent); overflow-wrap: anywhere; }
+.pf-quote { margin: 0; padding: 10px 12px; border-left: 3px solid var(--bad, #c4202c); border-radius: 4px 12px 12px 4px; background: color-mix(in srgb, var(--bad, #c4202c) 8%, transparent); }
+.pf-qmeta { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.pf-qtext { overflow-wrap: anywhere; white-space: pre-wrap; }
+.pf-chat { max-height: min(300px, 42dvh); overflow-y: auto; overscroll-behavior: contain; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--ink) 3%, var(--panel)); font-size: .88rem; }
+.pf-line { display: block; padding: 4px 8px; border-radius: 8px; color: var(--muted); overflow-wrap: anywhere; }
+.pf-line strong { color: inherit; }
+.pf-line.mine { color: var(--ink); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.pf-line.evi { background: color-mix(in srgb, var(--bad, #c4202c) 13%, transparent); box-shadow: inset 3px 0 0 var(--bad, #c4202c); }
+.pf-line.bot { opacity: .6; font-style: italic; }
+.pf-time { margin-right: 6px; font-variant-numeric: tabular-nums; }
+.pf-flag { margin-left: 6px; color: var(--bad, #c4202c); vertical-align: -2px; }
+.pf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pf-item { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.pf-item.here { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.pf-more { padding-top: 12px; border-top: 1px solid var(--line); }
+.pf-more > summary { cursor: pointer; font-weight: 600; font-size: .92rem; padding: 4px 0; }
+.pf-more[open] > summary { margin-bottom: 8px; }
+
+/* ------------------------------------------------------------------ names that open a profile (1.4.3) */
+.person-link { display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.person-link:hover { color: var(--accent); text-decoration: underline; }
+.person-link:focus-visible, .who-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.who-open { cursor: pointer; }
+.who-open:hover { text-decoration: underline; text-underline-offset: 3px; }
+.act-profile { margin-top: 6px; }
+
+/* ------------------------------------------------------------------ Moderation: Blocked phrases is a fixed-height card with an inline editor (1.4.3) */
+.block.fixed-scroll.mt-card > .mt-body { padding-bottom: 16px; }
+.mt-card .mt-sticky { position: sticky; top: -14px; z-index: 3; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 10px; margin: 0 -16px; padding: 14px 16px 10px; background: var(--panel); box-shadow: 0 10px 10px -10px color-mix(in srgb, var(--ink) 22%, transparent); }
+.mt-card .mt-sticky .mt-find[hidden] { display: none; }
+.ph-row.editing { display: block; padding: 14px; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); animation: ph-open .2s ease-out; }
+@keyframes ph-open { from { opacity: .4; transform: scale(.985); } }
+.ph-edit { display: grid; gap: 12px; min-width: 0; }
+.ph-edit > label { display: grid; gap: 6px; }
+.ph-edit .sev { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+.ph-edit-actions { gap: 8px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .ph-row.editing { animation: none; } }
+html[data-motion="reduce"] .ph-row.editing { animation: none; }
+
+/* 1.4.9, phones: a card that scrolls inside itself used to fill the whole screen and hold on to every touch, so at the end of its list the page would not move
+ * (it felt frozen) and the cards below could not be reached. Now it hands over to the page at its end and always leaves a strip of page showing. */
+@media (max-width: 719px) {
+  :root { --fs-max: clamp(360px, calc(75dvh - var(--topbar-h, 56px)), 720px); }
+  .block.fixed-scroll > :not(header):not(footer):not(.arr-handle),
+  .sp-card.sp-scroll > :not(:first-child) { overscroll-behavior: auto; }
+}

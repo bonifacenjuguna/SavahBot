@@ -1,0 +1,16 @@
+# Binary files must never be touched by line-ending conversion (Windows Git does this by default). A single changed byte
+# would change an APK's SHA-256 and break its signature.
+*.apk binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.png binary
+
+# Launcher scripts need the right line endings to run.
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# The checksum list is read by other tools: always LF.
+SHA256SUMS text eol=lf

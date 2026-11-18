@@ -1,0 +1,16 @@
+{
+ "id": "spam.learned",
+ "category": "spam",
+ "kind": "phrases",
+ "title": "Learned phrases",
+ "description": "Phrases the bot suggested from the actions you approved, once you accepted them. Every one can be removed.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "signal": "spam",
+ "weight": 50,
+ "fuzzy": false,
+ "default_mode": "live",
+ "entries": []
+}

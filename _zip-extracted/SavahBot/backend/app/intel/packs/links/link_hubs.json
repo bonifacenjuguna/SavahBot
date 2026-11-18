@@ -1,0 +1,32 @@
+{
+ "id": "links.link_hubs",
+ "category": "links",
+ "kind": "domains",
+ "title": "Link-in-bio hubs",
+ "description": "Pages that hold a pile of links. Mild signal: many bots hide their real link one click away.",
+ "version": "1.0.0",
+ "source": "SavahBot built-in",
+ "license": "Original work, free to edit",
+ "lang": "en",
+ "role": "hub",
+ "weight": 8,
+ "default_mode": "live",
+ "entries": [
+  "linktr.ee",
+  "bio.link",
+  "beacons.ai",
+  "carrd.co",
+  "lnk.bio",
+  "solo.to",
+  "allmylinks.com",
+  "campsite.bio",
+  "tap.bio",
+  "withkoji.com",
+  "milkshake.app",
+  "linkin.bio",
+  "flow.page",
+  "taplink.cc",
+  "hoo.be",
+  "stan.store"
+ ]
+}

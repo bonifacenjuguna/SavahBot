@@ -1,0 +1,563 @@
+import { pageLayout } from "../layout.js";
+import { get, post } from "../api.js";
+import { openProfile } from "./person-profile.js";
+import { ago, busy, clock, dateTime, debounce, h, mount, toast } from "../dom.js";
+import * as feed from "../events.js";
+import { icon } from "../icons.js";
+import { ring, sparkline } from "../charts.js";
+import { onStatus, status, type Status } from "../state.js";
+import { dateRange, rangeQuery, resetClock, zoomToFill, type RangeValue } from "./kit.js";
+import { approvalList, card, empty, pageHead, paneTabs, type Action } from "./shared.js";
+import { variableChips } from "./variables.js";
+import { liveCard } from "./live-card.js";
+import { dayLabel, openStreams, spanText, streamName, whenText, type Stream } from "./streams.js";
+
+import { openStreamLink } from "./stream-link.js";
+import { openSheet, pinLine, pins, unpin, wireLine, type ActionCtx } from "../chat-actions.js";
+import { readerControl, readerItems } from "../reader-ui.js";
+import { reader } from "../reader.js";
+import type { Page } from "./types.js";
+
+/** 00:00:00 (hours:minutes:seconds) for the clock on the chat handle. */
+function clockText(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
+}
+
+interface Line { id?: number; author_id?: string; platform?: string; author_name: string; text: string; level: string; ts: number; verdict: string | null; score: number | null; reasons?: string[]; demo?: boolean }
+type Filter = "all" | "flagged" | "blocked";
+
+const kindOf = (m: Line): Filter | "ok" => (m.verdict === "allow" || !m.verdict ? "ok" : m.verdict === "flag" ? "flagged" : "blocked");
+const SIZES = [0.9, 1, 1.15, 1.3, 1.5];
+/** What the chat feed says about a line moderation reacted to: a short plain label. Scores, rule names and the words that
+ * matched stay on the Moderation page, so the live chat never shows the bot's internals (or the blacklist) to anyone watching. */
+const WHY: Record<string, string> = { blacklist: "banned phrase", link: "link", new_chatter: "new chatter", caps: "shouting", repeat: "repeated message", emote: "emote spam", symbols: "symbol spam", length: "very long message", mention: "mention spam", rate: "too fast", duplicate: "repeated message" };
+const whyText = (m: Line, k: Filter | "ok"): string => {
+  const names = Array.from(new Set((m.reasons ?? []).map((r) => r.split(":")[0].trim().toLowerCase()).filter(Boolean)));
+  const shown = names.map((n) => WHY[n] ?? n.replace(/_/g, " ")).slice(0, 2);
+  return `${k === "blocked" ? "Blocked" : "Flagged"}${shown.length ? " · " + shown.join(", ") : ""}`;
+};
+const SIZE_KEY = "savahbot.chatsize";
+
+export const desk: Page = {
+  id: "desk",
+  title: "Desk",
+  icon: "desk",
+  blurb: "Live chat and approvals",
+  render(root) {
+    const MAX = 400;
+    const lines: Line[] = [];
+    const queue: Line[] = [];
+    let filter: Filter = "all";
+    let needle = "";
+    let paused = false;
+    let stick = true;
+    let pendingItems: Action[] = [];
+    let range: RangeValue = { label: "", active: false };
+    let saved: Line[] = [];            // rows from the database while a date range is chosen, or a past stream is open
+    let savedNote = "";
+    let viewing: Stream | null = null; // a past stream opened from the Streams list (read-only)
+    let sessionId = "";                // the stream running now ("" when none): a different one means a new stream, which starts on an empty chat
+    // state the controls handle reads (declared up here because the toolbar paints it while the page is still being built)
+    let startedAt = 0, streamTitle = "";
+    let handleEl: HTMLButtonElement | null = null;
+    let handleKey = "";
+    let drawerOpen = false;
+    const DRAWER_KEY = "savahbot.chatdrawer";
+    let lastStream: Stream | null = null;   // the stream that ended most recently, offered while nothing is running
+    const seen = new Set<number>();    // ids of the lines on screen, so catching up after a dropped connection never shows a line twice
+    let sizeIdx = (() => { try { const v = Number(localStorage.getItem(SIZE_KEY)); return Number.isInteger(v) && v >= 0 && v < SIZES.length ? v : 1; } catch { return 1; } })();
+    const arrivals: number[] = []; // epoch seconds of chat lines, used for the live rate
+
+    const list = h("div", { class: "feed", tabindex: 0, "aria-label": "Live chat", role: "log" });
+    const jump = h("button", { class: "jump", type: "button", hidden: true, onclick: () => { stick = true; list.scrollTop = list.scrollHeight; jump.hidden = true; } }, icon("arrowDown", 15), "Latest");
+    const pendingBox = h("div", { class: "q-scroll" });
+    const health = h("div");
+    const kpis = h("div", { class: "kpis swipe" });
+    const savedMode = () => range.active || viewing !== null;
+
+    let lastH = 0;
+    list.addEventListener("scroll", () => {
+      const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 30;
+      // Lines arriving (or old ones trimmed off the top) move the scroll position without the reader doing anything. That is not
+      // "scrolled up": while following the chat, keep following, instead of showing "Latest" and leaving you behind.
+      if (!atBottom && stick && list.scrollHeight !== lastH && !userScrolling) { lastH = list.scrollHeight; list.scrollTop = list.scrollHeight; return; }
+      lastH = list.scrollHeight;
+      stick = atBottom;
+      jump.hidden = stick || savedMode();
+    });
+    let userScrolling = false, usTimer = 0;
+    const touched = () => { userScrolling = true; clearTimeout(usTimer); usTimer = window.setTimeout(() => { userScrolling = false; }, 250); };
+    ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"].forEach((t) => list.addEventListener(t, touched, { passive: true }));
+    // The chat is open (or the Chat tab was just shown, which gives the list its size for the first time): start at the newest line
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => { if (stick && !savedMode()) list.scrollTop = list.scrollHeight; }).observe(list);
+
+    // ----- tapping a line: the action sheet, pins and multi-select
+    const picked = new Set<Line>();
+    const els = new WeakMap<Line, HTMLElement>();      // the row on screen for each line, so a delete can take it off without redrawing the list
+    let selecting = false;
+    /** Leave selection mode: nothing stays ticked and the bar goes away. Runs after Copy, Delete and Done. */
+    const endSelect = () => { selecting = false; picked.clear(); list.querySelectorAll(".line.picked").forEach((e) => e.classList.remove("picked")); paintSel(); };
+    const selBar = h("div", { class: "sel-bar", hidden: true });
+    const paintSel = () => {
+      selBar.hidden = !selecting;
+      const n = picked.size;
+      mount(selBar, h("strong", null, `${n} selected`),
+        h("button", { class: "btn small", type: "button", disabled: !n, onclick: () => { void navigator.clipboard.writeText([...picked].map((m) => `${m.author_name}: ${m.text}`).join("\n")).then(() => { toast("Copied"); endSelect(); }); } }, icon("copy", 14), "Copy"),
+        h("button", { class: "btn small danger", type: "button", disabled: !n, onclick: () => void bulkDelete() }, icon("trash", 14), "Delete"),
+        h("button", { class: "btn small ghost", type: "button", onclick: endSelect }, "Done"));
+    };
+    const bulkDelete = async () => {
+      const items = [...picked].filter((m) => m.id !== undefined && m.level !== "owner" && m.level !== "bot");
+      if (!items.length || !window.confirm(`Delete ${items.length} message${items.length === 1 ? "" : "s"}? Each costs YouTube quota in live mode.`)) return;
+      let done = 0;
+      const gone = new Set<Line>();
+      for (const m of items) { try { await post("/api/chat/act", { id: m.id, action: "delete" }); done++; gone.add(m); } catch (e) { toast(e instanceof Error ? e.message : "Stopped", "error"); break; } }
+      // what was deleted leaves the screen at once; the selection is over either way, so nothing is left ticked
+      for (const m of gone) { els.get(m)?.remove(); }
+      for (const arr of [lines, saved]) for (let i = arr.length - 1; i >= 0; i--) if (gone.has(arr[i])) arr.splice(i, 1);
+      toast(`Deleted ${done} of ${items.length}`);
+      endSelect();
+      updateCounts();
+      if (!list.querySelector(".line")) redraw();
+    };
+    const pinBar = h("div", { class: "pin-bar", hidden: true });
+    const paintPins = () => {
+      const all = pins();
+      pinBar.hidden = !all.length;
+      // every pin is a row of its own: tap it for the same sheet as any chat line, or use the cross to unpin it at once
+      mount(pinBar, ...all.map((p) => {
+        const open = () => openSheet(pinLine(p), actx, true);
+        const row = h("div", { class: "pin-item", role: "button", tabindex: 0, "aria-label": `Pinned message from ${p.author_name}. Open options` },
+          icon("pin", 14), h("span", { class: "pin-text" }, h("strong", null, p.author_name), " ", p.text),
+          h("button", { class: "pin-x", type: "button", "aria-label": `Unpin the message from ${p.author_name}`, title: "Unpin", onclick: (e: Event) => { e.stopPropagation(); unpin(p); paintPins(); } }, icon("x", 16)));
+        row.addEventListener("click", open);
+        row.addEventListener("contextmenu", (e) => { e.preventDefault(); open(); });
+        row.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === row) { e.preventDefault(); open(); } });
+        return row;
+      }));
+    };
+    paintPins();
+    const actx: ActionCtx = {
+      reply: (name) => { input.value = `@${name} `; input.focus(); },
+      select: (m) => { selecting = true; picked.add(m as Line); paintSel(); redraw(); },
+      pinsChanged: paintPins,
+      extra: readerItems,
+    };
+
+    // ----- chat lines
+    const lineEl = (m: Line, withDate = false): HTMLElement => {
+      const k = kindOf(m);
+      const cls = k === "ok" ? "" : k === "flagged" ? " flagged" : " blocked";
+      const el = h("div", { class: `line${cls}${picked.has(m) ? " picked" : ""}` }, h("time", { title: dateTime(m.ts) }, withDate ? dateTime(m.ts) : clock(m.ts)),
+        h("div", null,
+          h("span", { class: `who ${m.level}${m.author_id && m.level !== "bot" ? " who-open" : ""}`, title: m.author_id && m.level !== "bot" ? "Open profile" : "",
+            onclick: m.author_id && m.level !== "bot" ? (e: Event) => { e.stopPropagation(); openProfile({ author_id: m.author_id, platform: m.platform, name: m.author_name }); } : undefined }, m.author_name),
+          h("span", { class: "text" }, m.text),
+          k !== "ok" ? h("div", { class: `why ${k}` }, icon(k === "blocked" ? "shield" : "flag", 13), h("span", null, whyText(m, k))) : null));
+      els.set(m, el);
+      wireLine(el, m, actx);
+      el.addEventListener("click", () => { if (!selecting) return; if (picked.has(m)) picked.delete(m); else picked.add(m); el.classList.toggle("picked", picked.has(m)); paintSel(); });
+      return el;
+    };
+    const visible = (m: Line): boolean => {
+      if (filter === "flagged" && kindOf(m) === "ok") return false;   // flagged = everything moderation reacted to
+      if (filter === "blocked" && kindOf(m) !== "blocked") return false;
+      if (needle && !(`${m.author_name} ${m.text}`.toLowerCase().includes(needle))) return false;
+      return true;
+    };
+    const redraw = () => {
+      updateCounts();
+      if (savedMode()) {
+        const rows = saved.filter(visible);
+        // one small heading per day instead of a date on every line: nothing to overlap, and it reads like a chat history
+        const out: HTMLElement[] = [];
+        let day = "";
+        for (const m of rows) {
+          const d = dayLabel(m.ts);
+          if (d !== day) { out.push(h("div", { class: "day-sep", role: "separator" }, h("span", null, d))); day = d; }
+          out.push(lineEl(m));
+        }
+        list.replaceChildren(...out);
+        if (!rows.length) list.appendChild(empty("calendar", savedNote || "No saved chat in this range."));
+        list.scrollTop = list.scrollHeight;
+        jump.hidden = true;
+        return;
+      }
+      list.replaceChildren(...lines.filter(visible).map((m) => lineEl(m)));
+      if (!list.childElementCount) list.appendChild(lines.length ? empty("message", "No chat lines match this filter.") : waitingState());
+      list.scrollTop = list.scrollHeight;
+      stick = true;
+      jump.hidden = true;
+    };
+    let stickQueued = false;       // many lines can arrive in one frame; scroll once per frame, not once per line
+    const stickSoon = () => { if (stickQueued) return; stickQueued = true; requestAnimationFrame(() => { stickQueued = false; if (stick) list.scrollTop = list.scrollHeight; }); };
+    const push = (m: Line) => {
+      lines.push(m);
+      queueMicrotask(updateCounts);
+      if (lines.length > MAX) lines.shift();
+      if (savedMode() || !visible(m)) return;
+      list.querySelector(".empty")?.remove();
+      list.appendChild(lineEl(m));
+      while (list.childElementCount > MAX) list.firstElementChild?.remove();
+      if (stick) stickSoon();
+    };
+    const add = (m: Line, fromHistory = false) => {
+      if (m.id !== undefined && m.id !== null) { if (seen.has(m.id)) return; seen.add(m.id); }
+      arrivals.push(m.ts);
+      if (arrivals.length > 4000) arrivals.splice(0, arrivals.length - 4000);
+      if (!fromHistory) reader.offer({ ...m, arrived: Date.now() });   // lines loaded from history are never read aloud; the reader decides by its own rules; it does nothing unless Read chat was tapped
+      if (paused) { queue.push(m); updatePause(); return; }
+      push(m);
+    };
+
+    // ----- saved chat (date range)
+    const loadSaved = async () => {
+      const verdict = filter === "all" ? "" : `&verdict=${filter}`;
+      if (viewing) {
+        const r = await get<{ items: Line[] }>(`/api/streams/${viewing.id}/chat?limit=2000&q=${encodeURIComponent(needleRaw())}${verdict}`);
+        saved = r.items;
+        savedNote = "No lines in this stream match.";
+        redraw();
+        updateBanner(r.items.length);
+        return;
+      }
+      const r = await get<{ items: Line[]; retention_days: number }>(`/api/chat/search?limit=300&q=${encodeURIComponent(needleRaw())}${rangeQuery(range)}${verdict}`);
+      saved = r.items;
+      savedNote = `Nothing saved for ${range.label.toLowerCase()}. Chat is kept for ${r.retention_days} days.`;
+      redraw();
+      updateBanner(r.items.length);
+    };
+    const reload = () => { void loadSaved().catch((e) => toast(e.message, "error")); };
+    const needleRaw = () => search.value.trim();
+    const banner = h("div", { class: "saved-banner", hidden: true });
+    const backToLive = () => { dates.reset(); range = { label: "", active: false }; viewing = null; saved = []; updateBanner(); updatePause(); redraw(); };
+    const updateBanner = (n = saved.length) => {
+      banner.hidden = !savedMode();
+      if (!savedMode()) return;
+      const what = viewing
+        ? h("span", { class: "grow sb-text" }, h("strong", null, streamName(viewing)), h("span", { class: "muted" }, ` · ${dayLabel(viewing.started)}, ${whenText(viewing)} · ${spanText(viewing.duration)} · ${n}${n >= 2000 ? "+" : ""} line${n === 1 ? "" : "s"}`))
+        : h("span", { class: "grow sb-text" }, `Saved chat · ${range.label} · ${n}${n >= 300 ? "+" : ""} line${n === 1 ? "" : "s"}`);
+      mount(banner, icon(viewing ? "history" : "calendar", 16), what,
+        h("button", { class: "btn small", type: "button", onclick: backToLive }, icon("radio", 14), sessionId ? "Back to live" : "Back"));
+      updatePause();
+    };
+    const dates = dateRange({ anyLabel: "Live", label: "Chat date range" }, (v) => { range = v; if (v.active) { viewing = null; reload(); } else { saved = []; viewing = null; updateBanner(); updatePause(); redraw(); } });
+    const dateWrap = h("div", { class: "toolbar-dates", hidden: true }, dates.el);
+    const dateBtn = h("button", { class: "btn small ghost", type: "button", "aria-expanded": "false", "aria-label": "Filter by date", title: "Filter by date", onclick: () => {
+      dateWrap.hidden = !dateWrap.hidden;
+      dateBtn.setAttribute("aria-expanded", String(!dateWrap.hidden));
+    } }, icon("calendar", 15), h("span", { class: "hide-narrow" }, "Dates"));
+
+    // ----- streams: every livestream is its own chat; past ones are read from here
+    const openStream = (st: Stream) => { viewing = st; range = { label: "", active: false }; dates.reset(); dateWrap.hidden = true; dateBtn.setAttribute("aria-expanded", "false"); reload(); };
+    const streamsBtn = h("button", { class: "btn small ghost", type: "button", "aria-label": "Past streams", title: "Past streams", onclick: () => openStreams({
+      current: sessionId || null, open: openStream,
+      changed: (st, id) => { if (viewing && viewing.id === id) { if (st) { viewing = st; updateBanner(); } else backToLive(); } void loadLast(); },
+    }) }, icon("history", 15), h("span", { class: "hide-narrow" }, "Streams"));
+    const loadLast = async () => { try { lastStream = (await get<{ item: Stream | null }>("/api/streams/last")).item; } catch { /* the empty state just has no shortcut */ } if (!sessionId && !lines.length) redraw(); };
+
+    // ----- toolbar: filters, search, pause
+    const count = (f: Filter) => (savedMode() ? saved : lines).filter((m) => (f === "flagged" ? kindOf(m) !== "ok" : kindOf(m) === "blocked")).length;
+    const updateCounts = () => { paintHandle(); (["flagged", "blocked"] as Filter[]).forEach((f) => { const n = filterBtns[f === "flagged" ? 1 : 2].querySelector(".n") as HTMLElement; const v = count(f); n.hidden = v === 0; n.textContent = String(v); }); };
+    const filterBtns = (["all", "flagged", "blocked"] as Filter[]).map((f) =>
+      h("button", { type: "button", "aria-pressed": String(f === filter), onclick: () => { filter = f; filterBtns.forEach((b, i) => b.setAttribute("aria-pressed", String((["all", "flagged", "blocked"] as Filter[])[i] === f))); if (savedMode()) reload(); else redraw(); } }, f[0].toUpperCase() + f.slice(1), h("span", { class: "n", hidden: true }, "")));
+    const search = h("input", { type: "search", placeholder: "Filter chat", "aria-label": "Filter chat", maxLength: 80 });
+    const searchSaved = debounce(reload, 300);
+    search.addEventListener("input", () => { needle = search.value.trim().toLowerCase(); if (savedMode()) searchSaved(); else redraw(); });
+    const pauseBtn = h("button", { class: "btn small ghost", type: "button", onclick: () => {
+      paused = !paused;
+      if (!paused) { queue.splice(0).forEach(push); }
+      updatePause();
+    } });
+    const updatePause = () => {
+      pauseBtn.disabled = savedMode();
+      mount(pauseBtn, icon(paused ? "play" : "pause", 15), h("span", { class: "hide-narrow" }, paused ? `Resume${queue.length ? ` (${queue.length})` : ""}` : "Pause"));
+      pauseBtn.setAttribute("aria-pressed", String(paused));
+      pauseBtn.setAttribute("aria-label", paused ? "Resume chat" : "Pause chat");
+      paintHandle();
+    };
+    updatePause();
+    const toolbar = h("div", { class: "toolbar" },
+      h("div", { class: "seg-control", role: "group", "aria-label": "Show" }, filterBtns),
+      h("div", { class: "input-icon" }, icon("search", 16), search), streamsBtn, dateBtn, pauseBtn);
+
+    // ----- what is on air: this stream's name, how long it has run, and a shortcut to its link
+    const strip = h("div", { class: "stream-strip", "data-state": "off" });
+    const paintStrip = () => {
+      const live = Boolean(sessionId);
+      const demo = status?.hub.mode === "demo";
+      strip.setAttribute("data-state", live ? (demo ? "demo" : "live") : "off");
+      const yt = status?.youtube;
+      // the stream link works in every state (a demo too), so it is always there, and a name or a time is never cut to make room for it
+      const link = h("button", { class: "btn small ghost ss-link", type: "button", title: "Paste or change the stream link", "aria-label": "Stream link", onclick: () => openStreamLink() }, icon("youtube", 16), h("span", { class: "hide-narrow" }, "Stream link"));
+      mount(strip,
+        h("div", { class: "ss-main" },
+          h("strong", { class: "ss-title" }, live ? (streamTitle || (demo ? "Demo stream" : "On air")) : "No stream running"),
+          h("div", { class: "ss-meta" },
+            h("span", { class: "ss-tag" }, live ? (demo ? "Demo" : "Live") : "Off air"),
+            h("span", null, live ? `${spanText(Date.now() / 1000 - startedAt)} · fresh chat for this stream` : yt?.connected ? "Waiting for you to go live" : "YouTube not connected"))),
+        link);
+      paintHandle();
+    };
+    const waitingState = (): HTMLElement => {
+      const el = empty(sessionId ? "message" : "radio", sessionId ? "A new stream, a fresh chat. Lines appear here as they arrive." : "No stream is running. Your next stream starts on a fresh, empty chat.");
+      if (!sessionId && lastStream) el.appendChild(h("button", { class: "btn small", type: "button", style: "margin-top:10px", onclick: () => openStream(lastStream!) }, icon("history", 14), `Read the last stream: ${streamName(lastStream)}`));
+      return el;
+    };
+    /** A different stream began (or the first one was found): the old chat goes away and the new one starts empty. */
+    const newStream = (id: string, title: string, started: number) => {
+      sessionId = id; streamTitle = title; startedAt = started;
+      lines.length = 0; queue.length = 0; arrivals.length = 0; seen.clear();
+      if (!savedMode()) redraw();
+      paintStrip(); renderFacts();
+    };
+
+    // ----- the controls drawer: filters, search, streams, dates and the stream strip are tucked away so the chat itself is as tall as it can be.
+    // One slim handle sits above the chat; tap it and the controls slide down. It remembers its state and shows a dot while a filter is on.
+    drawerOpen = (() => { try { return localStorage.getItem(DRAWER_KEY) === "1"; } catch { return false; } })();
+    function paintHandle(): void {
+      if (!handleEl) return;
+      const live = Boolean(sessionId);
+      const demo = status?.hub.mode === "demo";
+      const filtered = filter !== "all" || needle !== "" || range.active || viewing !== null || paused;
+      // the handle shows how long the stream has run; the stream's name lives inside the drawer (paintStrip)
+      const name = viewing ? streamName(viewing) : clockText(live ? Date.now() / 1000 - startedAt : 0);
+      const tag = viewing ? "Past" : live ? (demo ? "Demo" : "Live") : "Off air";
+      const key = [drawerOpen, filtered, name, tag, live, demo].join("|");
+      if (key === handleKey) return;
+      handleKey = key;
+      handleEl.setAttribute("aria-expanded", String(drawerOpen));
+      handleEl.setAttribute("aria-label", `${drawerOpen ? "Hide" : "Show"} chat controls: ${name}${filtered ? ", a filter is on" : ""}`);
+      handleEl.dataset.state = viewing ? "past" : live ? (demo ? "demo" : "live") : "off";
+      mount(handleEl,
+        h("span", { class: "cd-grip", "aria-hidden": "true" }),
+        h("span", { class: "cd-tag" }, tag),
+        h("span", { class: "cd-name" }, name),
+        filtered ? h("span", { class: "cd-dot", title: "A filter, search, date or pause is on" }) : null,
+        h("span", { class: "cd-chev", "aria-hidden": "true" }, icon("chevronDown", 18)));
+    }
+    const drawer = h("div", { class: "chat-drawer", id: "chat-drawer", "data-open": String(drawerOpen) }, h("div", { class: "cd-inner" }, toolbar, strip, dateWrap));
+    const setDrawer = (open: boolean) => {
+      drawerOpen = open;
+      drawer.dataset.open = String(open);
+      (drawer.firstElementChild as HTMLElement).toggleAttribute("inert", !open);   // hidden controls take no focus
+      try { localStorage.setItem(DRAWER_KEY, open ? "1" : "0"); } catch { /* private mode */ }
+      handleKey = ""; paintHandle();
+    };
+    handleEl = h("button", { class: "chat-handle", type: "button", "aria-controls": "chat-drawer", onclick: () => setDrawer(!drawerOpen) }) as HTMLButtonElement;
+    (drawer.firstElementChild as HTMLElement).toggleAttribute("inert", !drawerOpen);
+    paintHandle();
+
+    // ----- send as the bot
+    const input = h("input", { type: "text", maxLength: 500, placeholder: "Say something as the bot", "aria-label": "Message to send" });
+    const send = h("button", { class: "btn primary", type: "submit" }, icon("send", 16), h("span", null, "Send"));
+    const form = h("form", { class: "say", onsubmit: (e: Event) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      busy(send, async () => { await post("/api/chat/send", { text }); input.value = ""; });
+    } }, input, send);
+    const chips = variableChips(input);
+
+    // ----- approvals
+    const tabs = paneTabs([
+      { id: "chat", label: "Chat" },
+      { id: "queue", label: "Waiting", badge: () => pendingItems.length },
+      { id: "status", label: "Status" },
+    ], {}, "chat");
+    const sideCount = h("span", { class: "n", hidden: true }, "");
+    const sideBadge = h("span", { class: "n side-n", hidden: true }, "");   // the same count, on the Waiting button (the panel is closed until you open it)
+    const queueCount = h("span", { class: "chip warn", hidden: true });
+    const loadPending = async () => {
+      const r = await get<{ items: Action[] }>("/api/moderation/pending");
+      pendingItems = r.items;
+      mount(pendingBox, approvalList(r.items, loadPending));
+      sideCount.hidden = !r.items.length;
+      sideCount.textContent = String(r.items.length);
+      sideBadge.hidden = !r.items.length;
+      sideBadge.textContent = String(r.items.length);
+      queueCount.hidden = !r.items.length;
+      queueCount.textContent = `${r.items.length} waiting`;
+      (tabs as any).refreshBadges?.();
+    };
+
+    // ----- KPI cards and status
+    const ratePill = h("span", { class: "rate-pill", title: "Chat lines in the last minute" }, "0/min");
+    const renderFacts = () => {
+      const s = status;
+      if (!s) return;
+      const now = Date.now() / 1000;
+      const perMin = arrivals.filter((t) => t >= now - 60).length;
+      ratePill.textContent = `${perMin}/min`;
+      const buckets: number[] = Array.from({ length: 30 }, () => 0);
+      for (const t of arrivals) { const i = 29 - Math.floor((now - t) / 60); if (i >= 0 && i < 30) buckets[i]++; }
+      const flagged = lines.filter((m) => kindOf(m) !== "ok").length;
+      const kpi = (cls: string, ic: string, label: string, value: string, sub?: string, spark?: SVGElement) =>
+        h("div", { class: `kpi ${cls}` }, h("div", { class: "kpi-top" }, h("span", null, label), icon(ic, 18)), h("div", { class: "kpi-val" }, value), sub ? h("div", { class: "kpi-sub" }, sub) : null, spark ?? null);
+      mount(kpis,
+        kpi("", "activity", "Chat rate", `${perMin}/min`, "Last 30 minutes below", sparkline(buckets)),
+        kpi("", "message", "Chat lines", String(s.hub.lines), "This session"),
+        kpi(flagged ? "warn" : "", "flag", "Flagged", String(flagged), "In the lines on screen"),
+        kpi(s.pending ? "warn" : "", "inbox", "Waiting for you", String(s.pending), s.pending ? "Needs a decision" : "All clear"),
+        kpi("", "shield", "Moderation", s.hub.mod_mode, `${s.hub.blacklist_size} blocked phrases`));
+      mount(health, healthBlock(s));
+    };
+    /** "11:00 AM Nairobi time, in 5h 12m". YouTube resets at midnight Pacific; the clock shown is the owner's own. */
+    const resetText = (s: Status): Node => {
+      const q = s.youtube.quota;
+      const r = resetClock(q.resets_at, s.timezone);
+      if (!r) return h("span", null, "At midnight Pacific Time");
+      return h("span", null, h("strong", null, `${r.clock} ${r.place} time`), h("span", { class: "muted" }, ` (in ${r.left})`));
+    };
+    const healthBlock = (s: Status): HTMLElement => {
+      const q = s.youtube.quota;
+      const pct = Math.min(100, Math.round(q.fraction * 100));
+      const row = (ic: string, title: string, text: string, chip: [string, string], onclick?: () => void) => {
+        const kids = [icon(ic, 18), h("div", { class: "grow" }, h("div", null, title), h("div", { class: "muted small" }, text)), h("span", { class: `chip ${chip[0]}` }, chip[1]), onclick ? icon("chevronRight", 16, "sr-go") : null];
+        return onclick ? h("button", { class: "status-row clickable", type: "button", onclick, title: "Paste or change the stream link", "aria-label": `${title}: ${text}. Tap to set the stream link` }, ...kids) : h("div", { class: "status-row" }, ...kids);
+      };
+      return h("div", null,
+        h("div", { class: "health" }, ring(s.hub.mode === "demo" ? 0 : q.fraction, s.hub.mode === "demo" ? "Demo" : `${pct}%`, "YouTube quota used today", pct >= 75 ? "hot" : ""),
+          h("dl", null, h("dt", null, "YouTube quota"), h("dd", null, s.hub.mode === "demo" ? "Not used in demo mode" : `${q.used} of ${q.daily} units (estimate)`),
+            s.hub.mode === "demo" ? null : h("dt", null, "Resets"), s.hub.mode === "demo" ? null : h("dd", { class: "reset-line" }, resetText(s)),
+            h("dt", null, "Last chat poll"), h("dd", null, s.hub.mode === "demo" ? "Simulated" : ago(s.youtube.last_poll)))),
+        h("div", { class: "status-rows" },
+          row("youtube", "YouTube", s.youtube.chat_attached ? (s.youtube.title || "Chat attached") : s.youtube.connected ? "Connected, no stream attached" : "Not connected", s.youtube.last_error ? ["bad", "Error"] : s.youtube.chat_attached ? ["ok", "Attached"] : s.youtube.connected ? ["warn", "Idle"] : ["", "Off"], () => openStreamLink()),
+          row("telegram", "Telegram", s.telegram.configured ? (s.telegram.bot_username ? `@${s.telegram.bot_username} (${s.telegram.mode})` : s.telegram.mode) : "No bot token", s.telegram.last_error ? ["bad", "Error"] : s.telegram.configured && s.telegram.owner_bound ? ["ok", "Ready"] : ["warn", s.telegram.configured ? "Not claimed" : "Off"]),
+          row("database", "Database", s.database, ["ok", "OK"]),
+          redisRow(s, row)));
+    };
+    /** Sits right under Database. Redis is optional, so "off" is a normal state, not a warning. */
+    const redisRow = (s: Status, row: (ic: string, title: string, text: string, chip: [string, string], onclick?: () => void) => HTMLElement): HTMLElement | null => {
+      const r = s.redis;
+      if (!r) return null;
+      if (r.mode === "off") return row("zap", "Redis", "Not set up, running in memory", ["", "Off"]);
+      if (r.mode === "unreachable") return row("zap", "Redis", "Cannot connect, using memory", ["warn", "Unreachable"]);
+      if (r.mode === "connecting") return row("zap", "Redis", "Connecting", ["warn", "Connecting"]);
+      const saved = r.snapshot.last_saved ? `memory saved ${ago(r.snapshot.last_saved)}` : r.snapshot.enabled ? "memory not saved yet" : "memory saving off";
+      return row("zap", "Redis", `${r.leader ? "Leader" : "Standby"}, ${saved}`, ["ok", r.leader ? "Leader" : "Standby"]);
+    };
+
+    const lay = pageLayout("desk");
+    mount(root,
+      pageHead("desk", "Desk", "Live chat, moderation requests that need your decision, and the state of the bot.", h("div", { class: "row" }, status?.hub.mode === "demo" ? h("a", { class: "btn ghost", href: "/demo" }, icon("flask", 16), "Run a scenario") : null, lay.button)),
+      status?.hub.mode === "demo" ? h("div", { class: "banner demo" }, icon("flask", 18), h("span", null, "Demo mode: this chat is simulated. Open Demo to run a scenario.")) : null,
+      kpis,
+      tabs);
+
+    // ----- the chat card, which can grow to fill the workspace
+    const readerUi = readerControl();
+    const main = h("div", { class: "chat-main" }, handleEl, drawer, readerUi.note, banner, pinBar, h("div", { class: "feed-wrap" }, list, jump), selBar, form, chips);
+    const side = h("aside", { class: "zoom-side", "aria-label": "Waiting for you" },
+      h("div", { class: "zs-head" }, h("h3", null, icon("inbox", 16), "Waiting for you", sideCount), h("button", { class: "icon-btn zs-close", type: "button", "aria-label": "Close the waiting list", onclick: () => chatPane.classList.remove("side-open") }, icon("x", 18))),
+      h("div", { class: "zs-body" }));
+    const sideToggle = h("button", { class: "btn small ghost zoom-only", type: "button", "aria-label": "Show what is waiting for you", onclick: () => chatPane.classList.toggle("side-open") }, icon("inbox", 15), h("span", { class: "hide-narrow" }, "Waiting"), sideBadge);
+    const sizeDown = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Smaller text", title: "Smaller text", onclick: () => setSize(sizeIdx - 1) }, icon("textSize", 15), h("span", { class: "sz" }, "−"));
+    const sizeUp = h("button", { class: "icon-btn zoom-only", type: "button", "aria-label": "Larger text", title: "Larger text", onclick: () => setSize(sizeIdx + 1) }, icon("textSize", 18), h("span", { class: "sz" }, "+"));
+    const expandBtn = h("button", { class: "icon-btn expand-btn", type: "button", "aria-label": "Expand the chat to fill the screen", "aria-expanded": "false", title: "Expand chat (F)", onclick: (e: Event) => { e.preventDefault(); zoom.toggle(); } });
+    const paintExpand = (open: boolean) => {
+      mount(expandBtn, icon(open ? "collapse" : "expand", 18));      // the icon says it; the label is in aria-label and the tooltip
+      expandBtn.setAttribute("aria-expanded", String(open));
+      expandBtn.setAttribute("aria-label", open ? "Shrink the chat back" : "Expand the chat to fill the screen");
+      expandBtn.title = open ? "Shrink chat (Esc)" : "Expand chat (F)";
+    };
+    paintExpand(false);
+    const chatPane = card("message", "Chat", h("div", { class: "chat-body" }, main, side), { flush: true, cls: "chat-card", id: "chat",
+      actions: h("div", { class: "row nowrap chat-actions" }, h("div", { class: "row nowrap chat-tools" }, ratePill, sizeDown, sizeUp, sideToggle, readerUi.button), expandBtn) });
+    const setSize = (i: number) => {
+      sizeIdx = Math.max(0, Math.min(SIZES.length - 1, i));
+      chatPane.style.setProperty("--chat-scale", String(SIZES[sizeIdx]));
+      sizeDown.disabled = sizeIdx === 0; sizeUp.disabled = sizeIdx === SIZES.length - 1;
+      try { localStorage.setItem(SIZE_KEY, String(sizeIdx)); } catch { /* private mode */ }
+    };
+    setSize(sizeIdx);
+
+    const queuePane = card("inbox", "Waiting for you", pendingBox, { flush: true, id: "queue", actions: queueCount, cls: "desk-queue" });
+    const statusPane = card("activity", "Bot status", health, { flush: true, id: "status" });
+    const live = liveCard();
+    live.el.dataset.card = "live";
+    const sideStack = h("div", { class: "stack", "data-card": "side", "data-label": "Side column" }, queuePane, live.el, statusPane);
+
+    const wide = window.matchMedia("(min-width: 1000px)");
+    const zoom = zoomToFill(chatPane, {
+      onOpen: () => {
+        paintExpand(true);
+        side.querySelector(".zs-body")!.appendChild(pendingBox);     // the waiting list moves in beside the chat
+        if (wide.matches) {
+          // 1.4.9, computers: the DEMO/LIVE tag and clock move up into the header row, and the INSERT chips join the message box, so the messages get the room
+          chatPane.querySelector(":scope > header h2")?.after(handleEl!);
+          handleEl!.classList.add("in-header");
+          form.insertBefore(chips, send);
+        }
+        chatPane.classList.remove("side-open");
+        window.requestAnimationFrame(() => { if (stick) list.scrollTop = list.scrollHeight; });
+      },
+      onClose: () => {
+        paintExpand(false);
+        chatPane.classList.remove("side-open");
+        handleEl!.classList.remove("in-header");
+        main.prepend(handleEl!);
+        form.after(chips);
+        queuePane.appendChild(pendingBox);   // back where it was: the last child of its card (it is the card body itself)
+        window.requestAnimationFrame(() => { if (stick) list.scrollTop = list.scrollHeight; });
+        expandBtn.focus({ preventScroll: true });
+      },
+    });
+    // the expand button is the only way in or out by touch (one tap); the title bar is not a hidden second button any more
+
+    // panes are switched by the tab control on narrow screens; on wide screens both columns show
+    const cols = h("div", { class: "cols" }, chatPane, sideStack);
+    root.appendChild(cols);
+    const panes: Record<string, HTMLElement> = { chat: chatPane, queue: queuePane, status: statusPane, live: live.el };
+    const apply = (id: string) => { for (const [k, el] of Object.entries(panes)) el.setAttribute("data-hidden", String(k !== id && !(k === "live" && id === "status"))); for (const b of Array.from(tabs.children)) b.setAttribute("aria-selected", String(b.getAttribute("data-id") === id)); };
+    for (const b of Array.from(tabs.children)) b.addEventListener("click", () => apply(b.getAttribute("data-id") ?? "chat"));
+    for (const el of Object.values(panes)) el.classList.add("pane");
+    apply("chat");
+    lay.arrange([cols, sideStack]);      // 1.4.0: the chat and the side column can swap places, and the side cards can be reordered
+
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (document.body.classList.contains("arranging")) return;
+      if (e.key.toLowerCase() !== "f" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (document.querySelector(".sheet, .palette")) return;
+      e.preventDefault();
+      zoom.toggle();
+    };
+    document.addEventListener("keydown", onKey);
+
+    /** Loads the chat of the stream that is running now. With `catchUp` it only adds what a dropped connection missed. */
+    const loadRecent = (catchUp = false) => get<{ items: Line[]; session: { id: string; started: number; title: string } | null; last: Stream | null }>("/api/chat/recent?limit=150").then((r) => {
+      lastStream = r.last;
+      if ((r.session?.id ?? "") !== sessionId) newStream(r.session?.id ?? "", r.session?.title ?? "", r.session?.started ?? 0);
+      else if (r.session) { streamTitle = r.session.title || streamTitle; startedAt = r.session.started; }
+      // With no stream running, whatever is left is the stream that just ended: shown for reading, never mixed into the next one
+      for (const m of r.items) add(m, true);
+      if (!catchUp) list.scrollTop = list.scrollHeight;
+      if (!lines.length || !catchUp) redraw();
+      paintStrip(); renderFacts();
+    }).catch((e) => { if (!catchUp) toast(e.message, "error"); });
+    void loadRecent();
+    void loadPending().catch((e) => toast(e.message, "error"));
+    renderFacts();
+    const offs = [
+      feed.on("chat", (e) => { if (Boolean(e.data.demo) === (status?.hub.mode === "demo")) add(e.data); }),
+      feed.on("session", (e) => {
+        if (e.data.live) { if (e.data.id !== sessionId) newStream(e.data.id, e.data.title ?? "", e.data.started ?? Date.now() / 1000); }
+        else if (e.data.id === sessionId) { sessionId = ""; paintStrip(); void loadLast(); if (!savedMode()) redraw(); }
+      }),
+      feed.on("stream", (e) => { if (e.data.live && e.data.title) { streamTitle = e.data.title; paintStrip(); } }),
+      feed.on("mod_pending", () => void loadPending()),
+      feed.on("mod_resolved", () => void loadPending()),
+      feed.on("mod_expired", () => void loadPending()),
+      // the connection dropped and came back: fetch what was missed instead of making you refresh
+      feed.onReconnect(() => { void loadRecent(true); void loadPending().catch(() => undefined); if (savedMode() && viewing?.live) reload(); }),
+    ];
+    offs.push(onStatus(() => { renderFacts(); paintStrip(); }));
+    const t = window.setInterval(() => { renderFacts(); if (sessionId) paintStrip(); }, 5000);
+    const tick = window.setInterval(() => { if (sessionId && !viewing) paintHandle(); }, 1000);   // the handle clock counts every second
+    return () => { lay.dispose(); window.clearInterval(tick); offs.forEach((f) => f()); readerUi.dispose(); live.stop(); window.clearInterval(t); document.removeEventListener("keydown", onKey); if (zoom.isOpen()) zoom.close(); };
+  },
+};
