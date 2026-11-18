@@ -29,7 +29,7 @@ You do not need an Android emulator. A physical Android phone with USB debugging
 
 ### 1.1 Install Android SDK command-line tools and packages
 
-Android Studio is optional. To install the SDK without it:
+Android Studio is optional. To install the SDK without it, first install and configure a JDK by following section **1.3 Configure Java**. The SDK manager needs Java when it installs packages.
 
 1. Open the official Android Studio download page:
    `https://developer.android.com/studio#command-line-tools-only`
@@ -117,21 +117,35 @@ Both commands should return `True`.
 
 ### 1.3 Configure Java
 
-Set `JAVA_HOME` to the JDK installation directory (not its `bin` folder). Example:
+Install a JDK 17 or JDK 21 distribution first. Set `JAVA_HOME` to the JDK installation directory (not its `bin` folder). Change the example path to match the JDK folder actually installed on your computer:
 
 ```powershell
 $JavaHome = "C:\Program Files\Java\jdk-21"
+if (-not (Test-Path "$JavaHome\bin\java.exe")) {
+    throw "JDK not found at $JavaHome. Correct the JavaHome path before continuing."
+}
+
 [Environment]::SetEnvironmentVariable("JAVA_HOME", $JavaHome, "User")
+$JavaBin = "$JavaHome\bin"
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$PathEntries = @($UserPath -split ";" | Where-Object { $_ })
+if ($PathEntries -notcontains $JavaBin) {
+    $PathEntries += $JavaBin
+}
+[Environment]::SetEnvironmentVariable("Path", ($PathEntries -join ";"), "User")
+$env:JAVA_HOME = $JavaHome
+$env:Path = "$env:Path;$JavaBin"
 ```
 
-Add `%JAVA_HOME%\bin` to the User PATH, reopen PowerShell, and verify:
+Close and reopen PowerShell, then verify:
 
 ```powershell
 java --version
 javac --version
+$env:JAVA_HOME
 ```
 
-The project compiles Java/Kotlin source to JVM target 17. A JDK 21 installation can compile for target 17.
+The commands should identify the JDK you installed. The project compiles Java/Kotlin source to JVM target 17. JDK 21 can compile for target 17.
 
 ### 1.4 Install Gradle for the first-time wrapper setup only
 
