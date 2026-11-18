@@ -9,6 +9,7 @@
 | PWA_AND_PUSH_PLATFORMS.md | Install and push on iPhone, Android, desktop |
 | WEATHER.md | Open-Meteo weather, places, alerts, licence |
 | SAVAHLIVE.md | The Android floating overlay: pairing, phones, the overlay feed |
+| RELEASING.md | Version bumps, signed APK releases, and keeping releases write-once |
 | SETTINGS.md | The Settings hub and where each setting is stored |
 | TELEGRAM.md | The Telegram bot and its commands |
 | YOUTUBE.md | Sign-in, moderating another channel, quota |

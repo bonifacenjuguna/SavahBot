@@ -53,6 +53,6 @@ Battery and data: the phone closes the stream when the screen goes off and reope
 
 ## Honest limits
 - In-app QR scanning is not built (it needs a decoder library or Google Play services, against the "no dependencies" rule). The phone's own camera opens the pairing page instead.
-- The Android code was written without being compiled or run here (no Android SDK in the build environment). Expect to fix small things on the first `./gradlew assembleDebug`, and test the overlay on a real phone, especially drag, docking and the Keystore on your phone brand.
+- The app has been built and run on a real phone (debug build, Windows). Some design polish is still planned, and other phone brands (Xiaomi, Oppo, Samsung battery handling) have not been tried yet. Test the overlay on your own phone, especially drag, docking and the Keystore.
 - Some phone makers stop background apps aggressively; the app offers a battery-settings shortcut.
 - The backend tests in `backend/tests/test_savahlive.py` exercise pairing, keys, expiry, revoking, the feed, batching and cut-offs. Its HTTP test needs the usual test dependencies.

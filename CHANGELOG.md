@@ -11,7 +11,7 @@
 - New settings `SAVAHLIVE_*` (listed in docs/ENVIRONMENT.md). The chat-deleted event now also carries the message id (an extra field; nothing else reads it differently).
 
 ### Notes
-- The Android code could not be compiled or run where this version was written (no Android SDK there). Build it with `android/README.md`, and expect to fix small things on the first run.
+- The Android app has been built and run on a real phone. Some design polish is still planned. Build it with `android/README.md`.
 - In-app QR scanning is not included (it would need a library); the phone's camera opens the pairing page instead.
 
 ## 1.4.12

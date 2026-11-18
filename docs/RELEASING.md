@@ -6,12 +6,7 @@ and a GitHub ruleset (one-time setup below) makes that check mandatory.
 
 ## One-time setup
 
-**1. Commit the Gradle wrapper.** The repo currently has no `gradlew`, `gradlew.bat` or `gradle-wrapper.jar`, so a fresh clone cannot build. From the repo root:
-```powershell
-git add -f android/gradlew android/gradlew.bat android/gradle/wrapper/gradle-wrapper.jar
-git commit -m "Add Gradle wrapper"
-```
-(`-f` only because some global ignore rules hide `.jar` files.) Also commit this release setup: `.gitignore`, `.gitattributes`, `.github/`, `scripts/`, `releases/`, `docs/RELEASING.md`.
+**1. Verify the Gradle wrapper is committed.** This project already includes `android/gradlew`, `android/gradlew.bat` and `android/gradle/wrapper/gradle-wrapper.jar`; keep all three tracked so a fresh clone can build. If any are missing in your local clone, restore them from `main` rather than generating a different wrapper. The release setup also includes `.gitignore`, `.gitattributes`, `.github/`, `scripts/`, `releases/` and this guide.
 
 **2. Create your signing key, once.** Follow `android/README.md` section 6 (keytool, then `android/keystore.properties`).
 Back up `android/savahlive.jks` and its passwords somewhere safe and **private** (password manager, USB stick, cloud vault). They are in `.gitignore` and must never be committed.
