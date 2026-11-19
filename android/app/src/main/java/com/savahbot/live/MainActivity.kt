@@ -3,14 +3,11 @@ package com.savahbot.live
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -18,54 +15,40 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
-import android.text.Editable
-import android.text.InputType
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.TextWatcher
-import android.text.style.ForegroundColorSpan
+import android.view.Gravity
 import android.view.View
-import android.widget.Button
-import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
 import java.text.DateFormat
 import java.util.Date
 
 /**
- * The only screen: pair this phone with SavahBot once, allow the floating window, start or stop the overlay.
- * No accounts, no dashboard, no settings: SavahBot (Manage > SavahLive) holds all of that.
+ * The only screen, in three stages: Pair (once), Allow (the floating-window permission, once), Go (start and stop the overlay).
+ * No accounts, no dashboard and no settings of its own: SavahBot (Manage > SavahLive) holds those, and the panel has its own tray for looks.
  */
 class MainActivity : Activity() {
     private companion object {
-        const val BG = 0xFF0F1116.toInt()
-        const val CARD = 0xFF181B23.toInt()
-        const val FIELD = 0xFF242834.toInt()
-        const val INK = 0xFFF1F2F5.toInt()
-        const val MUTED = 0xFF9AA0B0.toInt()
-        const val RED = 0xFFE5242B.toInt()
-        const val GREEN = 0xFF4ADE80.toInt()
-        const val AMBER = 0xFFF5B301.toInt()
         const val ASK_NOTIFICATIONS = 7
     }
 
     private lateinit var store: Store
+    private lateinit var ui: Ui
     private val main = Handler(Looper.getMainLooper())
     private var typedCode = ""
     private var typedServer = ""
+    private var showServer = false
     private var message = ""
+    private var messageIsError = true
     private var pairing = false
     private var autoPair: PairInput? = null
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = Store(this)
-        window.statusBarColor = BG
-        window.navigationBarColor = BG
+        ui = Ui(this)
+        window.statusBarColor = Ui.BG
+        window.navigationBarColor = Ui.BG
         take(intent)
         render()
     }
@@ -93,109 +76,43 @@ class MainActivity : Activity() {
         val link = i.data ?: return
         if (i.action == Intent.ACTION_VIEW && link.scheme == "savahlive") {
             val input = Pairing.parse(link.toString())
-            if (input != null) autoPair = input else message = "That pairing link is not complete. Make a new one in SavahBot."
+            if (input != null) {
+                autoPair = input
+            } else {
+                message = "That pairing link is not complete. Make a new one in SavahBot."
+                messageIsError = true
+            }
             i.data = null
         }
     }
 
-    // ---------------------------------------------------------------------------------------------- building blocks
-    private fun label(s: CharSequence, sp: Float, color: Int, bold: Boolean = false): TextView {
-        val t = TextView(this)
-        t.text = s
-        t.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
-        t.setTextColor(color)
-        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD)
-        return t
+    private fun stage(): Int = when {
+        !store.isPaired -> 0
+        !Settings.canDrawOverlays(this) -> 1
+        else -> 2
     }
 
-    private fun gap(h: Int): View {
-        val v = View(this)
-        v.layoutParams = LinearLayout.LayoutParams(1, dp(h))
-        return v
-    }
-
-    private fun card(): LinearLayout {
-        val c = LinearLayout(this)
-        c.orientation = LinearLayout.VERTICAL
-        c.setPadding(dp(16), dp(14), dp(16), dp(14))
-        val bg = GradientDrawable()
-        bg.setColor(CARD)
-        bg.setCornerRadius(dp(16).toFloat())
-        c.background = bg
-        c.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) }
-        return c
-    }
-
-    private fun button(text: String, primary: Boolean, onClick: () -> Unit): Button {
-        val b = Button(this)
-        b.text = text
-        b.setAllCaps(false)
-        b.setTextColor(Color.WHITE)
-        b.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16f)
-        b.setTypeface(Typeface.DEFAULT_BOLD)
-        val shape = GradientDrawable()
-        shape.setCornerRadius(dp(12).toFloat())
-        if (primary) shape.setColor(RED) else {
-            shape.setColor(FIELD)
-            shape.setStroke(dp(1), 0x33FFFFFF)
-        }
-        b.background = RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), shape, null)
-        b.minimumHeight = dp(50)
-        b.setOnClickListener { onClick() }
-        b.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) }
-        return b
-    }
-
-    private fun field(hint: String, value: String, uri: Boolean, onChange: (String) -> Unit): EditText {
-        val e = EditText(this)
-        e.hint = hint
-        e.setText(value)
-        e.setTextColor(INK)
-        e.setHintTextColor(MUTED)
-        e.setSingleLine(true)
-        e.inputType = if (uri) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        e.setPadding(dp(14), dp(12), dp(14), dp(12))
-        val bg = GradientDrawable()
-        bg.setColor(FIELD)
-        bg.setCornerRadius(dp(12).toFloat())
-        e.background = bg
-        e.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) }
-        e.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                onChange(s?.toString() ?: "")
-            }
-        })
-        return e
-    }
-
-    // ---------------------------------------------------------------------------------------------- the screen
+    // ---------------------------------------------------------------------------------------------------------------------------------------
     private fun render() {
+        val stage = stage()
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
-        col.setPadding(dp(20), dp(28), dp(20), dp(28))
+        col.setPadding(ui.dp(22), ui.dp(30), ui.dp(22), ui.dp(26))
 
-        val logo = ImageView(this)
-        logo.setImageResource(R.drawable.logo_icon)
-        logo.layoutParams = LinearLayout.LayoutParams(dp(72), dp(72))
-        col.addView(logo)
-        val title = SpannableStringBuilder("SavahLive")
-        title.setSpan(ForegroundColorSpan(RED), 5, title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        val head = label(title, 30f, INK, true)
-        head.setPadding(0, dp(12), 0, 0)
-        col.addView(head)
-        col.addView(label("Your SavahBot livestream, floating above any app.", 15f, MUTED))
-        col.addView(gap(18))
-
-        if (store.isPaired) pairedView(col) else unpairedView(col)
-
-        col.addView(gap(8))
-        col.addView(label("SavahLive " + BuildConfig.VERSION_NAME + "  \u00B7  SavahBot does the work, SavahLive shows the results.", 12f, MUTED))
+        brand(col, stage != 2)
+        if (stage < 2) col.addView(ui.stepBar(stage))
+        when (stage) {
+            0 -> pairStage(col)
+            1 -> allowStage(col)
+            else -> homeStage(col)
+        }
+        col.addView(ui.space(6))
+        col.addView(ui.text("SavahLive " + BuildConfig.VERSION_NAME + "  \u00B7  SavahBot does the work, SavahLive shows the results.", 12f, Ui.MUTED))
 
         val scroll = ScrollView(this)
-        scroll.setBackgroundColor(BG)
+        scroll.setBackgroundColor(Ui.BG)
         scroll.isFillViewport = true
+        scroll.isVerticalScrollBarEnabled = false
         scroll.addView(col)
         setContentView(scroll)
 
@@ -206,93 +123,205 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun unpairedView(col: LinearLayout) {
+    private fun brand(col: LinearLayout, big: Boolean) {
+        if (big) {
+            val logo = ImageView(this)
+            logo.setImageResource(R.drawable.logo_icon)
+            col.addView(logo, LinearLayout.LayoutParams(ui.dp(72), ui.dp(72)))
+            col.addView(ui.space(16))
+            col.addView(ui.wordmark(36f))
+            col.addView(ui.space(6))
+            col.addView(ui.text("Your stream chat, viewers and likes, floating over any game.", 16f, Ui.MUTED))
+            col.addView(ui.space(24))
+        } else {
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            val logo = ImageView(this)
+            logo.setImageResource(R.drawable.logo_icon)
+            row.addView(logo, LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)))
+            row.addView(ui.wordmark(26f), LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.leftMargin = ui.dp(12) })
+            row.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = ui.dp(20) }
+            col.addView(row)
+        }
+    }
+
+    // ---- stage 0: pair ----------------------------------------------------------------------------------------------------------------------
+    private fun pairStage(col: LinearLayout) {
         if (store.notice.isNotEmpty()) {
-            val n = card()
-            n.addView(label(store.notice, 14f, AMBER))
+            val n = ui.card(16)
+            n.background = ui.round(0x26F5B301, 20, 0x55F5B301, 1)
+            n.addView(ui.text(store.notice, 14f, Ui.AMBER))
             col.addView(n)
         }
-        val c = card()
-        c.addView(label("Pair with SavahBot", 18f, INK, true))
-        c.addView(gap(6))
-        c.addView(label("In SavahBot open Manage \u203A SavahLive \u203A Pair a phone. Scan the QR code with this phone's camera and tap Open SavahLive, or paste the link or type the code below. You only pair once.", 14f, MUTED))
-        c.addView(field("Pairing link or code", typedCode, false) { typedCode = it })
-        c.addView(field("SavahBot address (only if you typed just the code)", typedServer, true) { typedServer = it })
-        val go = button(if (pairing) "Pairing\u2026" else "Pair this phone", true) { onPairClicked() }
-        go.isEnabled = !pairing
+        val c = ui.card()
+        c.addView(ui.text("Link your SavahBot", 22f, Ui.INK, true))
+        c.addView(ui.space(4))
+        c.addView(ui.text("You only do this once.", 14f, Ui.MUTED))
+        c.addView(ui.space(12))
+        c.addView(ui.numberedStep(1, "In SavahBot open Manage, then SavahLive, then Pair a phone."))
+        c.addView(ui.numberedStep(2, "Scan the QR with your camera and tap Open SavahLive."))
+        c.addView(ui.numberedStep(3, "Or paste the link, or type the code, below."))
+        c.addView(ui.space(12))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val code = ui.field("Pairing link or code", typedCode) { typedCode = it }
+        code.letterSpacing = 0.06f
+        row.addView(code, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val paste = LinearLayout(this)
+        paste.gravity = Gravity.CENTER
+        paste.background = ui.round(Ui.RAISED, 16, Ui.LINE, 1)
+        paste.addView(ui.icon(R.drawable.ic_paste, Ui.INK, 22), LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)))
+        paste.isClickable = true
+        paste.contentDescription = "Paste"
+        paste.setOnClickListener { pasteFromClipboard() }
+        row.addView(paste, LinearLayout.LayoutParams(ui.dp(52), ui.dp(52)).also { it.leftMargin = ui.dp(8) })
+        c.addView(row)
+
+        if (showServer) {
+            c.addView(ui.space(8))
+            c.addView(ui.field("SavahBot address, like https://yourbot.up.railway.app", typedServer) { typedServer = it })
+        } else {
+            val more = ui.button("Typing only the code? Add the address", null, Ui.QUIET) {
+                showServer = true
+                render()
+            }
+            c.addView(more)
+        }
+        val go = ui.button(if (pairing) "Pairing\u2026" else "Pair this phone", R.drawable.ic_check, Ui.PRIMARY) { onPairClicked() }
+        ui.setEnabled(go, !pairing)
         c.addView(go)
         if (message.isNotEmpty()) {
-            val m = label(message, 14f, if (pairing) MUTED else AMBER)
-            m.setPadding(0, dp(10), 0, 0)
+            val m = ui.text(message, 14f, if (messageIsError && !pairing) Ui.AMBER else Ui.MUTED)
+            m.setPadding(0, ui.dp(12), 0, 0)
             c.addView(m)
         }
         col.addView(c)
     }
 
-    private fun pairedView(col: LinearLayout) {
-        val info = card()
-        info.addView(label("Paired with SavahBot", 18f, INK, true))
-        info.addView(gap(4))
-        val host = Uri.parse(store.server).host ?: store.server
-        info.addView(label(host, 14f, MUTED))
-        info.addView(label("This phone: " + store.deviceName, 14f, MUTED))
-        info.addView(label(
-            if (store.expires == 0L) "Stays paired until you remove it in SavahBot."
-            else "Pairing ends " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(store.expires)) + ".", 14f, MUTED))
-        col.addView(info)
-
-        val canDraw = Settings.canDrawOverlays(this)
-        val steps = card()
-        steps.addView(label("Before you start", 16f, INK, true))
-        steps.addView(gap(6))
-        steps.addView(label(if (canDraw) "\u2713  Display over other apps: allowed" else "Display over other apps: not allowed yet", 14f, if (canDraw) GREEN else AMBER))
-        if (!canDraw) steps.addView(button("Allow display over other apps", true) {
+    // ---- stage 1: allow the floating window -------------------------------------------------------------------------------------------------
+    private fun allowStage(col: LinearLayout) {
+        val c = ui.card()
+        c.addView(ui.iconBadge(R.drawable.ic_layers, Ui.RED, 60))
+        c.addView(ui.space(14))
+        c.addView(ui.text("Let SavahLive float", 24f, Ui.INK, true))
+        c.addView(ui.space(8))
+        c.addView(ui.text("To sit above your game, Android needs one switch turned on for SavahLive: \u201CDisplay over other apps\u201D.", 15f, Ui.MUTED))
+        c.addView(ui.space(12))
+        c.addView(ui.numberedStep(1, "Tap the button. Android opens a settings page."))
+        c.addView(ui.numberedStep(2, "Find SavahLive and turn the switch on."))
+        c.addView(ui.numberedStep(3, "Press back. You land here, ready to go."))
+        c.addView(ui.button("Open settings", R.drawable.ic_layers, Ui.PRIMARY) {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
+        col.addView(c)
+        optionalCards(col)
+    }
+
+    /** Notifications and battery: nice to have, never blocking. */
+    private fun optionalCards(col: LinearLayout) {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            steps.addView(gap(8))
-            steps.addView(label("Notifications: needed to show the Stop button while the overlay runs (optional).", 14f, MUTED))
-            steps.addView(button("Allow notifications", false) { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), ASK_NOTIFICATIONS) })
+            val n = ui.card(18)
+            n.addView(ui.infoRow(R.drawable.ic_bell, Ui.AMBER, "Notifications (optional)", "Shows the Stop button while the overlay runs."))
+            n.addView(ui.button("Allow notifications", null, Ui.SECONDARY) { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), ASK_NOTIFICATIONS) })
+            col.addView(n)
         }
         val power = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (!power.isIgnoringBatteryOptimizations(packageName)) {
-            steps.addView(gap(8))
-            steps.addView(label("Optional: on some phones (Xiaomi, Oppo, Samsung) the system stops background apps. Choose \u201CUnrestricted\u201D or \u201CDon't optimise\u201D for SavahLive if the overlay disappears during long games.", 13f, MUTED))
-            steps.addView(button("Open battery settings", false) { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) })
+            val b = ui.card(18)
+            b.addView(ui.infoRow(R.drawable.ic_power, Ui.GREEN, "Keep it running (optional)", "Some phones stop background apps during long games. Choose Unrestricted for SavahLive."))
+            b.addView(ui.button("Open battery settings", null, Ui.SECONDARY) { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) })
+            col.addView(b)
         }
-        col.addView(steps)
+    }
 
-        val run = card()
-        if (OverlayService.running) {
-            run.addView(label("Overlay is running", 18f, GREEN, true))
-            if (OverlayService.status.isNotEmpty()) run.addView(label(OverlayService.status, 14f, MUTED))
-            run.addView(gap(4))
-            run.addView(button("Stop overlay", false) {
+    // ---- stage 2: go ------------------------------------------------------------------------------------------------------------------------
+    private fun homeStage(col: LinearLayout) {
+        val running = OverlayService.running
+        val hero = ui.card(22)
+        hero.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(if (running) 0xFF0F3D2E.toInt() else 0xFF2A1114.toInt(), Ui.CARD)).also {
+            it.setCornerRadius(ui.dp(26).toFloat())
+            it.setStroke(ui.dp(1), Ui.LINE)
+        }
+        val status = LinearLayout(this)
+        status.orientation = LinearLayout.HORIZONTAL
+        status.gravity = Gravity.CENTER_VERTICAL
+        val dot = View(this)
+        dot.background = ui.round(if (running) Ui.GREEN else Ui.MUTED, 6)
+        status.addView(dot, LinearLayout.LayoutParams(ui.dp(12), ui.dp(12)))
+        status.addView(ui.text(if (running) "On air" else "Ready", 14f, if (running) Ui.GREEN else Ui.MUTED, true), LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.leftMargin = ui.dp(8) })
+        hero.addView(status)
+        hero.addView(ui.space(10))
+        hero.addView(ui.text(if (running) "Overlay is floating" else "Start the overlay", 26f, Ui.INK, true))
+        hero.addView(ui.space(6))
+        val sub = if (running && OverlayService.status.isNotEmpty()) OverlayService.status else "Then open PUBG Mobile or any app. SavahLive stays on top."
+        hero.addView(ui.text(sub, 15f, Ui.MUTED))
+        if (running) {
+            hero.addView(ui.button("Stop overlay", R.drawable.ic_power, Ui.SECONDARY) {
                 OverlayService.stop(this)
                 main.postDelayed({ render() }, 500)
             })
         } else {
-            run.addView(label("Overlay is off", 18f, INK, true))
-            run.addView(gap(4))
-            run.addView(label("Start it, then open PUBG Mobile or any app. Tap the small pill for the chat window, drag it to an edge to dock it, long-press it to change how see-through it is.", 14f, MUTED))
-            run.addView(button("Start overlay", true) { startOverlay() })
+            hero.addView(ui.button("Start overlay", R.drawable.ic_live, Ui.PRIMARY) { startOverlay() })
         }
         if (message.isNotEmpty()) {
-            val m = label(message, 14f, AMBER)
-            m.setPadding(0, dp(10), 0, 0)
-            run.addView(m)
+            val m = ui.text(message, 14f, Ui.AMBER)
+            m.setPadding(0, ui.dp(10), 0, 0)
+            hero.addView(m)
         }
-        col.addView(run)
+        col.addView(hero)
 
-        val unpair = button("Unpair this phone", false) { confirmUnpair() }
-        col.addView(unpair)
+        val how = ui.card(18)
+        how.addView(ui.text("How the panel works", 18f, Ui.INK, true))
+        how.addView(ui.space(6))
+        how.addView(ui.infoRow(R.drawable.ic_move, Ui.RED, "Move it", "Drag the top bar or the numbers row."))
+        how.addView(ui.infoRow(R.drawable.ic_expand, Ui.RED, "Resize it", "Drag a bottom corner. The whole panel scales together."))
+        how.addView(ui.infoRow(R.drawable.ic_tuck, Ui.RED, "Tuck it away", "Tap the \u2715. It becomes a small tab that hides at the screen edge and pops out when chat arrives."))
+        how.addView(ui.infoRow(R.drawable.ic_dots, Ui.RED, "More controls", "Tap the three dots for opacity, theme, lock, text size and stop."))
+        col.addView(how)
+
+        val info = ui.card(18)
+        info.addView(ui.text("This phone", 18f, Ui.INK, true))
+        info.addView(ui.space(8))
+        val host = Uri.parse(store.server).host ?: store.server
+        val chips = LinearLayout(this)
+        chips.orientation = LinearLayout.HORIZONTAL
+        chips.addView(ui.chip(host, Ui.GREEN))
+        info.addView(chips)
+        info.addView(ui.space(8))
+        info.addView(ui.text(store.deviceName, 15f, Ui.INK))
+        info.addView(ui.text(
+            if (store.expires == 0L) "Stays paired until you remove it in SavahBot."
+            else "Pairing ends " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(store.expires)) + ".",
+            13f, Ui.MUTED
+        ))
+        info.addView(ui.button("Unpair this phone", null, Ui.QUIET) { confirmUnpair() })
+        col.addView(info)
+        optionalCards(col)
     }
 
-    // ---------------------------------------------------------------------------------------------- actions
+    // ---- actions ----------------------------------------------------------------------------------------------------------------------------
+    private fun pasteFromClipboard() {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip
+        val text = if (clip != null && clip.itemCount > 0) (clip.getItemAt(0).coerceToText(this)?.toString() ?: "") else ""
+        if (text.isBlank()) {
+            message = "Nothing to paste yet. Copy the pairing link or code first."
+            messageIsError = true
+            render()
+            return
+        }
+        typedCode = text.trim()
+        onPairClicked()
+    }
+
     private fun onPairClicked() {
         val input = Pairing.parse(typedCode, typedServer)
         if (input == null) {
-            message = "That does not look like a pairing code. It has 8 letters and numbers, like K7Q4-9M2X."
+            message = "That does not look like a pairing link or code. A code has 8 letters and numbers, like K7Q4-9M2X."
+            messageIsError = true
             render()
             return
         }
@@ -303,12 +332,15 @@ class MainActivity : Activity() {
         if (pairing) return
         val server = Pairing.normalizeServer(input.server ?: typedServer, BuildConfig.DEBUG)
         if (server == null) {
-            message = "Enter the SavahBot address (it starts with https://)."
+            message = "Add the SavahBot address (it starts with https://). It is in the pairing link, or on the pairing page."
+            messageIsError = true
+            showServer = true
             render()
             return
         }
         pairing = true
         message = "Pairing\u2026"
+        messageIsError = false
         render()
         Thread({
             var ok: Net.PairResult? = null
@@ -329,6 +361,7 @@ class MainActivity : Activity() {
                     typedCode = ""
                 } else {
                     message = err
+                    messageIsError = true
                 }
                 render()
             }
@@ -337,7 +370,6 @@ class MainActivity : Activity() {
 
     private fun startOverlay() {
         if (!Settings.canDrawOverlays(this)) {
-            message = "Allow \u201CDisplay over other apps\u201D first."
             render()
             return
         }

@@ -380,8 +380,10 @@ Removed in 1.2.0: `NTFY_URL`, `NTFY_TOPIC` (push now uses Firebase), `WEATHER_AP
 | `SAVAHLIVE_CHAT_LINES` | `40` | How many recent chat lines a phone keeps (10 to 100). |
 | `SAVAHLIVE_PEEK_SECONDS` | `5` | How long the docked overlay slides out when a new chat line arrives, in seconds (2 to 15). |
 | `SAVAHLIVE_FONT_SIZE` | `14` | Chat text size in the overlay (11 to 22). |
+| `SAVAHLIVE_HIDE_SECONDS` | `3` | How long the tucked-away tab waits before sliding almost out of sight, in seconds (0 to 30). 0 keeps it fully visible. |
 | `SAVAHLIVE_HIDE_BOTS` | `True` | Leave bot messages (including SavahBot's own replies) out of the overlay chat. |
 | `SAVAHLIVE_HIDE_FLAGGED` | `True` | Leave messages that moderation flagged out of the overlay chat. |
 | `SAVAHLIVE_ONLY_SPECIAL` | `False` | Show only members, regulars, moderators and you in the overlay chat. |
 | `SAVAHLIVE_ROTATE_DAYS` | `30` | A paired phone quietly gets a new key this often, in days. 0 turns it off (1 to 365). |
 | `SAVAHLIVE_IDLE_UNPAIR_DAYS` | `0` | Unpair a phone that has not connected for this many days. 0 keeps phones paired until you remove them. |
+| `SAVAHLIVE_DOWNLOAD_URL` | blank | Optional link to the SavahLive APK (for example the GitHub raw link of the release). When set, Manage > SavahLive shows a Download button. |

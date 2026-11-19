@@ -28,18 +28,51 @@ class Store(context: Context) {
         get() = prefs.getString("notice", "") ?: ""
         set(v) { prefs.edit().putString("notice", v).apply() }
 
-    /** 0 solid, 1 glass, 2 ghost (text only). */
-    var opacity: Int
-        get() = prefs.getInt("opacity", 1)
-        set(v) { prefs.edit().putInt("opacity", v).apply() }
+    // ---- the floating panel and its edge tab: local choices, kept on this phone ----------------------------------------------------------
+    private fun int(key: String, def: Int, lo: Int, hi: Int): Int = prefs.getInt(key, def).coerceIn(lo, hi)
+    private fun put(key: String, v: Int) { prefs.edit().putInt(key, v).apply() }
 
-    val posX: Int get() = prefs.getInt("posX", -1)
-    val posY: Int get() = prefs.getInt("posY", -1)
-    val dock: Int get() = prefs.getInt("dock", 0)
+    var themeId: Int
+        get() = prefs.getInt("themeId", 0)
+        set(v) = put("themeId", v)
+    var customHue: Int                       // 0..359, used by the Custom theme
+        get() = int("customHue", 210, 0, 359)
+        set(v) = put("customHue", v)
+    var customLight: Int                     // 8..94
+        get() = int("customLight", 18, 8, 94)
+        set(v) = put("customLight", v)
+    var panelOpacity: Int                    // percent of the panel background, 20..100 (text and icons stay fully visible)
+        get() = int("panelOpacity", 92, 20, 100)
+        set(v) = put("panelOpacity", v)
+    var tabFade: Int                         // percent opacity of the tab while it is tucked away, 10..100
+        get() = int("tabFade", 45, 10, 100)
+        set(v) = put("tabFade", v)
+    var textScale: Int                       // percent, 80..140, on top of the size SavahBot asks for
+        get() = int("textScale", 100, 80, 140)
+        set(v) = put("textScale", v)
+    var panelScale: Int                      // percent of the base panel size, 50..160 (what you chose; the screen may allow less)
+        get() = int("panelScale", 100, 50, 160)
+        set(v) = put("panelScale", v)
 
-    fun savePosition(x: Int, y: Int, dock: Int) {
-        prefs.edit().putInt("posX", x).putInt("posY", y).putInt("dock", dock).apply()
-    }
+    /** Position of the panel as fractions of the free room on screen (per mille), so it keeps its place when the phone rotates. */
+    var panelFx: Int
+        get() = int("panelFx", 500, 0, 1000)
+        set(v) = put("panelFx", v)
+    var panelFy: Int
+        get() = int("panelFy", 300, 0, 1000)
+        set(v) = put("panelFy", v)
+
+    var tabEdge: Int                         // Edge.ordinal: LEFT, RIGHT, TOP, BOTTOM
+        get() = int("tabEdge", Edge.RIGHT.ordinal, 0, 3)
+        set(v) = put("tabEdge", v)
+    var tabAlong: Int                        // position along that edge, per mille
+        get() = int("tabAlong", 400, 0, 1000)
+        set(v) = put("tabAlong", v)
+
+    /** Which window was showing when the overlay last ran: the panel (true) or the tucked-away tab (false). */
+    var panelOpen: Boolean
+        get() = prefs.getBoolean("panelOpen", true)
+        set(v) { prefs.edit().putBoolean("panelOpen", v).apply() }
 
     val isPaired: Boolean get() = server.isNotEmpty() && key() != null
 

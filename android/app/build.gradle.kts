@@ -13,8 +13,8 @@ android {
         applicationId = "com.savahbot.live"
         minSdk = 26               // Android 8.0: the first version with the modern overlay window type, so no legacy code paths
         targetSdk = 34
-        versionCode = 10500
-        versionName = "1.5.0"
+        versionCode = 10600
+        versionName = "1.6.0"
     }
 
     buildFeatures {

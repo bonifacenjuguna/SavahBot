@@ -13,7 +13,8 @@ data class Stats(val viewers: Long?, val likes: Long?, val likesHidden: Boolean,
 
 data class State(val mode: String, val live: Boolean, val title: String)
 
-data class Prefs(val chatLines: Int, val peekSeconds: Int, val fontSize: Int)
+/** What SavahBot tells the phone to do: lines kept, how long new chat stays popped out, text size, and how long before the tab tucks itself away (0 = never). */
+data class Prefs(val chatLines: Int, val peekSeconds: Int, val fontSize: Int, val hideSeconds: Int = 3)
 
 enum class Link { CONNECTING, ONLINE, RECONNECTING, WAITING, PAUSED, UNPAIRED }
 

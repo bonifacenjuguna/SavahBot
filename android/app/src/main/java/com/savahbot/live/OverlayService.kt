@@ -92,7 +92,10 @@ class OverlayService : Service(), Feed.Listener {
             shutdown()
             return
         }
-        val o = Overlay(this, store) { shutdown() }
+        val o = Overlay(this, store, { shutdown() }, { on ->
+            locked = on
+            note(noteText)
+        })
         if (!o.show()) {
             shutdown()
             return

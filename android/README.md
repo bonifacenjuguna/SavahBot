@@ -435,3 +435,20 @@ Run these from the **`android`** directory unless stated otherwise.
 
 Signed APKs are filed, checksummed and protected from overwriting by `scripts\release-savahlive.ps1`. The full procedure (version bump, signing key, GitHub protection, installing over a debug build) is in [`../docs/RELEASING.md`](../docs/RELEASING.md). Releases live in `../releases/savahlive/<version>/`.
 
+
+---
+
+## 12. First-run checklist for 1.6.0 (the new panel and tab)
+
+The 1.6.0 Kotlin was written without a compiler. If `./gradlew assembleDebug` prints errors, copy the first few red lines to the developer: they are usually a one-line fix.
+`./gradlew test` runs the theme and geometry unit tests (`src/test`).
+
+1. **Pair and allow:** the three-step flow (Pair, Allow, Go) works; the paste button reads a copied link or code.
+2. **Panel:** Start overlay. Drag the top bar and the numbers row to move it. Drag a **bottom corner**: the whole panel scales together, with a coloured outline. The expand button cycles small, medium, large.
+3. **Tray:** tap the three dots. Slide **opacity** (the background fades, text stays readable) and **tab fade**. Try each theme and Custom. Text -/+ resizes chat text. **Stop** asks twice.
+4. **Tab:** tap the **X**. A box-shaped tab appears on the nearest edge. Drag it to another edge (left, right, top, bottom) and along the edge. After the hide delay it slides almost out of sight at the opacity you chose.
+5. **Pop-out:** in SavahBot Demo mode, start the demo. New chat slides the tab out with a card for the pop-out time, then it tucks away again. Tap the tab: the panel opens.
+6. **Edge tuck:** drag the panel more than a third off any screen edge and let go: it tucks into that edge.
+7. **Rotate the phone** (try PUBG in landscape): the panel and tab keep their relative place and the panel shrinks to fit.
+8. **Lock:** in the tray, Lock. Touches now pass through to the game; unlock from the notification.
+9. **Icon:** the SavahLive home-screen icon has the same face size as SavahBot's.

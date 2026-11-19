@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from branding/savahlive-icons/expand.svg. White on purpose: the app tints it with the panel theme at runtime. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M14,3h7v7l-2.6,-2.6 -4.4,4.4 -1.4,-1.4 4.4,-4.4zM10,21H3v-7l2.6,2.6 4.4,-4.4 1.4,1.4 -4.4,4.4z" />
+</vector>

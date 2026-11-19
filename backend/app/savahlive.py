@@ -55,6 +55,7 @@ OVERLAY: dict[str, tuple[str, str, int, int]] = {
     "chat_lines": ("savahlive_chat_lines", "int", 10, 100),
     "peek_seconds": ("savahlive_peek_seconds", "int", 2, 15),
     "font_size": ("savahlive_font_size", "int", 11, 22),
+    "hide_seconds": ("savahlive_hide_seconds", "int", 0, 30),
     "hide_bots": ("savahlive_hide_bots", "bool", 0, 1),
     "hide_flagged": ("savahlive_hide_flagged", "bool", 0, 1),
     "only_special": ("savahlive_only_special", "bool", 0, 1),

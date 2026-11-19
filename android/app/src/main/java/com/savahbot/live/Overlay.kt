@@ -1,584 +1,416 @@
 package com.savahbot.live
 
+import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.Color
 import android.graphics.PixelFormat
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.TextUtils
-import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
-import android.util.TypedValue
 import android.view.Gravity
-import android.view.MotionEvent
-import android.view.View
-import android.view.ViewConfiguration
 import android.view.WindowManager
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
+import android.view.animation.DecelerateInterpolator
 
 /**
- * The floating window. Three shapes of the same window:
- *  - compact: a small pill with the live dot, viewers and likes. A new chat line slides out under it for a few seconds, then tucks away.
- *  - docked: the compact pill pushed flush against the left, right or top edge (drag it there and let go).
- *  - expanded: tap the pill for a bigger window with the recent chat. The minimise button returns to the pill.
- * Long-press the pill (or tap the half-moon button when expanded) to cycle Solid, Glass and Ghost (no background, text only).
- * Everything here runs on the main thread. It draws what SavahBot sent; it decides nothing.
+ * Controls the two forms of the floating UI and what they show.
+ *  - [PanelView]: the full window (chat, stats, tray). Free-floating, draggable by its bars, resizable proportionally from the bottom corners.
+ *  - [TabWindow]: the box on a screen edge it tucks into (tap the X, or drag the panel off the edge).
+ * It keeps the one chat model, theme and settings, and feeds whichever window is showing. It draws what SavahBot sent; it decides nothing.
  */
-class Overlay(private val ctx: Context, private val store: Store, private val onClose: () -> Unit) {
-    private enum class Dock { NONE, LEFT, RIGHT, TOP }
+class Overlay(
+    private val ctx: Context,
+    private val store: Store,
+    private val onStop: () -> Unit,
+    private val onLockChanged: (Boolean) -> Unit
+) : PanelView.Host {
+    private companion object {
+        const val MIN_SCALE = 0.5f
+        const val MAX_SCALE = 1.6f
+        val SIZE_PRESETS = floatArrayOf(0.7f, 1.0f, 1.3f)
+    }
 
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val main = Handler(Looper.getMainLooper())
-    private val density = ctx.resources.displayMetrics.density
-
-    private fun dp(v: Int): Int = (v * density + 0.5f).toInt()
+    private fun dp(v: Int): Int = dpOf(ctx, v)
     private fun screenW(): Int = ctx.resources.displayMetrics.widthPixels
     private fun screenH(): Int = ctx.resources.displayMetrics.heightPixels
 
-    private var expanded = false
-    private var dock = Dock.NONE
-    private var opacity = store.opacity
-    private var added = false
+    // ---- model ---------------------------------------------------------------------------------------------------------------------------
+    private val lines = ArrayList<Line>()
+    private val shown = HashSet<Long>()
+    private var prefs = Prefs(40, 5, 14, 3)
     private var link = Link.CONNECTING
     private var detail = ""
     private var state = State("live", false, "")
     private var stats: Stats? = null
     private var lastData = 0L
-    private var prefs = Prefs(40, 5, 14)
     private var notice = ""
+    private var locked = false
 
-    private val dot = View(ctx)
-    private val statsView = TextView(ctx)
-    private val spacer = View(ctx)
-    private val btnOpacity = headerButton("\u25D0")
-    private val btnMin = headerButton("\u2013")
-    private val btnClose = headerButton("\u2715")
-    private val header = LinearLayout(ctx)
-    private val statusView = TextView(ctx)
-    private val ticker = LinearLayout(ctx)
-    private val list = LinearLayout(ctx)
-    private val scroll = ScrollView(ctx)
-    private val root = LinearLayout(ctx)
-
-    private val rows = ArrayList<TextView>()        // chat lines in the big window
-    private val ticks = ArrayList<TextView>()       // the last couple of lines shown under the pill
-    private val shown = HashSet<Long>()             // ids on screen, so a reconnect never repeats a line
-
-    private val params = WindowManager.LayoutParams(
+    // ---- windows -------------------------------------------------------------------------------------------------------------------------
+    private val panel = PanelView(ctx, store, this)
+    private val tab = TabWindow(ctx, wm, store) { openPanel() }
+    private var panelShown = false
+    private var scale = 1f
+    private var anim: ValueAnimator? = null
+    private val panelParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT
     )
+    private var dragStartX = 0
+    private var dragStartY = 0
+    private var anchorX = 0f
+    private var anchorY = 0f
+    private var corner = -1
+    private val staleCheck = Runnable { redrawHeader() }
 
-    private val hideTicker = Runnable { clearTicker() }
-    private val staleCheck = Runnable { redraw() }
-
-    private fun headerButton(symbol: String): TextView {
-        val t = TextView(ctx)
-        t.text = symbol
-        t.setTextColor(Color.WHITE)
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-        t.gravity = Gravity.CENTER
-        t.minimumWidth = dp(36)
-        t.minimumHeight = dp(36)
-        t.visibility = View.GONE
-        return t
-    }
-
-    init {
-        params.gravity = Gravity.TOP or Gravity.LEFT
-
-        dot.layoutParams = LinearLayout.LayoutParams(dp(10), dp(10)).apply { rightMargin = dp(8) }
-        statsView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        statsView.setTextColor(Color.WHITE)
-        statsView.setTypeface(Typeface.DEFAULT_BOLD)
-        statsView.setSingleLine(true)
-
-        header.orientation = LinearLayout.HORIZONTAL
-        header.gravity = Gravity.CENTER_VERTICAL
-        header.setPadding(dp(12), dp(6), dp(10), dp(6))
-        header.addView(dot)
-        header.addView(statsView)
-        header.addView(spacer, LinearLayout.LayoutParams(0, 1, 1f))
-        header.addView(btnOpacity)
-        header.addView(btnMin)
-        header.addView(btnClose)
-        header.setOnTouchListener(DragListener())
-
-        statusView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-        statusView.setPadding(dp(12), 0, dp(12), dp(6))
-        statusView.visibility = View.GONE
-
-        ticker.orientation = LinearLayout.VERTICAL
-        ticker.setPadding(dp(12), 0, dp(12), dp(8))
-        ticker.visibility = View.GONE
-
-        list.orientation = LinearLayout.VERTICAL
-        list.setPadding(dp(12), 0, dp(12), dp(8))
-        scroll.addView(list)
-        scroll.visibility = View.GONE
-
-        root.orientation = LinearLayout.VERTICAL
-        root.gravity = Gravity.LEFT
-        root.addView(header)
-        root.addView(statusView)
-        root.addView(ticker)
-        root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        btnClose.setOnClickListener { onClose() }
-        btnMin.setOnClickListener { setExpanded(false) }
-        btnOpacity.setOnClickListener { cycleOpacity() }
-    }
-
-    // ---------------------------------------------------------------------------------------------- window
+    // ---------------------------------------------------------------------------------------------------------------------------------------
     fun show(): Boolean {
-        if (added) return true
-        dock = Dock.values().getOrElse(store.dock) { Dock.NONE }
-        params.x = if (store.posX >= 0) store.posX else max(0, screenW() - dp(170))
-        params.y = if (store.posY >= 0) store.posY else dp(120)
-        params.gravity = Gravity.TOP or Gravity.LEFT
-        applyDock()
-        clamp()
         applyLook()
-        redraw()
+        redrawHeader()
+        val ok = if (store.panelOpen) showPanel() else tab.show(null, null)
+        if (!ok) hide()
+        return ok
+    }
+
+    fun hide() {
+        main.removeCallbacksAndMessages(null)
+        anim?.cancel()
+        anim = null
+        removePanel()
+        tab.hide()
+    }
+
+    fun onScreenChanged() {
+        if (panelShown) {
+            scale = effectiveScale()
+            panel.setScale(scale)
+            sizeToScale()
+            placeFromFractions()
+            update()
+        }
+        tab.onScreenChanged()
+    }
+
+    // ---- panel window --------------------------------------------------------------------------------------------------------------------
+    private fun effectiveScale(): Float =
+        Geo.clampScale(store.panelScale / 100f, MIN_SCALE, Geo.maxScale(panel.baseW, panel.baseH, screenW(), screenH(), dp(8), MIN_SCALE, MAX_SCALE))
+
+    private fun sizeToScale() {
+        panelParams.width = (panel.baseW * scale).toInt()
+        panelParams.height = (panel.baseH * scale).toInt()
+    }
+
+    private fun placeFromFractions() {
+        val sw = screenW()
+        val sh = screenH()
+        panelParams.gravity = Gravity.TOP or Gravity.LEFT
+        panelParams.x = Geo.clampInto((store.panelFx / 1000f * (sw - panelParams.width)).toInt(), panelParams.width, sw)
+        panelParams.y = Geo.clampInto((store.panelFy / 1000f * (sh - panelParams.height)).toInt(), panelParams.height, sh)
+    }
+
+    private fun savePanelPosition() {
+        val roomX = screenW() - panelParams.width
+        val roomY = screenH() - panelParams.height
+        store.panelFx = if (roomX > 0) (panelParams.x * 1000L / roomX).toInt().coerceIn(0, 1000) else 500
+        store.panelFy = if (roomY > 0) (panelParams.y * 1000L / roomY).toInt().coerceIn(0, 1000) else 300
+    }
+
+    private fun showPanel(): Boolean {
+        scale = effectiveScale()
+        panel.setScale(scale)
+        sizeToScale()
+        placeFromFractions()
+        panel.setLines(lines)
+        panel.setLocked(locked)
+        applyLockFlag()
         return try {
-            wm.addView(root, params)
-            added = true
+            wm.addView(panel.root, panelParams)
+            panelShown = true
+            store.panelOpen = true
+            panel.root.alpha = 0f
+            panel.root.animate().alpha(1f).setDuration(160).start()
             true
         } catch (e: Exception) {
             false          // no overlay permission, or the system refused: the service stops
         }
     }
 
-    fun hide() {
-        main.removeCallbacksAndMessages(null)
-        if (added) {
-            try {
-                wm.removeView(root)
-            } catch (e: Exception) {
-                // already gone
-            }
+    private fun removePanel() {
+        if (!panelShown) return
+        panel.closeTray()
+        try {
+            wm.removeView(panel.root)
+        } catch (e: Exception) {
+            // already gone
         }
-        added = false
+        panelShown = false
     }
 
     private fun update() {
-        if (!added) return
+        if (!panelShown) return
         try {
-            wm.updateViewLayout(root, params)
+            wm.updateViewLayout(panel.root, panelParams)
         } catch (e: Exception) {
             // the window is being torn down
         }
     }
 
+    private fun applyLockFlag() {
+        panelParams.flags = if (locked) panelParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        else panelParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+    }
+
     fun setLocked(on: Boolean) {
-        params.flags = if (on) params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        else params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        locked = on
+        panel.setLocked(on)
+        applyLockFlag()
         update()
     }
 
-    fun onScreenChanged() {
-        toAbsolute()
-        if (expanded) sizeExpanded()
-        applyDock()
-        clamp()
+    /** Panel's tray button. Locking makes touches pass through the panel, so it can only be unlocked from the notification. */
+    override fun toggleLock() {
+        setLocked(!locked)
+        onLockChanged(locked)
+    }
+
+    // ---- opening and tucking -------------------------------------------------------------------------------------------------------------
+    private fun openPanel() {
+        tab.hide()
+        if (!showPanel()) tab.show(null, null)
+    }
+
+    private fun tuckInto(e: Edge) {
+        val sw = screenW()
+        val sh = screenH()
+        val cx = panelParams.x + panelParams.width / 2f
+        val cy = panelParams.y + panelParams.height / 2f
+        val vertical = e == Edge.LEFT || e == Edge.RIGHT
+        val fraction = if (vertical) (cy / sh).coerceIn(0f, 1f) else (cx / sw).coerceIn(0f, 1f)
+        savePanelPosition()
+        removePanel()
+        store.panelOpen = false
+        if (!tab.show(e, fraction)) showPanel()
+    }
+
+    override fun tuck() {
+        val cx = panelParams.x + panelParams.width / 2f
+        val cy = panelParams.y + panelParams.height / 2f
+        tuckInto(Geo.nearestEdge(cx, cy, screenW(), screenH()))
+    }
+
+    override fun stopOverlay() {
+        onStop()
+    }
+
+    // ---- dragging ------------------------------------------------------------------------------------------------------------------------
+    override fun dragStart() {
+        anim?.cancel()
+        dragStartX = panelParams.x
+        dragStartY = panelParams.y
+    }
+
+    override fun dragBy(dx: Float, dy: Float) {
+        val w = panelParams.width
+        val h = panelParams.height
+        // it may be pulled up to 60% past an edge; letting go that far out tucks it into that edge
+        panelParams.x = (dragStartX + dx).toInt().coerceIn((-0.6f * w).toInt(), screenW() - (0.4f * w).toInt())
+        panelParams.y = (dragStartY + dy).toInt().coerceIn((-0.6f * h).toInt(), screenH() - (0.4f * h).toInt())
         update()
     }
 
-    private fun isRight(): Boolean = (params.gravity and Gravity.RIGHT) == Gravity.RIGHT
-
-    private fun widthNow(): Int = if (params.width > 0) params.width else if (root.width > 0) root.width else dp(160)
-    private fun heightNow(): Int = if (params.height > 0) params.height else if (root.height > 0) root.height else dp(44)
-
-    /** While dragging the window is positioned from its left edge; a right-docked window is anchored to the right edge, so convert first. */
-    private fun toAbsolute() {
-        if (isRight()) {
-            params.x = max(0, screenW() - widthNow() - params.x)
-            params.gravity = Gravity.TOP or Gravity.LEFT
+    override fun dragEnd() {
+        val w = panelParams.width
+        val h = panelParams.height
+        val e = Geo.overshootEdge(panelParams.x, panelParams.y, w, h, screenW(), screenH(), 0.35f)
+        if (e != null) {
+            tuckInto(e)
+            return
         }
-    }
-
-    private fun clamp() {
-        if (!isRight()) params.x = params.x.coerceIn(0, max(0, screenW() - widthNow()))
-        params.y = params.y.coerceIn(0, max(0, screenH() - heightNow()))
-    }
-
-    private fun applyDock() {
-        if (expanded) return
-        when (dock) {
-            Dock.LEFT -> {
-                params.gravity = Gravity.TOP or Gravity.LEFT
-                params.x = 0
+        val toX = Geo.clampInto(panelParams.x, w, screenW())
+        val toY = Geo.clampInto(panelParams.y, h, screenH())
+        val fromX = panelParams.x
+        val fromY = panelParams.y
+        if (fromX == toX && fromY == toY) {
+            savePanelPosition()
+            return
+        }
+        val a = ValueAnimator.ofFloat(0f, 1f)
+        a.duration = 160
+        a.interpolator = DecelerateInterpolator()
+        a.addUpdateListener {
+            val t = it.animatedValue as Float
+            panelParams.x = (fromX + (toX - fromX) * t).toInt()
+            panelParams.y = (fromY + (toY - fromY) * t).toInt()
+            update()
+        }
+        a.addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) {
+                savePanelPosition()
             }
-            Dock.RIGHT -> {
-                params.gravity = Gravity.TOP or Gravity.RIGHT
-                params.x = 0
-            }
-            Dock.TOP -> {
-                params.gravity = Gravity.TOP or Gravity.LEFT
-                params.y = 0
-            }
-            Dock.NONE -> params.gravity = Gravity.TOP or Gravity.LEFT
-        }
-        root.gravity = if (dock == Dock.RIGHT) Gravity.RIGHT else Gravity.LEFT
+        })
+        anim = a
+        a.start()
     }
 
-    /** After a drag: close to an edge means "dock there". */
-    private fun snap() {
-        val edge = dp(36)
-        val left = params.x
-        val right = screenW() - (params.x + widthNow())
-        val top = params.y
-        val best = min(left, min(right, top))
-        dock = when {
-            best > edge -> Dock.NONE
-            best == left -> Dock.LEFT
-            best == right -> Dock.RIGHT
-            else -> Dock.TOP
-        }
-        applyDock()
+    // ---- resizing (proportional, from the bottom corners) ----------------------------------------------------------------------------------
+    override fun resizeStart(corner: Int) {
+        this.corner = corner
+        anchorX = if (corner == 2) (panelParams.x + panelParams.width).toFloat() else panelParams.x.toFloat()    // the top corner opposite the one being dragged
+        anchorY = panelParams.y.toFloat()
+    }
+
+    override fun resizeTo(rawX: Float, rawY: Float) {
+        if (corner < 0) return
+        val maxS = Geo.maxScale(panel.baseW, panel.baseH, screenW(), screenH(), dp(8), MIN_SCALE, MAX_SCALE)
+        scale = Geo.clampScale(Geo.scaleFromDrag(anchorX, anchorY, rawX, rawY, panel.baseW, panel.baseH), MIN_SCALE, maxS)
+        panel.setScale(scale)
+        sizeToScale()
+        panelParams.x = if (corner == 2) (anchorX - panelParams.width).toInt() else anchorX.toInt()
+        panelParams.y = anchorY.toInt()
         update()
-        savePosition()
     }
 
-    private fun savePosition() {
-        val absX = if (isRight()) max(0, screenW() - widthNow() - params.x) else params.x
-        store.savePosition(absX, params.y, dock.ordinal)
-    }
-
-    private fun sizeExpanded() {
-        params.width = min(dp(340), screenW() - dp(16))
-        params.height = min(dp(380), (screenH() * 0.55f).toInt())
-    }
-
-    private fun setExpanded(on: Boolean) {
-        if (expanded == on) return
-        toAbsolute()
-        expanded = on
-        if (on) {
-            clearTicker()
-            sizeExpanded()
-            root.gravity = Gravity.LEFT
-        } else {
-            params.width = WindowManager.LayoutParams.WRAP_CONTENT
-            params.height = WindowManager.LayoutParams.WRAP_CONTENT
-            applyDock()
-        }
-        scroll.visibility = if (on) View.VISIBLE else View.GONE
-        val buttons = if (on) View.VISIBLE else View.GONE
-        btnOpacity.visibility = buttons
-        btnMin.visibility = buttons
-        btnClose.visibility = buttons
-        clamp()
-        redraw()
+    override fun resizeEnd() {
+        if (corner < 0) return
+        corner = -1
+        store.panelScale = Math.round(scale * 100f)
+        panelParams.x = Geo.clampInto(panelParams.x, panelParams.width, screenW())
+        panelParams.y = Geo.clampInto(panelParams.y, panelParams.height, screenH())
         update()
-        if (on) scrollDown()
-        savePosition()
+        savePanelPosition()
     }
 
-    private fun cycleOpacity() {
-        opacity = (opacity + 1) % 3
-        store.opacity = opacity
+    /** The expand button: small, medium, large. */
+    override fun cycleSize() {
+        val maxS = Geo.maxScale(panel.baseW, panel.baseH, screenW(), screenH(), dp(8), MIN_SCALE, MAX_SCALE)
+        var next = SIZE_PRESETS[0]
+        for (p in SIZE_PRESETS) {
+            if (p > scale + 0.05f) {
+                next = p
+                break
+            }
+        }
+        scale = Geo.clampScale(next, MIN_SCALE, maxS)
+        store.panelScale = Math.round(scale * 100f)
+        panel.setScale(scale)
+        sizeToScale()
+        panelParams.x = Geo.clampInto(panelParams.x, panelParams.width, screenW())
+        panelParams.y = Geo.clampInto(panelParams.y, panelParams.height, screenH())
+        update()
+        savePanelPosition()
+    }
+
+    // ---- look and settings ---------------------------------------------------------------------------------------------------------------
+    override fun settingsChanged() {
         applyLook()
     }
 
-    private inner class DragListener : View.OnTouchListener {
-        private var downX = 0f
-        private var downY = 0f
-        private var startX = 0
-        private var startY = 0
-        private var moved = false
-        private var longPressed = false
-        private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
-        private val longPress = Runnable {
-            if (!moved) {
-                longPressed = true
-                cycleOpacity()
-            }
-        }
-
-        override fun onTouch(v: View, e: MotionEvent): Boolean {
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    toAbsolute()
-                    downX = e.rawX
-                    downY = e.rawY
-                    startX = params.x
-                    startY = params.y
-                    moved = false
-                    longPressed = false
-                    main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
-                    return true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = e.rawX - downX
-                    val dy = e.rawY - downY
-                    if (!moved && (abs(dx) > slop || abs(dy) > slop)) {
-                        moved = true
-                        main.removeCallbacks(longPress)
-                        if (!expanded) dock = Dock.NONE
-                    }
-                    if (moved) {
-                        params.x = (startX + dx).toInt()
-                        params.y = (startY + dy).toInt()
-                        clamp()
-                        update()
-                    }
-                    return true
-                }
-                MotionEvent.ACTION_UP -> {
-                    main.removeCallbacks(longPress)
-                    if (moved) {
-                        if (!expanded) snap() else savePosition()
-                    } else if (!longPressed && !expanded) {
-                        setExpanded(true)
-                    }
-                    return true
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    main.removeCallbacks(longPress)
-                    if (moved) {
-                        if (!expanded) snap() else savePosition()
-                    }
-                    return true
-                }
-            }
-            return false
-        }
+    private fun applyLook() {
+        val theme = Themes.byId(store.themeId, store.customHue, store.customLight)
+        panel.setLook(theme, store.panelOpacity, prefs.fontSize.toFloat(), store.textScale, prefs.chatLines)
+        tab.setLook(theme, store.tabFade, prefs.hideSeconds, prefs.peekSeconds, prefs.fontSize.toFloat())
     }
 
-    // ---------------------------------------------------------------------------------------------- what is shown
+    // ---- what SavahBot sends -------------------------------------------------------------------------------------------------------------
     fun setLink(l: Link, d: String) {
         link = l
         detail = d
         main.removeCallbacks(staleCheck)
         if (l == Link.ONLINE) lastData = System.currentTimeMillis() else main.postDelayed(staleCheck, 31_000)
-        redraw()
+        redrawHeader()
     }
 
     fun setState(s: State) {
         state = s
-        redraw()
+        redrawHeader()
     }
 
     fun setStats(s: Stats) {
         stats = s
         lastData = System.currentTimeMillis()
-        redraw()
+        redrawHeader()
     }
 
     fun setPrefs(p: Prefs) {
         prefs = p
-        for (r in rows) r.setTextSize(TypedValue.COMPLEX_UNIT_SP, p.fontSize.toFloat())
-        for (t in ticks) t.setTextSize(TypedValue.COMPLEX_UNIT_SP, p.fontSize.toFloat())
-        trimRows()
+        applyLook()
+        trim()
+        if (panelShown) panel.setLines(lines)
     }
 
     fun showNotice(text: String) {
         notice = text
-        redraw()
+        redrawHeader()
     }
 
-    fun addChat(lines: List<Line>, skipped: Int) {
-        val atBottom = !expanded || scroll.height == 0 || scroll.scrollY + scroll.height >= list.height - dp(48)
+    private fun trim() {
+        while (lines.size > prefs.chatLines) {
+            val old = lines.removeAt(0)
+            shown.remove(old.id)
+        }
+    }
+
+    fun addChat(newLines: List<Line>, skipped: Int) {
         val fresh = ArrayList<Line>()
         if (skipped > 0) fresh.add(Line(0, "", "", "+$skipped more messages", "note"))
-        for (l in lines) {
-            if (l.id > 0 && shown.contains(l.id)) continue
-            fresh.add(l)
+        for (l in newLines) {
+            if (l.id == 0L || shown.add(l.id)) fresh.add(l)
         }
         if (fresh.isEmpty()) return
-        for (l in fresh) {
-            val row = makeLine(l, false)
-            list.addView(row)
-            rows.add(row)
-            if (l.id > 0) shown.add(l.id)
-        }
-        trimRows()
-        if (expanded) {
-            if (atBottom) scrollDown()
-        } else {
-            peek(fresh)
-        }
+        lines.addAll(fresh)
+        trim()
+        if (panelShown) panel.addLines(fresh) else tab.pop(fresh)
     }
 
     fun purge(uids: List<String>, ids: List<Long>) {
-        val gone = ArrayList<TextView>()
-        for (r in rows) {
-            val l = r.tag as? Line ?: continue
-            if (l.id > 0 && ids.contains(l.id) || l.uid.isNotEmpty() && uids.contains(l.uid)) gone.add(r)
-        }
-        for (r in gone) {
-            list.removeView(r)
-            rows.remove(r)
-            (r.tag as? Line)?.let { shown.remove(it.id) }
-        }
-        val goneTicks = ArrayList<TextView>()
-        for (t in ticks) {
-            val l = t.tag as? Line ?: continue
-            if (l.id > 0 && ids.contains(l.id) || l.uid.isNotEmpty() && uids.contains(l.uid)) goneTicks.add(t)
-        }
-        for (t in goneTicks) {
-            ticker.removeView(t)
-            ticks.remove(t)
-        }
-        if (ticks.isEmpty()) ticker.visibility = View.GONE
-    }
-
-    private fun trimRows() {
-        while (rows.size > prefs.chatLines) {
-            val v = rows.removeAt(0)
-            list.removeView(v)
-            (v.tag as? Line)?.let { shown.remove(it.id) }
-        }
-    }
-
-    private fun scrollDown() {
-        scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
-    }
-
-    /** Compact mode: the newest line or two slide out under the pill, then tuck away after the peek time. */
-    private fun peek(fresh: List<Line>) {
-        val newest = if (fresh.size > 2) fresh.subList(fresh.size - 2, fresh.size) else fresh
-        for (l in newest) {
-            val t = makeLine(l, true)
-            ticker.addView(t, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            ticks.add(t)
-        }
-        while (ticks.size > 2) {
-            ticker.removeView(ticks.removeAt(0))
-        }
-        ticker.visibility = View.VISIBLE
-        main.removeCallbacks(hideTicker)
-        main.postDelayed(hideTicker, prefs.peekSeconds * 1000L)
-    }
-
-    private fun clearTicker() {
-        main.removeCallbacks(hideTicker)
-        ticker.removeAllViews()
-        ticks.clear()
-        ticker.visibility = View.GONE
-    }
-
-    private fun makeLine(line: Line, forTicker: Boolean): TextView {
-        val t = TextView(ctx)
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, prefs.fontSize.toFloat())
-        t.setTextColor(0xFFF1F2F5.toInt())
-        t.setPadding(0, dp(2), 0, dp(2))
-        t.setShadowLayer(if (opacity == 2) 4f else 0f, 0f, 1f, Color.BLACK)
-        t.text = lineText(line)
-        t.tag = line
-        if (forTicker) {
-            t.maxLines = 2
-            t.ellipsize = TextUtils.TruncateAt.END
-            t.maxWidth = min(dp(280), (screenW() * 0.75f).toInt())
-        }
-        return t
-    }
-
-    private fun lineText(line: Line): CharSequence {
-        val sb = SpannableStringBuilder()
-        if (line.level == "note") {
-            val start = sb.length
-            sb.append(line.text)
-            sb.setSpan(ForegroundColorSpan(0xFF9AA0B0.toInt()), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            sb.setSpan(StyleSpan(Typeface.ITALIC), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            return sb
-        }
-        val color = when (line.level) {
-            "owner" -> 0xFFFFC857.toInt()
-            "mod" -> 0xFF6EA8FF.toInt()
-            "member" -> 0xFF4ADE80.toInt()
-            else -> 0xFFB8BECC.toInt()
-        }
-        val start = sb.length
-        sb.append(line.name).append("  ")
-        sb.setSpan(ForegroundColorSpan(color), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        sb.setSpan(StyleSpan(Typeface.BOLD), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        sb.append(line.text)
-        return sb
-    }
-
-    // ---------------------------------------------------------------------------------------------- drawing
-    private fun applyLook() {
-        val bg = GradientDrawable()
-        bg.setCornerRadius(dp(14).toFloat())
-        when (opacity) {
-            0 -> {
-                bg.setColor(0xF2111318.toInt())
-                bg.setStroke(dp(1), 0x33FFFFFF)
+        val iter = lines.iterator()
+        var changed = false
+        while (iter.hasNext()) {
+            val l = iter.next()
+            if ((l.id > 0 && ids.contains(l.id)) || (l.uid.isNotEmpty() && uids.contains(l.uid))) {
+                iter.remove()
+                shown.remove(l.id)
+                changed = true
             }
-            1 -> {
-                bg.setColor(0x99111318.toInt())
-                bg.setStroke(dp(1), 0x22FFFFFF)
-            }
-            else -> bg.setColor(Color.TRANSPARENT)
         }
-        root.background = bg
-        val shadow = if (opacity == 2) 4f else 0f
-        statsView.setShadowLayer(shadow, 0f, 1f, Color.BLACK)
-        statusView.setShadowLayer(shadow, 0f, 1f, Color.BLACK)
-        for (r in rows) r.setShadowLayer(shadow, 0f, 1f, Color.BLACK)
-        for (t in ticks) t.setShadowLayer(shadow, 0f, 1f, Color.BLACK)
+        if (changed && panelShown) panel.setLines(lines)
     }
 
-    private fun redraw() {
+    /** The numbers and the status line, worked out once and given to both windows. Nothing is shown as live when it is not. */
+    private fun redrawHeader() {
         val fresh = link == Link.ONLINE || System.currentTimeMillis() - lastData < 30_000
         val s = stats
         val canShow = fresh && s != null && s.enabled && state.live
-        val sb = SpannableStringBuilder()
-        sb.append("\uD83D\uDC41 ").append(if (canShow && s != null) Fmt.count(s.viewers) else Fmt.count(null))
-        sb.append("   ")
-        val heart = sb.length
-        sb.append("\u2665")
-        sb.setSpan(ForegroundColorSpan(0xFFFF4D55.toInt()), heart, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        sb.append(" ").append(if (canShow && s != null && !s.likesHidden) Fmt.count(s.likes) else Fmt.count(null))
-        statsView.text = sb
-
-        val dotColor = when {
-            link == Link.ONLINE && state.live -> 0xFFE5242B.toInt()
-            link == Link.CONNECTING || link == Link.RECONNECTING || link == Link.WAITING -> 0xFFF5B301.toInt()
-            else -> 0xFF8A90A0.toInt()
+        val viewers = if (canShow && s != null) Fmt.count(s.viewers) else Fmt.count(null)
+        val likes = if (canShow && s != null && !s.likesHidden) Fmt.count(s.likes) else Fmt.count(null)
+        val dot = when {
+            link == Link.ONLINE && state.live -> 0
+            link == Link.CONNECTING || link == Link.RECONNECTING || link == Link.WAITING -> 1
+            else -> 2
         }
-        val d = GradientDrawable()
-        d.shape = GradientDrawable.OVAL
-        d.setColor(dotColor)
-        dot.background = d
-
         var text = ""
-        var color = 0xFFB8BECC.toInt()
+        var alert = false
         when {
             notice.isNotEmpty() -> {
                 text = notice
-                color = 0xFFFF6B6B.toInt()
+                alert = true
             }
             link == Link.CONNECTING -> text = "Connecting\u2026"
             link == Link.RECONNECTING -> {
                 text = "Reconnecting\u2026"
-                color = 0xFFF5B301.toInt()
+                alert = true
             }
             link == Link.WAITING -> {
                 text = detail
-                color = 0xFFF5B301.toInt()
+                alert = true
             }
             link == Link.ONLINE && state.mode == "demo" -> text = "Demo mode"
             link == Link.ONLINE && !state.live -> text = "Waiting for your stream"
-            link == Link.ONLINE && expanded && state.title.isNotEmpty() -> text = state.title
+            link == Link.ONLINE && state.title.isNotEmpty() -> text = state.title
         }
-        statusView.text = text
-        statusView.setTextColor(color)
-        statusView.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
-        applyLook()
+        panel.setHeader(viewers, likes, dot, text, alert)
+        tab.setHeader(viewers, likes, dot)
     }
 }

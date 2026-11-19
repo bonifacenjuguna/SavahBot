@@ -237,6 +237,22 @@ def test_one_feed_per_phone_and_a_cap_across_phones():
     run(go())
 
 
+def test_overlay_settings_are_clamped_and_include_the_tab_hide_delay():
+    async def go():
+        sl, c = await make()
+        assert sl.overlay_settings()["hide_seconds"] == 3                            # the default: the tab tucks away after three seconds
+        c.cfg.set("savahlive_hide_seconds", 99)
+        assert sl.overlay_settings()["hide_seconds"] == 30
+        c.cfg.set("savahlive_hide_seconds", 0)
+        assert sl.overlay_settings()["hide_seconds"] == 0                            # 0 = never tuck away
+        d = await pair(sl)
+        gen = sl.stream(await sl.device(bearer(d["key"])), 0, lambda: asyncio.sleep(0, False))
+        hello = body((await next_events(gen))[0])
+        assert hello["settings"]["hide_seconds"] == 0 and hello["settings"]["peek_seconds"] == 5
+        await gen.aclose()
+    run(go())
+
+
 def test_revoke_all_and_listing():
     async def go():
         sl, c = await make()

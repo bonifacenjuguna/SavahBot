@@ -10,3 +10,7 @@ Added the Android overlay companion: backend (`savahlive.py`, `api/savahlive_rou
 
 ## 1.5.0 follow-up (release setup)
 The owner built and ran the SavahLive APK (debug) on a phone: the Kotlin compiled unchanged. Added: write-once `releases/` folder and the "Protect releases" workflow, `scripts/release-savahlive.ps1`, `scripts/bump_version.py`, `scripts/check_releases.py`, root `.gitignore` and `.gitattributes`, `docs/RELEASING.md`, and a backend repo-hygiene test (`tests/test_repo.py`). Still to do by the owner: commit the Gradle wrapper, create the release key, turn on the GitHub ruleset, then run the first signed release. Not verified here: the PowerShell script and the GitHub workflow (no PowerShell or GitHub in this environment).
+
+## 1.6.0 (SavahLive redesign)
+Panel + edge tab (Panel/Tab/Overlay/PanelView/TabWindow), themes and SVG icons, guided app screens, redesigned web page, `hide_seconds` and `download_url` settings, logo proportion fix. Verified here: backend service tests (10, against this tree), frontend type-check, icon path validation and rendering, theme contrast maths, bracket/cross-reference scans of the Kotlin. NOT verified: any Kotlin compile or run, the backend HTTP tests, `vite build`, the PowerShell script and the workflow.
+

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.6.0
+
+### Changed: SavahLive redesigned (see docs/SAVAHLIVE.md)
+- **The floating window is now a resizable panel with an edge tab.** Drag the top bar to move it; drag a bottom corner to resize (the whole panel scales proportionally, with an outline while you do); the expand button cycles small, medium and large. The three dots open a tray with panel opacity and tab fade as slide lines, theme, lock, text size and a two-tap stop. The ✕ tucks the panel into a **box-shaped tab** on any screen edge, anywhere along it, which slides almost out of sight (at an opacity you choose) and **pops out when new chat arrives** for a time you set. Dragging the panel off an edge tucks it too.
+- **Fixed:** the small pill used to stretch across the whole screen and cover game buttons. It no longer exists in that form: the tab is a small box.
+- **Themes and SVG icons.** Six themes plus Custom (colour and light/dark lines). All icons are SVG (`branding/savahlive-icons/`) drawn in the theme's colours, replacing the emoji. Text colour is chosen automatically for contrast.
+- **App screens redesigned:** a guided Pair, Allow, Go flow with a paste button, a clear explanation before Android's permission page, and a calm home screen with a big Start/Stop and a short "how the panel works".
+- **Logo:** the SavahLive home-screen and in-app logo now match SavahBot's proportions (the face was about 44% too big).
+- **Manage > SavahLive redesigned:** a status hero, phone cards that no longer squash on a phone, a live preview of the panel, sliders and steppers, a redesigned pairing sheet (bigger QR, countdown bar) and a save bar for unsaved changes.
+- **New settings:** `SAVAHLIVE_HIDE_SECONDS` (how long before the tab tucks away, 0 = never) and `SAVAHLIVE_DOWNLOAD_URL` (optional Download button). Phones no longer use up any of the dashboard's connection slots.
+
+### Notes
+- The Android code could not be compiled where this version was written (no Android SDK there); the previous version's Kotlin compiled unchanged on a real phone. Build with `android/README.md` and send me any compiler errors. The theme and geometry maths have unit tests (`./gradlew test`).
+
 ## 1.5.0
 
 ### Added: SavahLive, the Android floating overlay (see docs/SAVAHLIVE.md)

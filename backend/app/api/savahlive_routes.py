@@ -52,6 +52,8 @@ class SettingsIn(_In):
     chat_lines: int | None = Field(default=None, ge=10, le=100)
     peek_seconds: int | None = Field(default=None, ge=2, le=15)
     font_size: int | None = Field(default=None, ge=11, le=22)
+    hide_seconds: int | None = Field(default=None, ge=0, le=30)
+    download_url: str | None = Field(default=None, max_length=300)
     hide_bots: bool | None = None
     hide_flagged: bool | None = None
     only_special: bool | None = None
@@ -62,7 +64,7 @@ class SettingsIn(_In):
 
 # setting field (above) -> config name
 SETTING_KEYS = {"enabled": "savahlive_enabled", "max_devices": "savahlive_max_devices", "max_feeds": "savahlive_max_feeds", "chat_lines": "savahlive_chat_lines",
-                "peek_seconds": "savahlive_peek_seconds", "font_size": "savahlive_font_size", "hide_bots": "savahlive_hide_bots", "hide_flagged": "savahlive_hide_flagged",
+                "peek_seconds": "savahlive_peek_seconds", "font_size": "savahlive_font_size", "hide_seconds": "savahlive_hide_seconds", "download_url": "savahlive_download_url", "hide_bots": "savahlive_hide_bots", "hide_flagged": "savahlive_hide_flagged",
                 "only_special": "savahlive_only_special", "rotate_days": "savahlive_rotate_days", "idle_unpair_days": "savahlive_idle_unpair_days", "track_stats": "yt_live_enabled"}
 
 
@@ -154,7 +156,7 @@ async def _overview(request: Request, c: Any) -> dict:
         "devices": await sl.devices(), "connected": len(sl.feeds), "state": state,
         "settings": {**sl.overlay_settings(), "enabled": sl.enabled, "max_devices": sl.limit("savahlive_max_devices", 1, 20), "max_feeds": sl.limit("savahlive_max_feeds", 1, 20),
                      "rotate_days": sl.limit("savahlive_rotate_days", 0, 365), "idle_unpair_days": sl.limit("savahlive_idle_unpair_days", 0, 365),
-                     "track_stats": bool(cfg.get("yt_live_enabled"))},
+                     "track_stats": bool(cfg.get("yt_live_enabled")), "download_url": str(cfg.get("savahlive_download_url") or "")},
         "stats_seconds": int(cfg.get("yt_live_seconds")), "dashboard_clients": c.bus.subscriber_count, "dashboard_limit": int(cfg.get("sse_max_clients")),
         "expiry_choices": list(EXPIRY_CHOICES), "now": time.time(),
     }
@@ -212,6 +214,10 @@ async def device_remove_all(request: Request, c: Any) -> dict:
 @R.add("/savahlive/settings", ["POST"])
 async def settings_save(request: Request, c: Any) -> dict:
     b = await parse(request, SettingsIn)
-    for field, value in b.model_dump(exclude_none=True).items():
+    data = b.model_dump(exclude_none=True)
+    url = data.get("download_url")
+    if url and not url.startswith("https://"):
+        raise ApiError("The download link must start with https://", 422)
+    for field, value in data.items():
         await c.cfg.set(SETTING_KEYS[field], value)
     return await _overview(request, c)
