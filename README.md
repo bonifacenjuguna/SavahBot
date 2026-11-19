@@ -1,42 +1,23 @@
-# SavahBot
+# Androx v0.0.0
 
-A personal, owner-only moderation and utility bot for YouTube live chat, controlled from a web dashboard and from Telegram.
+Lightweight, local-only Android automation app. Kotlin, Jetpack Compose, Material 3. No backend, no network.
 
-- **Backend** (`backend/`): Python 3.13, Starlette + uvicorn, PostgreSQL (SQLite for local use). Runs on Railway.
-- **Dashboard** (`frontend/`): Vite + TypeScript, no framework, responsive for phone, tablet and desktop, installable as an app. Runs on Vercel.
-- **Telegram**: webhook or polling, switchable at any time from the dashboard or with `/tgmode`.
-- **Demo mode**: simulated chat and nine scenarios (raid, link spammer, caps flood, bot timing, disguised words, ...). Nothing is sent to YouTube or Telegram and no quota is used. Switch between Demo and Live in the sidebar; the status card at the top shows which one you are in (flask = demo, red broadcast icon = on air, power icon = standby). Switching mode redraws every page, so Demo and Live data never mix.
+**Open in Android Studio (Ladybug or newer, JDK 17)** and sync. The Gradle wrapper *properties* are included (Gradle 8.9);
+the wrapper JAR/scripts are not (they are binary and could not be generated offline). Android Studio does not need them;
+from a terminal run `gradle wrapper` once. Build: `./gradlew :app:assembleDebug`; unit tests: `./gradlew :app:testDebugUnitTest`.
 
-There is no AI in this version. Moderation is a set of explainable algorithms, each of which shows up as a named signal with a weight, so you can always see why a message scored what it did.
+## What is in it
+- **Model** (`model/`): one shared representation, Trigger -> optional Condition -> Actions. All three editors read/write it.
+- **Engine** (`engine/`): pure Kotlin executor + Rhino JavaScript runner (sandboxed, 5 s limit). Unit-tested on the JVM.
+- **Data** (`data/`): JSON files in app storage (atomic writes), SharedPreferences for settings.
+- **Platform** (`platform/`): notifications, AlarmManager scheduling, boot re-arm, permission helpers.
+- **UI** (`ui/`): Home, Automations, History, Settings, and the editor (Builder / JavaScript / Visual workflow tabs).
+- **Brand** (`brand/`): original logo plus transparent white/black/silver/charcoal PNGs, SVG, 512 and 1024 icons.
 
----
+## Triggers / conditions / actions
+Triggers: Manual, Schedule (time + weekdays). Conditions: Battery level, Charging state, Variable comparison.
+Actions: Show notification, Set/Add variable, Run another automation, Write to log, Run JavaScript.
+Templates in text fields: `{{battery}} {{time}} {{date}} {{automation}} {{yourVariable}}`.
 
-## Start here
-
-| I want to | Read |
-|---|---|
-| Deploy it | docs/DEPLOYMENT.md |
-| Know every setting | docs/ENVIRONMENT.md |
-| Protect sign-in | docs/SECURITY.md |
-| Get push notifications | docs/NOTIFICATIONS.md, docs/PWA_AND_PUSH_PLATFORMS.md |
-| Add weather | docs/WEATHER.md |
-| Float your stream over other apps (Android) | docs/SAVAHLIVE.md, android/README.md |
-| Release a new version of the Android app | docs/RELEASING.md |
-| Back up and restore | docs/BACKUP_AND_RECOVERY.md |
-| Fix a problem | docs/TROUBLESHOOTING.md |
-| Everything else | docs/README.md |
-
-## Quick start (local)
-
-```bash
-cd backend && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-uvicorn app.main:create_app --factory --reload --port 8000
-cd ../frontend && npm install && VITE_API_URL=http://localhost:8000 npm run dev
-```
-
-On first start a generated owner password is printed in the log (or set `OWNER_PASSWORD`). Details: docs/TESTING.md.
-
-## What is and is not verified
-
-Automated tests use fakes, never the real YouTube, Firebase or Open-Meteo, and cannot exercise real browsers, phones, hardware passkeys or PostgreSQL. The list and a manual checklist are in docs/TESTING.md. Expect to fix small things on the first real run; Settings > Developer and the logs are designed to make them easy to find.
+## JavaScript API
+`androx.log / notify / getVar / setVar / deleteVar / battery / isCharging / now`, plus `console.log`.
