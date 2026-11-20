@@ -20,12 +20,14 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextView
 import java.text.DateFormat
 import java.util.Date
 
 /**
- * The only screen, in three stages: Pair (once), Allow (the floating-window permission, once), Go (start and stop the overlay).
- * No accounts, no dashboard and no settings of its own: SavahBot (Manage > SavahLive) holds those, and the panel has its own tray for looks.
+ * The only screen, in three stages: Pair (once), Allow (the floating-window permission, once), Go (start and stop the overlay, and choose how the overlay looks).
+ * No accounts and no dashboard: SavahBot (Manage > SavahLive) holds what the stream shows. Everything about how the panel, tab and pop-outs look and behave is here,
+ * so the panel itself only carries what you need while playing. Changes apply to the open overlay at once.
  */
 class MainActivity : Activity() {
     private companion object {
@@ -273,13 +275,15 @@ class MainActivity : Activity() {
         }
         col.addView(hero)
 
+        looksCards(col)
+
         val how = ui.card(18)
         how.addView(ui.text("How the panel works", 18f, Ui.INK, true))
         how.addView(ui.space(6))
-        how.addView(ui.infoRow(R.drawable.ic_move, Ui.RED, "Move it", "Drag the top bar or the numbers row."))
-        how.addView(ui.infoRow(R.drawable.ic_expand, Ui.RED, "Resize it", "Drag a bottom corner. The whole panel scales together."))
-        how.addView(ui.infoRow(R.drawable.ic_tuck, Ui.RED, "Tuck it away", "Tap the \u2715. It becomes a small tab that hides at the screen edge and pops out when chat arrives."))
-        how.addView(ui.infoRow(R.drawable.ic_dots, Ui.RED, "More controls", "Tap the three dots for opacity, theme, lock, text size and stop."))
+        how.addView(ui.infoRow(R.drawable.ic_move, Ui.RED, "Move it", "Drag the top row, where the viewers and likes are."))
+        how.addView(ui.infoRow(R.drawable.ic_expand, Ui.RED, "Resize it", "Drag any edge or corner. The chat gets longer or wider."))
+        how.addView(ui.infoRow(R.drawable.ic_collapse, Ui.RED, "Make it big", "Tap the expand button for a big window. Tap it again to go back."))
+        how.addView(ui.infoRow(R.drawable.ic_dock, Ui.RED, "Tuck it away", "Tap the tuck button. It becomes a small tab on the screen edge. Tap the tab to open the panel, or drag it to another edge."))
         col.addView(how)
 
         val info = ui.card(18)
@@ -300,6 +304,211 @@ class MainActivity : Activity() {
         info.addView(ui.button("Unpair this phone", null, Ui.QUIET) { confirmUnpair() })
         col.addView(info)
         optionalCards(col)
+    }
+
+    // ---- how the overlay looks: sliders, switches and choices that apply to the open overlay at once ------------------------------------------
+    private val matchWidth = LinearLayout.LayoutParams.MATCH_PARENT
+    private val wrap = LinearLayout.LayoutParams.WRAP_CONTENT
+
+    private fun sliderRow(title: String, body: String, min: Int, max: Int, value: Int, suffix: String, onChange: (Int) -> Unit): LinearLayout {
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(0, ui.dp(10), 0, ui.dp(2))
+        val top = LinearLayout(this)
+        top.orientation = LinearLayout.HORIZONTAL
+        top.gravity = Gravity.CENTER_VERTICAL
+        val valueTv = ui.text("$value$suffix", 14f, Ui.MUTED)
+        top.addView(ui.text(title, 15f, Ui.INK, true), LinearLayout.LayoutParams(0, wrap, 1f))
+        top.addView(valueTv)
+        col.addView(top)
+        if (body.isNotEmpty()) col.addView(ui.text(body, 13f, Ui.MUTED))
+        val slider = LineSlider(this)
+        slider.min = min
+        slider.max = max
+        slider.value = value
+        slider.trackColor = 0x33FFFFFF
+        slider.fillColor = Ui.RED
+        slider.thumbColor = Ui.INK
+        slider.contentDescription = title
+        slider.onChange = { v ->
+            valueTv.text = "$v$suffix"
+            onChange(v)
+        }
+        col.addView(slider, LinearLayout.LayoutParams(matchWidth, ui.dp(34)))
+        return col
+    }
+
+    private fun toggleRow(title: String, body: String, on: Boolean, onChange: (Boolean) -> Unit): LinearLayout {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(0, ui.dp(10), 0, ui.dp(6))
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.addView(ui.text(title, 15f, Ui.INK, true))
+        col.addView(ui.text(body, 13f, Ui.MUTED))
+        row.addView(col, LinearLayout.LayoutParams(0, wrap, 1f))
+        val pill = LinearLayout(this)
+        pill.setPadding(ui.dp(3), 0, ui.dp(3), 0)
+        val knob = View(this)
+        knob.background = ui.round(Ui.INK, 11)
+        pill.addView(knob, LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)))
+        var state = on
+        fun paint() {
+            pill.background = ui.round(if (state) Ui.RED else Ui.RAISED, 14, Ui.LINE, 1)
+            pill.gravity = (if (state) Gravity.END else Gravity.START) or Gravity.CENTER_VERTICAL
+        }
+        paint()
+        pill.isClickable = true
+        pill.contentDescription = title
+        pill.setOnClickListener {
+            state = !state
+            paint()
+            onChange(state)
+        }
+        row.addView(pill, LinearLayout.LayoutParams(ui.dp(52), ui.dp(28)).also { it.leftMargin = ui.dp(12) })
+        return row
+    }
+
+    private fun segmented(options: List<Pair<String, Int>>, current: Int, onPick: (Int) -> Unit): LinearLayout {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.setPadding(0, ui.dp(8), 0, ui.dp(4))
+        val cells = ArrayList<TextView>()
+        fun paint(selected: Int) {
+            for ((i, c) in cells.withIndex()) {
+                val on = options[i].second == selected
+                c.background = ui.round(if (on) Ui.RED else Ui.RAISED, 12, Ui.LINE, 1)
+                c.setTextColor(if (on) Ui.INK else Ui.MUTED)
+            }
+        }
+        for ((i, o) in options.withIndex()) {
+            val c = ui.text(o.first, 13f, Ui.MUTED, true)
+            c.gravity = Gravity.CENTER
+            c.setPadding(0, ui.dp(10), 0, ui.dp(10))
+            c.isClickable = true
+            c.setOnClickListener {
+                onPick(o.second)
+                paint(o.second)
+            }
+            cells.add(c)
+            row.addView(c, LinearLayout.LayoutParams(0, wrap, 1f).also { it.rightMargin = if (i < options.size - 1) ui.dp(6) else 0 })
+        }
+        paint(current)
+        return row
+    }
+
+    /** Six themes and Custom. The panel, the tab and the pop-outs all take their colours from the one you pick. */
+    private fun themeChooser(): LinearLayout {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(0, ui.dp(8), 0, ui.dp(4))
+        val custom = LinearLayout(this)
+        custom.orientation = LinearLayout.VERTICAL
+        val hue = LineSlider(this)
+        hue.min = 0
+        hue.max = 359
+        hue.value = store.customHue
+        hue.gradient = IntArray(7) { i -> Themes.hsl(i * 60 % 360, 0.85f, 0.55f) }
+        hue.thumbColor = Ui.INK
+        hue.contentDescription = "Colour"
+        hue.onChange = { v -> store.customHue = v }
+        val light = LineSlider(this)
+        light.min = 8
+        light.max = 94
+        light.value = store.customLight
+        light.gradient = intArrayOf(0xFF000000.toInt(), 0xFF808080.toInt(), 0xFFFFFFFF.toInt())
+        light.thumbColor = Ui.INK
+        light.contentDescription = "Light or dark"
+        light.onChange = { v -> store.customLight = v }
+        custom.addView(hue, LinearLayout.LayoutParams(matchWidth, ui.dp(34)))
+        custom.addView(light, LinearLayout.LayoutParams(matchWidth, ui.dp(34)))
+        fun draw() {
+            row.removeAllViews()
+            val ids = ArrayList<Int>()
+            for (t in Themes.presets) ids.add(t.id)
+            ids.add(Themes.CUSTOM)
+            val current = if (ids.contains(store.themeId)) store.themeId else 0
+            for (id in ids) {
+                val g = GradientDrawable()
+                g.shape = GradientDrawable.OVAL
+                if (id == Themes.CUSTOM) {
+                    g.setGradientType(GradientDrawable.SWEEP_GRADIENT)
+                    g.setColors(IntArray(7) { i -> Themes.hsl(i * 60 % 360, 0.85f, 0.55f) })
+                } else {
+                    g.setColor(Themes.byId(id, 0, 0).bg)
+                }
+                val on = id == current
+                g.setStroke(ui.dp(if (on) 3 else 1), if (on) Ui.RED else Ui.MUTED)
+                val v = View(this)
+                v.background = g
+                v.contentDescription = if (id == Themes.CUSTOM) "Custom colour" else Themes.byId(id, 0, 0).name
+                v.setOnClickListener {
+                    store.themeId = id
+                    draw()
+                }
+                row.addView(v, LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)).also { it.rightMargin = ui.dp(10) })
+            }
+            custom.visibility = if (current == Themes.CUSTOM) View.VISIBLE else View.GONE
+        }
+        draw()
+        box.addView(row)
+        box.addView(custom)
+        return box
+    }
+
+    private fun sectionHead(res: Int, title: String, body: String): LinearLayout {
+        val row = ui.infoRow(res, Ui.RED, title, body)
+        row.setPadding(0, 0, 0, ui.dp(2))
+        return row
+    }
+
+    private fun looksCards(col: LinearLayout) {
+        val panelCard = ui.card(18)
+        panelCard.addView(sectionHead(R.drawable.ic_layers, "Panel", "The window with the chat."))
+        panelCard.addView(sliderRow("Opacity", "How see-through the panel background is. Text stays clear.", 20, 100, store.panelOpacity, "%") { store.panelOpacity = it })
+        panelCard.addView(sliderRow("Chat text size", "", 80, 140, store.textScale, "%") { store.textScale = it })
+        panelCard.addView(ui.text("Theme", 15f, Ui.INK, true).also { it.setPadding(0, ui.dp(12), 0, 0) })
+        panelCard.addView(themeChooser())
+        col.addView(panelCard)
+
+        val tabCard = ui.card(18)
+        tabCard.addView(sectionHead(R.drawable.ic_tab, "Tab", "The small box on the screen edge."))
+        tabCard.addView(sliderRow("Opacity", "It never gets fainter than 40%, so you can always find it.", 40, 100, store.tabOpacity, "%") { store.tabOpacity = it })
+        tabCard.addView(ui.text("Slide away", 15f, Ui.INK, true).also { it.setPadding(0, ui.dp(12), 0, 0) })
+        tabCard.addView(ui.text("Tuck the tab mostly off screen when you are not touching it. It slides back out for new chat.", 13f, Ui.MUTED))
+        tabCard.addView(segmented(listOf(Pair("Never", 0), Pair("3 s", 3), Pair("5 s", 5), Pair("10 s", 10), Pair("20 s", 20)), store.tabHide) { store.tabHide = it })
+        col.addView(tabCard)
+
+        val popCard = ui.card(18)
+        popCard.addView(sectionHead(R.drawable.ic_chat, "Chat pop-outs", "The new messages that slide out beside the tab. Separate from the panel."))
+        popCard.addView(sliderRow("Size", "", 70, 170, store.popScale, "%") { store.popScale = it })
+        popCard.addView(sliderRow("Opacity", "", 30, 100, store.popOpacity, "%") { store.popOpacity = it })
+        col.addView(popCard)
+
+        val sendCard = ui.card(18)
+        sendCard.addView(sectionHead(R.drawable.ic_send, "Send messages", "Type to your chat from the panel."))
+        sendCard.addView(toggleRow("Show the message box", "Needs permission in SavahBot: Manage, SavahLive, then this phone.", store.sendEnabled) { store.sendEnabled = it })
+        col.addView(sendCard)
+
+        val resetCard = ui.card(18)
+        resetCard.addView(ui.text("Panel in the wrong place?", 16f, Ui.INK, true))
+        resetCard.addView(ui.text("Puts the panel and the tab back to where they start.", 13f, Ui.MUTED))
+        resetCard.addView(ui.button("Reset size and position", null, Ui.SECONDARY) {
+            store.panelWdp = 270
+            store.panelHdp = 300
+            store.expanded = false
+            store.panelFx = 500
+            store.panelFy = 300
+            store.tabEdge = Edge.RIGHT.ordinal
+            store.tabAlong = 400
+            message = "Reset. The panel is back in the middle."
+            render()
+        })
+        col.addView(resetCard)
     }
 
     // ---- actions ----------------------------------------------------------------------------------------------------------------------------

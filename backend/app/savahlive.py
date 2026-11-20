@@ -15,6 +15,7 @@ Existing behaviour is untouched: new tables, new routes, new settings, and a rea
 from __future__ import annotations
 
 import asyncio
+import collections
 import hashlib
 import json
 import logging
@@ -40,6 +41,9 @@ MAX_BATCH = 25                                   # chat lines in one message; a 
 FEED_TICK = 5.0
 HEARTBEAT = 15.0
 CHAT_MAX_AGE = 180                               # history found when the bot connects is not "new chat"; the overlay never replays it live
+SEND_MAX = 200                                   # longest message a phone may send
+SEND_GAP = 2.0                                   # seconds between two messages from one phone
+SEND_PER_MINUTE = 12                             # and no more than this many in a minute
 
 register_schema([
     """CREATE TABLE IF NOT EXISTS live_devices (
@@ -48,7 +52,7 @@ register_schema([
         revoked_ts {REAL}, revoked_reason TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '', app_version TEXT NOT NULL DEFAULT '')""",
     "CREATE INDEX IF NOT EXISTS idx_live_devices_prev ON live_devices (prev_hash)",
     "CREATE TABLE IF NOT EXISTS live_pair_codes (code_hash TEXT PRIMARY KEY, created {REAL} NOT NULL, expires {REAL} NOT NULL, used_ts {REAL}, expiry_days INTEGER NOT NULL DEFAULT 0)",
-])
+], columns=[("live_devices", "can_send", "INTEGER NOT NULL DEFAULT 0")])
 
 # overlay settings the phone receives: name in the feed -> (setting, kind, low, high)
 OVERLAY: dict[str, tuple[str, str, int, int]] = {
@@ -103,6 +107,7 @@ class SavahLive:
         self.throttle = SharedThrottle(c.shared, 8, 900)          # per address
         self.global_throttle = SharedThrottle(c.shared, 30, 900)  # all addresses together: guessing codes from many places still hits a wall
         self._next_clean = 0.0
+        self._sent: dict[str, collections.deque[float]] = {}      # device id -> when its recent messages were sent (for the rate limit)
 
     # ------------------------------------------------------------------ settings
     def overlay_settings(self) -> dict[str, Any]:
@@ -118,6 +123,13 @@ class SavahLive:
     @property
     def enabled(self) -> bool:
         return bool(self.cfg.get("savahlive_enabled"))
+
+    def may_send(self, row: dict[str, Any] | None) -> bool:
+        """Sending chat from a phone needs both: the master switch in Manage > SavahLive, and this phone's own permission (off until you give it)."""
+        return bool(self.cfg.get("savahlive_send_enabled")) and bool(row and row.get("can_send"))
+
+    def _feed_settings(self, row: dict[str, Any] | None) -> dict[str, Any]:
+        return {**self.overlay_settings(), "can_send": self.may_send(row)}
 
     # ------------------------------------------------------------------ pairing
     async def new_code(self, expiry_days: int = 0) -> dict[str, Any]:
@@ -226,10 +238,11 @@ class SavahLive:
     # ------------------------------------------------------------------ managing devices
     async def devices(self) -> list[dict[str, Any]]:
         now = time.time()
-        rows = await self.db.fetchall("SELECT id, name, created, last_seen, expires, ip, app_version FROM live_devices WHERE revoked_ts IS NULL ORDER BY created DESC")
+        rows = await self.db.fetchall("SELECT id, name, created, last_seen, expires, ip, app_version, can_send FROM live_devices WHERE revoked_ts IS NULL ORDER BY created DESC")
         for r in rows:
             r["online"] = r["id"] in self.feeds
             r["status"] = "expired" if r["expires"] is not None and r["expires"] < now else "active"
+            r["can_send"] = bool(r["can_send"])
         return rows
 
     async def revoke(self, did: str, reason: str = "removed by you") -> bool:
@@ -243,7 +256,7 @@ class SavahLive:
             await self.revoke(r["id"], reason)
         return len(rows)
 
-    async def edit(self, did: str, name: str | None, expiry_days: int | None) -> bool:
+    async def edit(self, did: str, name: str | None, expiry_days: int | None, can_send: bool | None = None) -> bool:
         row = await self.db.fetchone("SELECT id FROM live_devices WHERE id = ? AND revoked_ts IS NULL", (did,))
         if not row:
             return False
@@ -256,6 +269,8 @@ class SavahLive:
             if expiry_days not in EXPIRY_CHOICES:
                 raise LiveError("Choose until removed, 30, 7 or 1 day.", 422)
             await self.db.execute("UPDATE live_devices SET expires = ? WHERE id = ?", (time.time() + expiry_days * 86400 if expiry_days else None, did))
+        if can_send is not None:
+            await self.db.execute("UPDATE live_devices SET can_send = ? WHERE id = ?", (1 if can_send else 0, did))
         return True
 
     def kick(self, did: str, reason: str) -> None:
@@ -263,6 +278,36 @@ class SavahLive:
         if q is not None:
             try:
                 q.put_nowait({"type": "_kick", "data": {"code": reason}})
+            except asyncio.QueueFull:
+                pass
+
+    # ------------------------------------------------------------------ sending chat from a phone
+    async def send(self, dev: dict[str, Any], text: str, ip: str = "") -> None:
+        """Post one chat message as SavahBot's own account (the one it is signed in to YouTube with). Off until you allow this phone."""
+        if not self.cfg.get("savahlive_send_enabled"):
+            raise LiveError("Sending chat from phones is switched off in SavahBot (Manage > SavahLive).", 403, "send_off")
+        fresh = await self.db.fetchone("SELECT can_send FROM live_devices WHERE id = ?", (dev["id"],))        # read now: a change made a moment ago counts
+        if not fresh or not fresh["can_send"]:
+            raise LiveError("This phone is not allowed to send chat. Allow it in SavahBot (Manage > SavahLive).", 403, "send_denied")
+        clean = " ".join((text or "").split())[:SEND_MAX]                                                       # one line, no control characters
+        if not clean:
+            raise LiveError("Type a message first.", 422, "empty")
+        now = time.monotonic()
+        recent = self._sent.setdefault(dev["id"], collections.deque())
+        while recent and now - recent[0] > 60:
+            recent.popleft()
+        if recent and now - recent[-1] < SEND_GAP:
+            raise LiveError("One message every couple of seconds, please.", 429, "slow")
+        if len(recent) >= SEND_PER_MINUTE:
+            raise LiveError("That is a lot of messages. Wait a moment.", 429, "slow")
+        if not await self.c.hub.send_chat(clean):
+            raise LiveError("SavahBot could not post that. Is it connected to your YouTube chat?", 502, "send_failed")
+        recent.append(now)
+        await self.c.access.audit("savahlive_sent", None, ip, f"{dev['name']}: {len(clean)} characters")
+        q = self.feeds.get(dev["id"])
+        if q is not None:      # SavahBot hides its own account's messages from the overlay; the sender should still see what they just said
+            try:
+                q.put_nowait({"type": "chat", "data": {"id": None, "ts": time.time(), "author_id": "self", "author_name": "You", "text": clean, "level": "owner", "verdict": "allow"}})
             except asyncio.QueueFull:
                 pass
 
@@ -331,7 +376,7 @@ class SavahLive:
                 pass
         try:
             await self.touch(did)
-            settings = self.overlay_settings()
+            settings = self._feed_settings(dev)
             state = self.state()
             stats = self.stats(state)
             yield "retry: 5000\n\n"
@@ -398,7 +443,7 @@ class SavahLive:
                         yield sse("unpaired", {"code": err.code or "revoked"})
                         return
                     state = self.state()
-                    settings = self.overlay_settings()
+                    settings = self._feed_settings(row)
                     stats = self.stats(state)
                     trimmed = {k: v for k, v in stats.items() if k != "updated"}
                     if state != last["state"]:

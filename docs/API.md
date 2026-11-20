@@ -39,11 +39,13 @@ Encrypted export, import and restore.
 
 | Method | Path | Notes |
 |---|---|---|
+| POST | `/api/backup/cancel` | public |
 | POST | `/api/backup/export` |  |
 | GET | `/api/backup/first-run` | public |
 | POST | `/api/backup/first-run` | public |
 | POST | `/api/backup/import` |  |
 | GET | `/api/backup/info` |  |
+| GET | `/api/backup/progress` | public |
 | POST | `/api/backup/undo` |  |
 | POST | `/api/backup/verify` |  |
 
@@ -56,6 +58,7 @@ Bans and timeouts.
 | GET | `/api/bans` |  |
 | POST | `/api/bans/preview` |  |
 | POST | `/api/bans/{ban_id:int}/lift` |  |
+| GET | `/api/bans/{ban_id:int}/profile` |  |
 
 ## blacklist
 
@@ -185,6 +188,7 @@ Knowledge packs, detectors, learning, live lists.
 | POST | `/api/live/pair` | public |
 | GET | `/api/live/pair/open` | public |
 | POST | `/api/live/rotate` | public |
+| POST | `/api/live/send` | public |
 | GET | `/api/live/stats` |  |
 | GET | `/api/live/streams` |  |
 | GET | `/api/live/streams/{video_id}` |  |
@@ -244,6 +248,12 @@ Notification Centre: preferences, inbox, devices, test, stats.
 | GET | `/api/notify/stats` |  |
 | POST | `/api/notify/test` |  |
 | GET | `/api/notify/unread` | limited ok |
+
+## people
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/people/profile` |  |
 
 ## quotes
 

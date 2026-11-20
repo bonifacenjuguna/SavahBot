@@ -1,30 +1,46 @@
 package com.savahbot.live
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.widget.FrameLayout
 
 /**
- * Controls the two forms of the floating UI and what they show.
- *  - [PanelView]: the full window (chat, stats, tray). Free-floating, draggable by its bars, resizable proportionally from the bottom corners.
- *  - [TabWindow]: the box on a screen edge it tucks into (tap the X, or drag the panel off the edge).
- * It keeps the one chat model, theme and settings, and feeds whichever window is showing. It draws what SavahBot sent; it decides nothing.
+ * Controls the floating UI and what it shows. There is exactly ONE system window for the whole life of the overlay. It holds both forms:
+ *  - the [PanelView]: a free-form window (any size, drag the header to move, drag any edge or corner to resize);
+ *  - the [TabView]: a small tab on a screen edge (tap to open, drag to move it to another edge).
+ * Switching between them only changes which content is visible and the window's size and place. No window is ever added or removed in between, and no
+ * view is ever added or removed while a finger is on it, so tucking and opening cannot crash or lose the overlay.
+ * Every entry point is wrapped in [guard]: if something unexpected happens the overlay logs it and carries on instead of taking the app down.
+ * It keeps the one chat model, theme and settings. It draws what SavahBot sent; it decides nothing.
  */
 class Overlay(
     private val ctx: Context,
     private val store: Store,
     private val onStop: () -> Unit,
     private val onLockChanged: (Boolean) -> Unit
-) : PanelView.Host {
+) : PanelView.Host, TabView.Host {
+    private enum class Mode { PANEL, TAB }
+
     private companion object {
-        const val MIN_SCALE = 0.5f
-        const val MAX_SCALE = 1.6f
-        val SIZE_PRESETS = floatArrayOf(0.7f, 1.0f, 1.3f)
+        const val TAG = "SavahLive"
+        const val MIN_W = 190
+        const val MIN_H = 140
+        const val MAX_W = 700
+        const val MAX_H = 900
+        const val EXPANDED_W = 420
+        const val EXPANDED_H = 620
+        const val SLIVER = 16
     }
 
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -33,10 +49,24 @@ class Overlay(
     private fun screenW(): Int = ctx.resources.displayMetrics.widthPixels
     private fun screenH(): Int = ctx.resources.displayMetrics.heightPixels
 
+    /** Runs [block]; if it throws, logs and carries on. A bug in the overlay must never close SavahLive or the game under it. */
+    private inline fun guard(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            Log.w(TAG, "overlay recovered from an error", e)
+            try {
+                recover()
+            } catch (e2: Exception) {
+                Log.w(TAG, "overlay could not recover", e2)
+            }
+        }
+    }
+
     // ---- model ---------------------------------------------------------------------------------------------------------------------------
     private val lines = ArrayList<Line>()
     private val shown = HashSet<Long>()
-    private var prefs = Prefs(40, 5, 14, 3)
+    private var prefs = Prefs(40, 5, 14, 3, false)
     private var link = Link.CONNECTING
     private var detail = ""
     private var state = State("live", false, "")
@@ -44,277 +74,541 @@ class Overlay(
     private var lastData = 0L
     private var notice = ""
     private var locked = false
+    private var sending = false
 
-    // ---- windows -------------------------------------------------------------------------------------------------------------------------
+    // ---- the one window ------------------------------------------------------------------------------------------------------------------
+    private val root = FrameLayout(ctx)
     private val panel = PanelView(ctx, store, this)
-    private val tab = TabWindow(ctx, wm, store) { openPanel() }
-    private var panelShown = false
-    private var scale = 1f
-    private var anim: ValueAnimator? = null
-    private val panelParams = WindowManager.LayoutParams(
-        WindowManager.LayoutParams.WRAP_CONTENT,
-        WindowManager.LayoutParams.WRAP_CONTENT,
+    private val tab = TabView(ctx, this)
+    private val params = WindowManager.LayoutParams(
+        dp(MIN_W),
+        dp(MIN_H),
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT
     )
-    private var dragStartX = 0
-    private var dragStartY = 0
-    private var anchorX = 0f
-    private var anchorY = 0f
-    private var corner = -1
-    private val staleCheck = Runnable { redrawHeader() }
+    private var added = false
+    private var mode = Mode.PANEL
+    private var keyboardOn = false
+    private var moving = false
+
+    // panel gestures
+    private var moveX = 0
+    private var moveY = 0
+    private var rsMode = 0
+    private var rsMoved = false
+    private var rsX = 0
+    private var rsY = 0
+    private var rsW = 0
+    private var rsH = 0
+
+    // tab state
+    private var edge = Edge.RIGHT
+    private var along = 0.4f
+    private var hiddenF = 0f            // 0 = fully showing, 1 = slid mostly off screen (only when the app's "slide away" setting is on)
+    private var tabDragging = false
+    private var dragX = 0
+    private var dragY = 0
+    private var anim: ValueAnimator? = null
+    private var slide: ValueAnimator? = null
+
+    private val hideRun = Runnable { guard { if (mode == Mode.TAB && !tabDragging && !tab.cardShowing) animateHidden(1f) } }
+    private val cardRun = Runnable { guard { endPeek() } }
+    private val staleCheck = Runnable { guard { redrawHeader() } }
+
+    init {
+        root.addView(panel.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(tab.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        params.gravity = Gravity.TOP or Gravity.LEFT
+        // a tap outside the window while the keyboard is up puts the keyboard away
+        root.setOnTouchListener { _, e ->
+            if (e.actionMasked == MotionEvent.ACTION_OUTSIDE && keyboardOn) {
+                keyboard(false)
+                true
+            } else {
+                false
+            }
+        }
+    }
 
     // ---------------------------------------------------------------------------------------------------------------------------------------
     fun show(): Boolean {
-        applyLook()
+        edge = Edge.values().getOrElse(store.tabEdge) { Edge.RIGHT }
+        along = store.tabAlong / 1000f
+        mode = if (store.panelOpen) Mode.PANEL else Mode.TAB
+        prefsOrLookChanged()
         redrawHeader()
-        val ok = if (store.panelOpen) showPanel() else tab.show(null, null)
-        if (!ok) hide()
-        return ok
+        panel.setLines(lines)
+        panel.setExpanded(store.expanded)
+        applyMode()
+        return try {
+            wm.addView(root, params)
+            added = true
+            store.watch { main.post { guard { prefsOrLookChanged() } } }
+            root.alpha = 0f
+            root.animate().alpha(1f).setDuration(160).start()
+            scheduleHide()
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "could not show the overlay", e)
+            false           // no overlay permission, or the system refused: the service stops
+        }
     }
 
     fun hide() {
+        store.unwatch()
         main.removeCallbacksAndMessages(null)
+        slide?.cancel()
+        slide = null
         anim?.cancel()
         anim = null
-        removePanel()
-        tab.hide()
-    }
-
-    fun onScreenChanged() {
-        if (panelShown) {
-            scale = effectiveScale()
-            panel.setScale(scale)
-            sizeToScale()
-            placeFromFractions()
-            update()
+        if (added) {
+            try {
+                panel.hideKeyboard()
+                wm.removeView(root)
+            } catch (e: Exception) {
+                // already gone
+            }
         }
-        tab.onScreenChanged()
+        added = false
     }
 
-    // ---- panel window --------------------------------------------------------------------------------------------------------------------
-    private fun effectiveScale(): Float =
-        Geo.clampScale(store.panelScale / 100f, MIN_SCALE, Geo.maxScale(panel.baseW, panel.baseH, screenW(), screenH(), dp(8), MIN_SCALE, MAX_SCALE))
-
-    private fun sizeToScale() {
-        panelParams.width = (panel.baseW * scale).toInt()
-        panelParams.height = (panel.baseH * scale).toInt()
+    fun onScreenChanged() = guard {
+        if (!added) return@guard
+        if (mode == Mode.PANEL) layoutPanel() else placeTab()
     }
 
-    private fun placeFromFractions() {
-        val sw = screenW()
-        val sh = screenH()
-        panelParams.gravity = Gravity.TOP or Gravity.LEFT
-        panelParams.x = Geo.clampInto((store.panelFx / 1000f * (sw - panelParams.width)).toInt(), panelParams.width, sw)
-        panelParams.y = Geo.clampInto((store.panelFy / 1000f * (sh - panelParams.height)).toInt(), panelParams.height, sh)
+    /** The last resort after an unexpected error: show the small tab, which is the simplest state, and carry on. */
+    private fun recover() {
+        tabDragging = false
+        moving = false
+        keyboardOn = false
+        params.flags = (params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) and WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH.inv()
+        rsMode = 0
+        anim?.cancel()
+        anim = null
+        slide?.cancel()
+        slide = null
+        hiddenF = 0f
+        mode = Mode.TAB
+        store.panelOpen = false
+        applyMode()
     }
 
-    private fun savePanelPosition() {
-        val roomX = screenW() - panelParams.width
-        val roomY = screenH() - panelParams.height
-        store.panelFx = if (roomX > 0) (panelParams.x * 1000L / roomX).toInt().coerceIn(0, 1000) else 500
-        store.panelFy = if (roomY > 0) (panelParams.y * 1000L / roomY).toInt().coerceIn(0, 1000) else 300
-    }
-
-    private fun showPanel(): Boolean {
-        scale = effectiveScale()
-        panel.setScale(scale)
-        sizeToScale()
-        placeFromFractions()
-        panel.setLines(lines)
-        panel.setLocked(locked)
-        applyLockFlag()
-        return try {
-            wm.addView(panel.root, panelParams)
-            panelShown = true
-            store.panelOpen = true
-            panel.root.alpha = 0f
-            panel.root.animate().alpha(1f).setDuration(160).start()
-            true
-        } catch (e: Exception) {
-            false          // no overlay permission, or the system refused: the service stops
+    // ---- showing the right form ------------------------------------------------------------------------------------------------------------
+    private fun applyMode() {
+        if (mode == Mode.PANEL) {
+            tab.view.visibility = View.GONE
+            panel.view.visibility = View.VISIBLE
+            layoutPanel()
+        } else {
+            panel.view.visibility = View.GONE
+            tab.view.visibility = View.VISIBLE
+            placeTab()
         }
     }
 
-    private fun removePanel() {
-        if (!panelShown) return
-        panel.closeTray()
+    private fun push() {
+        if (!added) return
         try {
-            wm.removeView(panel.root)
-        } catch (e: Exception) {
-            // already gone
-        }
-        panelShown = false
-    }
-
-    private fun update() {
-        if (!panelShown) return
-        try {
-            wm.updateViewLayout(panel.root, panelParams)
+            wm.updateViewLayout(root, params)
         } catch (e: Exception) {
             // the window is being torn down
         }
     }
 
-    private fun applyLockFlag() {
-        panelParams.flags = if (locked) panelParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        else panelParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-    }
-
-    fun setLocked(on: Boolean) {
-        locked = on
-        panel.setLocked(on)
-        applyLockFlag()
-        update()
-    }
-
-    /** Panel's tray button. Locking makes touches pass through the panel, so it can only be unlocked from the notification. */
-    override fun toggleLock() {
-        setLocked(!locked)
-        onLockChanged(locked)
-    }
-
-    // ---- opening and tucking -------------------------------------------------------------------------------------------------------------
-    private fun openPanel() {
-        tab.hide()
-        if (!showPanel()) tab.show(null, null)
-    }
-
-    private fun tuckInto(e: Edge) {
+    // ---- the panel -----------------------------------------------------------------------------------------------------------------------
+    /** The panel's size in pixels: the big size when expanded, otherwise the one you dragged it to, always fitting the screen. */
+    private fun panelSize(): IntArray {
         val sw = screenW()
         val sh = screenH()
-        val cx = panelParams.x + panelParams.width / 2f
-        val cy = panelParams.y + panelParams.height / 2f
-        val vertical = e == Edge.LEFT || e == Edge.RIGHT
-        val fraction = if (vertical) (cy / sh).coerceIn(0f, 1f) else (cx / sw).coerceIn(0f, 1f)
+        val margin = dp(8)
+        if (store.expanded) {
+            val e = Geo.expandedSize(sw, sh, margin, dp(EXPANDED_W), dp(EXPANDED_H))
+            return intArrayOf(Geo.clampI(e[0], dp(MIN_W), sw), Geo.clampI(e[1], dp(MIN_H), sh))
+        }
+        return intArrayOf(
+            Geo.clampI(dp(store.panelWdp), dp(MIN_W), maxOf(dp(MIN_W), sw)),
+            Geo.clampI(dp(store.panelHdp), dp(MIN_H), maxOf(dp(MIN_H), sh))
+        )
+    }
+
+    private fun layoutPanel() {
+        val sw = screenW()
+        val sh = screenH()
+        val size = panelSize()
+        params.width = size[0]
+        params.height = size[1]
+        params.x = Geo.clampI((store.panelFx / 1000f * (sw - size[0])).toInt(), 0, sw - size[0])
+        params.y = Geo.clampI((store.panelFy / 1000f * (sh - size[1])).toInt(), 0, sh - size[1])
+        push()
+    }
+
+    private fun savePanelPosition() {
+        val roomX = screenW() - params.width
+        val roomY = screenH() - params.height
+        store.panelFx = if (roomX > 0) (params.x * 1000L / roomX).toInt().coerceIn(0, 1000) else 500
+        store.panelFy = if (roomY > 0) (params.y * 1000L / roomY).toInt().coerceIn(0, 1000) else 300
+    }
+
+    override fun moveStart() = guard {
+        moving = true
+        moveX = params.x
+        moveY = params.y
+    }
+
+    override fun moveBy(dx: Int, dy: Int) = guard {
+        if (mode != Mode.PANEL) return@guard
+        params.x = Geo.clampI(moveX + dx, 0, screenW() - params.width)
+        params.y = Geo.clampI(moveY + dy, 0, screenH() - params.height)
+        push()
+    }
+
+    override fun moveEnd() = guard {
+        moving = false
+        panel.outline(false)
         savePanelPosition()
-        removePanel()
-        store.panelOpen = false
-        if (!tab.show(e, fraction)) showPanel()
     }
 
+    override fun resizeStart(mode: Int) = guard {
+        keyboard(false)
+        rsMode = mode
+        rsMoved = false
+        rsX = params.x
+        rsY = params.y
+        rsW = params.width
+        rsH = params.height
+        panel.outline(true)
+    }
+
+    override fun resizeBy(dx: Int, dy: Int) = guard {
+        if (rsMode == 0 || mode != Mode.PANEL) return@guard
+        val sw = screenW()
+        val sh = screenH()
+        val r = Geo.resize(rsMode, rsX, rsY, rsW, rsH, dx, dy, dp(MIN_W), dp(MIN_H), minOf(dp(MAX_W), sw), minOf(dp(MAX_H), sh), sw, sh)
+        params.x = r[0]
+        params.y = r[1]
+        params.width = r[2]
+        params.height = r[3]
+        rsMoved = true
+        push()
+    }
+
+    override fun resizeEnd() = guard {
+        panel.outline(false)
+        if (rsMode == 0) return@guard
+        rsMode = 0
+        if (!rsMoved) return@guard          // a tap on an edge changes nothing
+        // The size you dragged it to becomes the normal size; the expand button then goes between this and the big size.
+        val d = ctx.resources.displayMetrics.density
+        store.panelWdp = Math.round(params.width / d)
+        store.panelHdp = Math.round(params.height / d)
+        store.expanded = false
+        panel.setExpanded(false)
+        savePanelPosition()
+    }
+
+    /** The expand button: the big window, then back to the normal one. */
+    override fun toggleExpand() = guard {
+        keyboard(false)
+        savePanelPosition()
+        store.expanded = !store.expanded
+        panel.setExpanded(store.expanded)
+        layoutPanel()
+    }
+
+    // ---- keyboard and sending -------------------------------------------------------------------------------------------------------------
+    /** An overlay cannot type by default. While the message box is in use the window becomes focusable, and goes back to pass-through afterwards. */
+    override fun keyboard(on: Boolean) = guard {
+        if (!added || on == keyboardOn) return@guard
+        if (on && mode != Mode.PANEL) return@guard
+        keyboardOn = on
+        val focus = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        val outside = WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        if (on) {
+            params.flags = (params.flags and focus.inv()) or outside
+            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+        } else {
+            params.flags = (params.flags or focus) and outside.inv()
+            params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        }
+        applyLockFlag()
+        push()
+        if (on) main.postDelayed({ guard { if (keyboardOn) panel.focusInput() } }, 80) else panel.hideKeyboard()
+    }
+
+    override fun send(text: String) {
+        if (sending) return
+        sending = true
+        val server = store.server
+        Thread({
+            var error = "Not paired."
+            try {
+                val key = store.key()
+                if (key != null && server.isNotEmpty()) error = Net.send(server, key, text) ?: ""
+            } catch (e: Exception) {
+                error = "Could not send."
+            }
+            val result = error
+            main.post {
+                sending = false
+                guard { panel.sendResult(result) }
+            }
+        }, "savahlive-send").start()
+    }
+
+    // ---- lock ----------------------------------------------------------------------------------------------------------------------------
+    private fun applyLockFlag() {
+        val t = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        params.flags = if (locked) params.flags or t else params.flags and t.inv()
+    }
+
+    /** Locking makes touches pass through the overlay (to play under it). It is switched back from the notification or the app. */
+    fun setLocked(on: Boolean) = guard {
+        locked = on
+        if (on) keyboard(false)
+        applyLockFlag()
+        push()
+    }
+
+    // ---- tucking into a tab and opening again --------------------------------------------------------------------------------------------
     override fun tuck() {
-        val cx = panelParams.x + panelParams.width / 2f
-        val cy = panelParams.y + panelParams.height / 2f
-        tuckInto(Geo.nearestEdge(cx, cy, screenW(), screenH()))
+        // not inside the button's own click handling: the next turn of the main loop
+        main.post { guard { tuckNow() } }
     }
 
-    override fun stopOverlay() {
-        onStop()
+    private fun tuckNow() {
+        if (!added || mode != Mode.PANEL) return
+        keyboard(false)
+        savePanelPosition()
+        val sw = screenW()
+        val sh = screenH()
+        val cx = params.x + params.width / 2f
+        val cy = params.y + params.height / 2f
+        val e = Geo.nearestEdge(cx, cy, sw, sh)
+        edge = e
+        tab.setEdge(e)
+        val size = tab.measure(sw, sh)
+        along = Geo.alongFraction(e, (cx - size.boxW / 2f).toInt(), (cy - size.boxH / 2f).toInt(), size.boxW, size.boxH, sw, sh)
+        saveTab()
+        hiddenF = 0f
+        mode = Mode.TAB
+        store.panelOpen = false
+        applyMode()
+        scheduleHide()
     }
 
-    // ---- dragging ------------------------------------------------------------------------------------------------------------------------
-    override fun dragStart() {
-        anim?.cancel()
-        dragStartX = panelParams.x
-        dragStartY = panelParams.y
+    private fun openPanelNow() {
+        if (!added || mode != Mode.TAB) return
+        main.removeCallbacks(hideRun)
+        main.removeCallbacks(cardRun)
+        val old = anim
+        anim = null
+        old?.cancel()
+        slide?.cancel()
+        slide = null
+        tabDragging = false
+        tab.clearCard()
+        hiddenF = 0f
+        mode = Mode.PANEL
+        store.panelOpen = true
+        panel.setLines(lines)
+        panel.setExpanded(store.expanded)
+        applyMode()
     }
 
-    override fun dragBy(dx: Float, dy: Float) {
-        val w = panelParams.width
-        val h = panelParams.height
-        // it may be pulled up to 60% past an edge; letting go that far out tucks it into that edge
-        panelParams.x = (dragStartX + dx).toInt().coerceIn((-0.6f * w).toInt(), screenW() - (0.4f * w).toInt())
-        panelParams.y = (dragStartY + dy).toInt().coerceIn((-0.6f * h).toInt(), screenH() - (0.4f * h).toInt())
-        update()
+    private fun saveTab() {
+        store.tabEdge = edge.ordinal
+        store.tabAlong = (along * 1000).toInt().coerceIn(0, 1000)
     }
 
-    override fun dragEnd() {
-        val w = panelParams.width
-        val h = panelParams.height
-        val e = Geo.overshootEdge(panelParams.x, panelParams.y, w, h, screenW(), screenH(), 0.35f)
-        if (e != null) {
-            tuckInto(e)
-            return
+    /** Puts the tab flush against its edge, anchored there so a pop-out card growing beside it never moves it. */
+    private fun placeTab() {
+        if (mode != Mode.TAB) return
+        val sw = screenW()
+        val sh = screenH()
+        tab.setEdge(edge)
+        val s = tab.measure(sw, sh)
+        val vertical = edge == Edge.LEFT || edge == Edge.RIGHT
+        val extent = if (vertical) s.boxW else s.boxH
+        val hidden = maxOf(0, ((extent - dp(SLIVER)) * hiddenF).toInt())
+        val alongBox = Geo.alongPx(edge, along, s.boxW, s.boxH, sw, sh)
+        when (edge) {
+            Edge.LEFT -> {
+                params.x = -hidden
+                params.y = Geo.clampI(alongBox - (s.winH - s.boxH) / 2, 0, sh - s.winH)
+            }
+            Edge.RIGHT -> {
+                params.x = sw - s.winW + hidden
+                params.y = Geo.clampI(alongBox - (s.winH - s.boxH) / 2, 0, sh - s.winH)
+            }
+            Edge.TOP -> {
+                params.x = Geo.clampI(alongBox - (s.winW - s.boxW) / 2, 0, sw - s.winW)
+                params.y = -hidden
+            }
+            Edge.BOTTOM -> {
+                params.x = Geo.clampI(alongBox - (s.winW - s.boxW) / 2, 0, sw - s.winW)
+                params.y = sh - s.winH + hidden
+            }
         }
-        val toX = Geo.clampInto(panelParams.x, w, screenW())
-        val toY = Geo.clampInto(panelParams.y, h, screenH())
-        val fromX = panelParams.x
-        val fromY = panelParams.y
-        if (fromX == toX && fromY == toY) {
-            savePanelPosition()
-            return
-        }
-        val a = ValueAnimator.ofFloat(0f, 1f)
-        a.duration = 160
+        params.width = s.winW
+        params.height = s.winH
+        tab.view.alpha = tabAlpha()
+        push()
+    }
+
+    /** The tab is never invisible: its opacity (set in the app, never below 40%) is lowered by at most a quarter while it is slid away. */
+    private fun tabAlpha(): Float = (store.tabOpacity / 100f) * (1f - 0.25f * hiddenF)
+
+    private fun animateHidden(to: Float) {
+        slide?.cancel()
+        slide = null
+        if (Math.abs(hiddenF - to) < 0.001f) return
+        val a = ValueAnimator.ofFloat(hiddenF, to)
+        a.duration = if (to > hiddenF) 260 else 160
         a.interpolator = DecelerateInterpolator()
         a.addUpdateListener {
-            val t = it.animatedValue as Float
-            panelParams.x = (fromX + (toX - fromX) * t).toInt()
-            panelParams.y = (fromY + (toY - fromY) * t).toInt()
-            update()
+            guard {
+                hiddenF = it.animatedValue as Float
+                placeTab()
+            }
         }
-        a.addListener(object : android.animation.AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: android.animation.Animator) {
-                savePanelPosition()
+        slide = a
+        a.start()
+    }
+
+    /** Slides away only if you chose that in the app (Tab > Slide away). The default is to stay put where you can see it. */
+    private fun scheduleHide() {
+        main.removeCallbacks(hideRun)
+        val s = store.tabHide
+        if (s > 0 && added && mode == Mode.TAB && !tabDragging) main.postDelayed(hideRun, s * 1000L)
+    }
+
+    // ---- TabView.Host: what a finger does to the tab ----------------------------------------------------------------------------------------
+    override fun touched() = guard {
+        main.removeCallbacks(hideRun)
+        animateHidden(0f)
+    }
+
+    override fun released() = guard { scheduleHide() }
+
+    override fun tapped() {
+        main.post { guard { openPanelNow() } }
+    }
+
+    override fun dragStart() = guard {
+        // cancel any slide in progress first, so nothing from before can finish in the middle of this drag
+        val old = anim
+        anim = null
+        old?.cancel()
+        slide?.cancel()
+        slide = null
+        main.removeCallbacks(hideRun)
+        main.removeCallbacks(cardRun)
+        tabDragging = true
+        hiddenF = 0f
+        tab.clearCard()
+        placeTab()
+        dragX = params.x
+        dragY = params.y
+    }
+
+    override fun dragBy(dx: Int, dy: Int) = guard {
+        if (!tabDragging) return@guard
+        params.x = Geo.clampI(dragX + dx, 0, screenW() - params.width)
+        params.y = Geo.clampI(dragY + dy, 0, screenH() - params.height)
+        push()
+    }
+
+    /** Let go: snap to the nearest edge. The change of shape (upright or flat) happens after the finger is up, not during the touch. */
+    override fun dragEnd() {
+        main.post { guard { settleTab() } }
+    }
+
+    private fun settleTab() {
+        if (!tabDragging) return
+        val sw = screenW()
+        val sh = screenH()
+        val bw = maxOf(1, params.width)
+        val bh = maxOf(1, params.height)
+        val e = Geo.nearestEdge(params.x + bw / 2f, params.y + bh / 2f, sw, sh)
+        along = Geo.alongFraction(e, params.x, params.y, bw, bh, sw, sh)
+        edge = e
+        tab.setEdge(e)
+        val s = tab.measure(sw, sh)
+        val target = Geo.flush(e, Geo.alongPx(e, along, s.boxW, s.boxH, sw, sh), s.winW, s.winH, sw, sh, 0)
+        params.width = s.winW
+        params.height = s.winH
+        val fromX = params.x
+        val fromY = params.y
+        val a = ValueAnimator.ofFloat(0f, 1f)
+        a.duration = 180
+        a.interpolator = DecelerateInterpolator()
+        a.addUpdateListener {
+            guard {
+                val t = it.animatedValue as Float
+                params.x = (fromX + (target.first - fromX) * t).toInt()
+                params.y = (fromY + (target.second - fromY) * t).toInt()
+                push()
+            }
+        }
+        a.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (anim !== a) return          // a newer drag took over
+                anim = null
+                guard {
+                    tabDragging = false
+                    saveTab()
+                    placeTab()
+                    scheduleHide()
+                }
             }
         })
         anim = a
         a.start()
     }
 
-    // ---- resizing (proportional, from the bottom corners) ----------------------------------------------------------------------------------
-    override fun resizeStart(corner: Int) {
-        this.corner = corner
-        anchorX = if (corner == 2) (panelParams.x + panelParams.width).toFloat() else panelParams.x.toFloat()    // the top corner opposite the one being dragged
-        anchorY = panelParams.y.toFloat()
+    /** New chat while the tab is showing: slide out if it was tucked, show the newest line or two, then go back after the pop-out time. */
+    private fun peek(fresh: List<Line>) {
+        if (!added || mode != Mode.TAB || tabDragging) return
+        tab.pop(fresh)
+        main.removeCallbacks(hideRun)
+        slide?.cancel()
+        slide = null
+        hiddenF = 0f
+        placeTab()
+        main.removeCallbacks(cardRun)
+        main.postDelayed(cardRun, prefs.peekSeconds * 1000L)
     }
 
-    override fun resizeTo(rawX: Float, rawY: Float) {
-        if (corner < 0) return
-        val maxS = Geo.maxScale(panel.baseW, panel.baseH, screenW(), screenH(), dp(8), MIN_SCALE, MAX_SCALE)
-        scale = Geo.clampScale(Geo.scaleFromDrag(anchorX, anchorY, rawX, rawY, panel.baseW, panel.baseH), MIN_SCALE, maxS)
-        panel.setScale(scale)
-        sizeToScale()
-        panelParams.x = if (corner == 2) (anchorX - panelParams.width).toInt() else anchorX.toInt()
-        panelParams.y = anchorY.toInt()
-        update()
-    }
-
-    override fun resizeEnd() {
-        if (corner < 0) return
-        corner = -1
-        store.panelScale = Math.round(scale * 100f)
-        panelParams.x = Geo.clampInto(panelParams.x, panelParams.width, screenW())
-        panelParams.y = Geo.clampInto(panelParams.y, panelParams.height, screenH())
-        update()
-        savePanelPosition()
-    }
-
-    /** The expand button: small, medium, large. */
-    override fun cycleSize() {
-        val maxS = Geo.maxScale(panel.baseW, panel.baseH, screenW(), screenH(), dp(8), MIN_SCALE, MAX_SCALE)
-        var next = SIZE_PRESETS[0]
-        for (p in SIZE_PRESETS) {
-            if (p > scale + 0.05f) {
-                next = p
-                break
-            }
-        }
-        scale = Geo.clampScale(next, MIN_SCALE, maxS)
-        store.panelScale = Math.round(scale * 100f)
-        panel.setScale(scale)
-        sizeToScale()
-        panelParams.x = Geo.clampInto(panelParams.x, panelParams.width, screenW())
-        panelParams.y = Geo.clampInto(panelParams.y, panelParams.height, screenH())
-        update()
-        savePanelPosition()
+    private fun endPeek() {
+        main.removeCallbacks(cardRun)
+        tab.clearCard()
+        placeTab()
+        scheduleHide()
     }
 
     // ---- look and settings ---------------------------------------------------------------------------------------------------------------
-    override fun settingsChanged() {
-        applyLook()
-    }
-
-    private fun applyLook() {
+    /** Runs when anything changes, here or on the app's settings screen (the open overlay follows live). Cheap when nothing it draws has changed. */
+    private fun prefsOrLookChanged() {
         val theme = Themes.byId(store.themeId, store.customHue, store.customLight)
         panel.setLook(theme, store.panelOpacity, prefs.fontSize.toFloat(), store.textScale, prefs.chatLines)
-        tab.setLook(theme, store.tabFade, prefs.hideSeconds, prefs.peekSeconds, prefs.fontSize.toFloat())
+        tab.setLook(theme, prefs.fontSize.toFloat(), store.popScale, store.popOpacity)
+        panel.setComposer(prefs.canSend && store.sendEnabled)
+        if (!added) return
+        if (mode == Mode.PANEL) {
+            // sizes or positions may have been reset from the app's settings screen
+            if (rsMode == 0 && !moving) layoutPanel()
+        } else if (!tabDragging) {
+            edge = Edge.values().getOrElse(store.tabEdge) { Edge.RIGHT }
+            along = store.tabAlong / 1000f
+            placeTab()
+            scheduleHide()
+        }
     }
 
     // ---- what SavahBot sends -------------------------------------------------------------------------------------------------------------
-    fun setLink(l: Link, d: String) {
+    fun setLink(l: Link, d: String) = guard {
         link = l
         detail = d
         main.removeCallbacks(staleCheck)
@@ -322,25 +616,25 @@ class Overlay(
         redrawHeader()
     }
 
-    fun setState(s: State) {
+    fun setState(s: State) = guard {
         state = s
         redrawHeader()
     }
 
-    fun setStats(s: Stats) {
+    fun setStats(s: Stats) = guard {
         stats = s
         lastData = System.currentTimeMillis()
         redrawHeader()
     }
 
-    fun setPrefs(p: Prefs) {
+    fun setPrefs(p: Prefs) = guard {
         prefs = p
-        applyLook()
+        prefsOrLookChanged()
         trim()
-        if (panelShown) panel.setLines(lines)
+        if (mode == Mode.PANEL) panel.setLines(lines)
     }
 
-    fun showNotice(text: String) {
+    fun showNotice(text: String) = guard {
         notice = text
         redrawHeader()
     }
@@ -352,19 +646,19 @@ class Overlay(
         }
     }
 
-    fun addChat(newLines: List<Line>, skipped: Int) {
+    fun addChat(newLines: List<Line>, skipped: Int) = guard {
         val fresh = ArrayList<Line>()
         if (skipped > 0) fresh.add(Line(0, "", "", "+$skipped more messages", "note"))
         for (l in newLines) {
             if (l.id == 0L || shown.add(l.id)) fresh.add(l)
         }
-        if (fresh.isEmpty()) return
+        if (fresh.isEmpty()) return@guard
         lines.addAll(fresh)
         trim()
-        if (panelShown) panel.addLines(fresh) else tab.pop(fresh)
+        if (mode == Mode.PANEL) panel.addLines(fresh) else peek(fresh)
     }
 
-    fun purge(uids: List<String>, ids: List<Long>) {
+    fun purge(uids: List<String>, ids: List<Long>) = guard {
         val iter = lines.iterator()
         var changed = false
         while (iter.hasNext()) {
@@ -375,10 +669,10 @@ class Overlay(
                 changed = true
             }
         }
-        if (changed && panelShown) panel.setLines(lines)
+        if (changed && mode == Mode.PANEL) panel.setLines(lines)
     }
 
-    /** The numbers and the status line, worked out once and given to both windows. Nothing is shown as live when it is not. */
+    /** The numbers and the status line, worked out once and given to both forms. Nothing is shown as live when it is not. */
     private fun redrawHeader() {
         val fresh = link == Link.ONLINE || System.currentTimeMillis() - lastData < 30_000
         val s = stats
@@ -397,9 +691,9 @@ class Overlay(
                 text = notice
                 alert = true
             }
-            link == Link.CONNECTING -> text = "Connecting\u2026"
+            link == Link.CONNECTING -> text = "Connecting…"
             link == Link.RECONNECTING -> {
-                text = "Reconnecting\u2026"
+                text = "Reconnecting…"
                 alert = true
             }
             link == Link.WAITING -> {
@@ -411,6 +705,6 @@ class Overlay(
             link == Link.ONLINE && state.title.isNotEmpty() -> text = state.title
         }
         panel.setHeader(viewers, likes, dot, text, alert)
-        tab.setHeader(viewers, likes, dot)
+        if (tab.setHeader(viewers, likes, dot) && added && mode == Mode.TAB && !tabDragging) placeTab()
     }
 }

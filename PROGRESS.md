@@ -14,3 +14,6 @@ The owner built and ran the SavahLive APK (debug) on a phone: the Kotlin compile
 ## 1.6.0 (SavahLive redesign)
 Panel + edge tab (Panel/Tab/Overlay/PanelView/TabWindow), themes and SVG icons, guided app screens, redesigned web page, `hide_seconds` and `download_url` settings, logo proportion fix. Verified here: backend service tests (10, against this tree), frontend type-check, icon path validation and rendering, theme contrast maths, bracket/cross-reference scans of the Kotlin. NOT verified: any Kotlin compile or run, the backend HTTP tests, `vite build`, the PowerShell script and the workflow.
 
+
+## 1.6.1 (SavahLive stability rebuild)
+Single-window Overlay with PanelView/TabView, guarded callbacks, edge and corner resizing, in-app settings, separate pop-out controls, send-to-chat (backend + phone + dashboard), web page fixes. Verified here: tsc, SavahLive and config backend tests, Geometry logic executed, Kotlin syntax check (no new unresolved names). NOT verified: any Android compile or run.

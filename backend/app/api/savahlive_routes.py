@@ -5,6 +5,7 @@ Phone side (no dashboard sign-in; the phone proves itself with its own device ke
   POST /api/live/pair        swap a one-time code for a device key
   GET  /api/live/feed        the overlay's Server-Sent Events stream
   POST /api/live/rotate      swap the device key for a fresh one
+  POST /api/live/send        post one chat message (only for a phone you allowed to send)
 
 Dashboard side (the usual owner sign-in):
   GET  /api/savahlive, POST /api/savahlive/pair-code, PATCH|DELETE /api/savahlive/devices/{id},
@@ -43,6 +44,11 @@ class NewCode(_In):
 class DeviceEdit(_In):
     name: str | None = Field(default=None, max_length=40)
     expiry_days: int | None = None
+    can_send: bool | None = None
+
+
+class SendIn(_In):
+    text: str = Field(min_length=1, max_length=400)
 
 
 class SettingsIn(_In):
@@ -57,6 +63,7 @@ class SettingsIn(_In):
     hide_bots: bool | None = None
     hide_flagged: bool | None = None
     only_special: bool | None = None
+    send_enabled: bool | None = None
     rotate_days: int | None = Field(default=None, ge=0, le=365)
     idle_unpair_days: int | None = Field(default=None, ge=0, le=365)
     track_stats: bool | None = None
@@ -65,7 +72,7 @@ class SettingsIn(_In):
 # setting field (above) -> config name
 SETTING_KEYS = {"enabled": "savahlive_enabled", "max_devices": "savahlive_max_devices", "max_feeds": "savahlive_max_feeds", "chat_lines": "savahlive_chat_lines",
                 "peek_seconds": "savahlive_peek_seconds", "font_size": "savahlive_font_size", "hide_seconds": "savahlive_hide_seconds", "download_url": "savahlive_download_url", "hide_bots": "savahlive_hide_bots", "hide_flagged": "savahlive_hide_flagged",
-                "only_special": "savahlive_only_special", "rotate_days": "savahlive_rotate_days", "idle_unpair_days": "savahlive_idle_unpair_days", "track_stats": "yt_live_enabled"}
+                "only_special": "savahlive_only_special", "send_enabled": "savahlive_send_enabled", "rotate_days": "savahlive_rotate_days", "idle_unpair_days": "savahlive_idle_unpair_days", "track_stats": "yt_live_enabled"}
 
 
 def _fail(err: LiveError) -> ApiError:
@@ -146,6 +153,18 @@ async def rotate(request: Request, c: Any) -> dict:
         raise _fail(err) from None
 
 
+@R.add("/live/send", ["POST"], public=True)
+async def send(request: Request, c: Any) -> dict:
+    b = await parse(request, SendIn)
+    sl = c.savahlive
+    try:
+        dev = await sl.device(request.headers.get("authorization", ""))
+        await sl.send(dev, b.text, client_ip(request))
+    except LiveError as err:
+        raise _fail(err) from None
+    return {"ok": True}
+
+
 # ================================================================================= dashboard side
 async def _overview(request: Request, c: Any) -> dict:
     sl = c.savahlive
@@ -156,7 +175,7 @@ async def _overview(request: Request, c: Any) -> dict:
         "devices": await sl.devices(), "connected": len(sl.feeds), "state": state,
         "settings": {**sl.overlay_settings(), "enabled": sl.enabled, "max_devices": sl.limit("savahlive_max_devices", 1, 20), "max_feeds": sl.limit("savahlive_max_feeds", 1, 20),
                      "rotate_days": sl.limit("savahlive_rotate_days", 0, 365), "idle_unpair_days": sl.limit("savahlive_idle_unpair_days", 0, 365),
-                     "track_stats": bool(cfg.get("yt_live_enabled")), "download_url": str(cfg.get("savahlive_download_url") or "")},
+                     "track_stats": bool(cfg.get("yt_live_enabled")), "send_enabled": bool(cfg.get("savahlive_send_enabled")), "download_url": str(cfg.get("savahlive_download_url") or "")},
         "stats_seconds": int(cfg.get("yt_live_seconds")), "dashboard_clients": c.bus.subscriber_count, "dashboard_limit": int(cfg.get("sse_max_clients")),
         "expiry_choices": list(EXPIRY_CHOICES), "now": time.time(),
     }
@@ -187,7 +206,7 @@ async def pair_code(request: Request, c: Any) -> dict:
 async def device_edit(request: Request, c: Any) -> dict:
     b = await parse(request, DeviceEdit)
     try:
-        ok = await c.savahlive.edit(request.path_params["did"], b.name, b.expiry_days)
+        ok = await c.savahlive.edit(request.path_params["did"], b.name, b.expiry_days, b.can_send)
     except LiveError as err:
         raise _fail(err) from None
     if not ok:

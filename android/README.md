@@ -438,17 +438,18 @@ Signed APKs are filed, checksummed and protected from overwriting by `scripts\re
 
 ---
 
-## 12. First-run checklist for 1.6.0 (the new panel and tab)
+## 12. First-run checklist for 1.6.1 (rebuilt panel and tab)
 
-The 1.6.0 Kotlin was written without a compiler. If `./gradlew assembleDebug` prints errors, copy the first few red lines to the developer: they are usually a one-line fix.
+The 1.6.1 Kotlin was written without a compiler. If `./gradlew assembleDebug` prints errors, send the first few red lines. For a crash, run `adb logcat -b crash` and send the output.
 `./gradlew test` runs the theme and geometry unit tests (`src/test`).
 
-1. **Pair and allow:** the three-step flow (Pair, Allow, Go) works; the paste button reads a copied link or code.
-2. **Panel:** Start overlay. Drag the top bar and the numbers row to move it. Drag a **bottom corner**: the whole panel scales together, with a coloured outline. The expand button cycles small, medium, large.
-3. **Tray:** tap the three dots. Slide **opacity** (the background fades, text stays readable) and **tab fade**. Try each theme and Custom. Text -/+ resizes chat text. **Stop** asks twice.
-4. **Tab:** tap the **X**. A box-shaped tab appears on the nearest edge. Drag it to another edge (left, right, top, bottom) and along the edge. After the hide delay it slides almost out of sight at the opacity you chose.
-5. **Pop-out:** in SavahBot Demo mode, start the demo. New chat slides the tab out with a card for the pop-out time, then it tucks away again. Tap the tab: the panel opens.
-6. **Edge tuck:** drag the panel more than a third off any screen edge and let go: it tucks into that edge.
-7. **Rotate the phone** (try PUBG in landscape): the panel and tab keep their relative place and the panel shrinks to fit.
-8. **Lock:** in the tray, Lock. Touches now pass through to the game; unlock from the notification.
-9. **Icon:** the SavahLive home-screen icon has the same face size as SavahBot's.
+1. **Pair and allow:** the three-step flow works.
+2. **Panel:** Start overlay. Drag the header to move. Drag each of the four **sides** and four **corners** to resize; there are no grip lines. A simple tap on an edge changes nothing.
+3. **Expand:** tap expand: bigger window, icon becomes collapse. Tap again: smaller. The chat scrolls in both.
+4. **Tuck:** tap the tuck button. The tab appears; tap it: the panel opens. Repeat 20 times quickly. No crash.
+5. **Tab drag:** drag the tab to the centre, to all four edges, away and back. It snaps to an edge and never crashes.
+6. **In-app settings:** change panel opacity, text size, theme, tab opacity, Slide away, pop-out size and opacity. Each applies live. Reset size and position works.
+7. **Pop-out:** in Demo mode, new chat slides a card out of the tab, using the pop-out size and opacity.
+8. **Send:** in Manage > SavahLive turn on Let phones send chat and Can send chat for the phone. A message box appears in the panel; send a line and see it on YouTube and as "You".
+9. **Rotate the phone:** panel and tab keep their relative place.
+10. **Lock** from the notification: touches pass through; unlock from the notification.

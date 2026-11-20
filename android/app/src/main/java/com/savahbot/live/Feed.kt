@@ -304,7 +304,8 @@ class Feed(private val store: Store, private val ui: Listener) {
         (o?.optInt("chat_lines", 40) ?: 40).coerceIn(10, 100),
         (o?.optInt("peek_seconds", 5) ?: 5).coerceIn(2, 15),
         (o?.optInt("font_size", 14) ?: 14).coerceIn(11, 22),
-        (o?.optInt("hide_seconds", 3) ?: 3).coerceIn(0, 30)
+        (o?.optInt("hide_seconds", 3) ?: 3).coerceIn(0, 30),
+        o?.optBoolean("can_send", false) ?: false
     )
 
     private fun parseLines(arr: JSONArray?): List<Line> {

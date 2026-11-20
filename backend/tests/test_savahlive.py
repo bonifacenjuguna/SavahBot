@@ -74,6 +74,62 @@ def body(chunk):
     return json.loads(chunk.split("data: ", 1)[1])
 
 
+class FakeHub(SimpleNamespace):
+    """The part of the hub the phone's send route touches: it records what was posted and can be told to fail."""
+
+    async def send_chat(self, text, render=False):
+        self.posted.append(text)
+        return self.ok
+
+
+def test_sending_chat_needs_both_switches_and_is_rate_limited():
+    async def go():
+        sl, c = await make()
+        c.hub = FakeHub(mode="live", stream_live=True, stream_title="x", buffer=deque(), posted=[], ok=True)
+        d = await pair(sl)
+        dev = await sl.device(bearer(d["key"]))
+        await refused(sl.send(dev, "hello"), "send_denied")                           # a new phone cannot send until you allow it
+        assert sl._feed_settings(dev)["can_send"] is False
+        assert await sl.edit(d["device_id"], None, None, can_send=True)
+        dev = await sl.device(bearer(d["key"]))
+        assert sl._feed_settings(dev)["can_send"] is True and (await sl.devices())[0]["can_send"] is True
+        await sl.send(dev, "  hello\n\tthere  ", "1.1.1.1")
+        assert c.hub.posted == ["hello there"]                                         # one clean line
+        assert c.access.audits[-1][0] == "savahlive_sent" and "hello" not in c.access.audits[-1][1]   # the log has the length, not the words
+        await refused(sl.send(dev, "again"), "slow")                                   # one message every couple of seconds
+        sl._sent[d["device_id"]].clear()
+        await refused(sl.send(dev, "   "), "empty")
+        await sl.send(dev, "x" * 500)
+        assert len(c.hub.posted[-1]) == 200
+        c.cfg.set("savahlive_send_enabled", False)                                     # the master switch beats the phone's own permission
+        assert sl._feed_settings(dev)["can_send"] is False
+        sl._sent[d["device_id"]].clear()
+        await refused(sl.send(dev, "hi"), "send_off")
+        c.cfg.set("savahlive_send_enabled", True)
+        sl._sent[d["device_id"]].clear()
+        c.hub.ok = False
+        await refused(sl.send(dev, "hi"), "send_failed")                               # YouTube said no: the phone is told, nothing is counted
+        assert not sl._sent[d["device_id"]]
+    run(go())
+
+
+def test_a_sent_message_shows_on_the_senders_own_feed():
+    async def go():
+        sl, c = await make()
+        c.hub = FakeHub(mode="live", stream_live=True, stream_title="x", buffer=deque(), posted=[], ok=True)
+        d = await pair(sl)
+        await sl.edit(d["device_id"], None, None, can_send=True)
+        dev = await sl.device(bearer(d["key"]))
+        gen = sl.stream(dev, 0, lambda: asyncio.sleep(0, False))
+        hello = body((await next_events(gen))[0])
+        assert hello["settings"]["can_send"] is True
+        await sl.send(dev, "gg everyone")
+        chat = body((await next_events(gen))[0])
+        assert chat["lines"][0]["text"] == "gg everyone" and chat["lines"][0]["name"] == "You"      # SavahBot hides its own account, the sender still sees theirs
+        await gen.aclose()
+    run(go())
+
+
 def test_pairing_gives_a_working_key_once():
     async def go():
         sl, c = await make()
@@ -297,6 +353,15 @@ async def test_http_pairing_and_feed(api):
     w.close()
     st, ov = await api.call("GET", "/api/savahlive")
     assert st == 200 and len(ov["devices"]) == 1 and ov["devices"][0]["name"] == "Pixel 8" and ov["devices"][0]["expires"]
+    assert ov["devices"][0]["can_send"] is False and ov["settings"]["send_enabled"] is True
+    st, denied = await request_json("POST", api.base + "/api/live/send", json_body={"text": "hi"}, headers=dev_auth)
+    assert st == 403 and denied["code"] == "send_denied"                                  # a phone cannot send until you allow it
+    st, _ = await request_json("POST", api.base + "/api/live/send", json_body={"text": "hi"})
+    assert st == 401                                                                       # and a request with no device key is nobody
+    st, _ = await api.call("PATCH", "/api/savahlive/devices/" + ov["devices"][0]["id"], {"can_send": True})
+    assert st == 200
+    st, ov = await api.call("GET", "/api/savahlive")
+    assert ov["devices"][0]["can_send"] is True
     st, _ = await api.call("DELETE", "/api/savahlive/devices/" + ov["devices"][0]["id"])
     assert st == 200
     st, gone = await request_json("GET", api.base + "/api/live/feed", headers=dev_auth)

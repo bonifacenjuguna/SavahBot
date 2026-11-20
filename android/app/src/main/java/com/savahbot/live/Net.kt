@@ -82,4 +82,15 @@ object Net {
             throw PairError("SavahBot sent an answer this app does not understand. Update SavahLive and SavahBot to the same version.")
         }
     }
+
+    /** Sends one chat message through SavahBot (only when this phone is allowed to). Returns null on success, or a sentence for the screen. Runs on a background thread. */
+    fun send(server: String, key: String, text: String): String? {
+        val reply = try {
+            call("POST", "$server/api/live/send", JSONObject().put("text", text).toString(), key)
+        } catch (e: IOException) {
+            return "Could not reach SavahBot."
+        }
+        if (reply.status == 200) return null
+        return message(reply.body, "Could not send (HTTP ${reply.status}).")
+    }
 }

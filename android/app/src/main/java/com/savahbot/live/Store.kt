@@ -44,15 +44,35 @@ class Store(context: Context) {
     var panelOpacity: Int                    // percent of the panel background, 20..100 (text and icons stay fully visible)
         get() = int("panelOpacity", 92, 20, 100)
         set(v) = put("panelOpacity", v)
-    var tabFade: Int                         // percent opacity of the tab while it is tucked away, 10..100
-        get() = int("tabFade", 45, 10, 100)
-        set(v) = put("tabFade", v)
-    var textScale: Int                       // percent, 80..140, on top of the size SavahBot asks for
+    var tabOpacity: Int                      // percent opacity of the edge tab, 40..100. Never lower, so the tab can always be found.
+        get() = int("tabOpacity", 90, 40, 100)
+        set(v) = put("tabOpacity", v)
+    var tabHide: Int                         // seconds before the tab slides mostly off screen, 0 = never (the default)
+        get() = int("tabHide", 0, 0, 30)
+        set(v) = put("tabHide", v)
+    var textScale: Int                       // percent, 80..140, panel chat text on top of the size SavahBot asks for
         get() = int("textScale", 100, 80, 140)
         set(v) = put("textScale", v)
-    var panelScale: Int                      // percent of the base panel size, 50..160 (what you chose; the screen may allow less)
-        get() = int("panelScale", 100, 50, 160)
-        set(v) = put("panelScale", v)
+    var popScale: Int                        // percent, 70..170, size of the chat pop-outs beside the tab (separate from the panel)
+        get() = int("popScale", 100, 70, 170)
+        set(v) = put("popScale", v)
+    var popOpacity: Int                      // percent, 30..100, how solid the chat pop-outs are (separate from the panel)
+        get() = int("popOpacity", 95, 30, 100)
+        set(v) = put("popOpacity", v)
+    var sendEnabled: Boolean                 // show the message box in the panel (only if SavahBot allows this phone to send)
+        get() = prefs.getBoolean("sendEnabled", true)
+        set(v) { prefs.edit().putBoolean("sendEnabled", v).apply() }
+
+    /** The normal panel size in dp, set by dragging its edges; and whether it is currently expanded to the big size. */
+    var panelWdp: Int
+        get() = int("panelWdp", 270, 180, 700)
+        set(v) = put("panelWdp", v)
+    var panelHdp: Int
+        get() = int("panelHdp", 300, 140, 900)
+        set(v) = put("panelHdp", v)
+    var expanded: Boolean
+        get() = prefs.getBoolean("expanded", false)
+        set(v) { prefs.edit().putBoolean("expanded", v).apply() }
 
     /** Position of the panel as fractions of the free room on screen (per mille), so it keeps its place when the phone rotates. */
     var panelFx: Int
@@ -73,6 +93,22 @@ class Store(context: Context) {
     var panelOpen: Boolean
         get() = prefs.getBoolean("panelOpen", true)
         set(v) { prefs.edit().putBoolean("panelOpen", v).apply() }
+
+    private var watcher: SharedPreferences.OnSharedPreferenceChangeListener? = null
+
+    /** Calls [onChange] (on the main thread) whenever any choice above changes, wherever it was changed, so the open overlay follows the app's settings screen live. */
+    fun watch(onChange: () -> Unit) {
+        unwatch()
+        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> onChange() }
+        watcher = l
+        prefs.registerOnSharedPreferenceChangeListener(l)
+    }
+
+    fun unwatch() {
+        val l = watcher ?: return
+        prefs.unregisterOnSharedPreferenceChangeListener(l)
+        watcher = null
+    }
 
     val isPaired: Boolean get() = server.isNotEmpty() && key() != null
 

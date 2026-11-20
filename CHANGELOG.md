@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.1
+
+### Fixed: the SavahLive overlay crashes (see docs/SAVAHLIVE.md)
+- **Tucking, tab dragging and drag-and-return no longer crash the overlay or the app.** The cause was views being removed from the window while a finger was still on them. The overlay is now one window holding the panel and the tab, switched by visibility; nothing is added or removed during a touch, and every touch handler is guarded so a failure falls back to the tab instead of killing the overlay.
+- **The tab can always be found:** it never hides by default and never goes below 40% opacity. The unlabeled "tab fade" slider is gone.
+
+### Changed: panel and tab redesigned
+- New rounded panel with a live dot, a user icon with viewers, a heart with likes, a round expand/collapse button (the icon swaps) and a tuck button. No emojis anywhere; every icon is a themed SVG.
+- Resize from any **side or corner**, no grip lines, one stable drag engine. The chat scrolls in every size.
+- Chat pop-outs have their own size and opacity.
+- **Settings moved into the app:** panel opacity, text size, theme, tab opacity, Slide away (Never, 3, 5, 10, 20 s), pop-out size and opacity, send messages, reset size and position.
+
+### Added: send chat from the phone
+- Optional message box in the panel. Needs the global **Let phones send chat** switch (`SAVAHLIVE_SEND_ENABLED`) and **Can send chat** on each phone. Posts as SavahBot's YouTube account; limited to 200 characters, one per 2 s, 12 per minute. New route `POST /api/live/send`.
+
+### Fixed: web page
+- One **Pair a phone** button instead of two; the three stat boxes no longer wrap mid-word; the live preview mirrors the new panel.
+
+### Notes
+- The Android code could not be compiled where this was written. Build it and send any compiler errors or `adb logcat -b crash` output.
+- `SAVAHLIVE_HIDE_SECONDS` is no longer used by the app (the phone's Slide away setting replaces it).
+- Several backend tests (backup, bans, hub_demo, notify, timer modes) fail on the untouched 1.6.0 as well; they are unrelated to this release.
+
 ## 1.6.0
 
 ### Changed: SavahLive redesigned (see docs/SAVAHLIVE.md)

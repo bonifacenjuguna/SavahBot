@@ -64,4 +64,54 @@ class ThemeGeoTest {
         assertEquals(Pair(710, 300), Geo.flush(Edge.RIGHT, 300, 100, 200, 720, 1600, 90))
         assertEquals(Pair(200, -190), Geo.flush(Edge.TOP, 200, 100, 200, 720, 1600, 190))
     }
+
+    // ---- the free-form panel: touch zones and resizing -------------------------------------------------------------------------------------
+    @Test fun touchZonesCoverEveryEdgeAndCorner() {
+        val w = 800
+        val h = 1000
+        assertEquals(0, Geo.hitMode(400f, 500f, w, h, 40, 20, 60))                         // the middle belongs to the chat
+        assertEquals(Geo.L, Geo.hitMode(10f, 500f, w, h, 40, 20, 60))
+        assertEquals(Geo.R, Geo.hitMode(790f, 500f, w, h, 40, 20, 60))
+        assertEquals(Geo.T, Geo.hitMode(400f, 5f, w, h, 40, 20, 60))
+        assertEquals(Geo.B, Geo.hitMode(400f, 990f, w, h, 40, 20, 60))
+        assertEquals(Geo.L or Geo.T, Geo.hitMode(5f, 5f, w, h, 40, 20, 60))
+        assertEquals(Geo.R or Geo.B, Geo.hitMode(795f, 995f, w, h, 40, 20, 60))
+        assertEquals(Geo.L or Geo.T, Geo.hitMode(50f, 50f, w, h, 40, 20, 60))              // the corner square is bigger than the side bands
+        assertEquals(0, Geo.hitMode(70f, 70f, w, h, 40, 20, 60))
+    }
+
+    @Test fun resizingMovesOnlyTheHeldSides() {
+        // window at (100, 200), 400 x 500, on a 1080 x 2200 screen; min 200 x 150, max 700 x 900
+        fun r(mode: Int, dx: Int, dy: Int) = Geo.resize(mode, 100, 200, 400, 500, dx, dy, 200, 150, 700, 900, 1080, 2200).toList()
+        assertEquals(listOf(100, 200, 500, 500), r(Geo.R, 100, 999))                         // the right edge: only the width changes
+        assertEquals(listOf(50, 200, 450, 500), r(Geo.L, -50, 0))                            // the left edge moves out, the right side stays at 500
+        assertEquals(listOf(100, 150, 400, 550), r(Geo.T, 0, -50))
+        assertEquals(listOf(100, 200, 400, 600), r(Geo.B, 0, 100))
+        assertEquals(listOf(100, 200, 500, 600), r(Geo.R or Geo.B, 100, 100))                // a corner moves two sides
+    }
+
+    @Test fun resizingNeverGoesBelowTheMinimumAboveTheMaximumOrOffScreen() {
+        fun r(mode: Int, dx: Int, dy: Int) = Geo.resize(mode, 100, 200, 400, 500, dx, dy, 200, 150, 700, 900, 1080, 2200).toList()
+        assertEquals(listOf(300, 200, 200, 500), r(Geo.L, 900, 0))                           // dragged far right: stops at the minimum width, right side still 500
+        assertEquals(listOf(100, 200, 200, 150), r(Geo.R or Geo.B, -900, -900))
+        assertEquals(listOf(100, 200, 700, 500), r(Geo.R, 5000, 0))                          // stops at the maximum width
+        assertEquals(listOf(0, 200, 500, 500), r(Geo.L, -5000, 0))                           // and at the screen's left edge (never past 0)
+        val tight = Geo.resize(Geo.R, 100, 200, 400, 500, 5000, 0, 200, 150, 5000, 900, 600, 2200)
+        assertEquals(500, tight[2])                                                           // a 600 px wide screen: from x=100 the width tops out at 500
+    }
+
+    @Test fun clampNeverThrowsEvenWhenTheLimitsCross() {
+        assertEquals(5, Geo.clampI(3, 5, 1))                                                  // coerceIn would throw here; the lower limit wins
+        assertEquals(7, Geo.clampI(7, 0, 10))
+        assertEquals(10, Geo.clampI(99, 0, 10))
+    }
+
+    @Test fun expandedWindowFitsAPhoneAndStaysSaneOnATablet() {
+        val phone = Geo.expandedSize(1080, 2400, 24, 1260, 1860)
+        assertEquals(1032, phone[0])
+        assertTrue(phone[1] in 1000..1860)
+        val tablet = Geo.expandedSize(2560, 1600, 24, 1260, 1860)
+        assertEquals(1260, tablet[0])
+        assertTrue(tablet[1] < 1600)
+    }
 }

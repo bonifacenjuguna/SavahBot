@@ -1,4 +1,4 @@
-/** SavahLive (1.6.0): the control room for the Android overlay app. Pair phones, see who is connected, tune what the overlay shows, remove a phone.
+/** SavahLive (1.6.1): the control room for the Android overlay app. Pair phones, see who is connected, tune what the overlay shows, allow a phone to send chat, remove a phone.
  *  SavahBot does the work; this page only manages the link. Everything the phone shows is produced by the backend. */
 import { del, get, patch, post } from "../api.js";
 import { ago, busy, copyButton, dateTime, h, mount, sheet, toast } from "../dom.js";
@@ -7,10 +7,10 @@ import { areaNav } from "./kit.js";
 import type { Page } from "./types.js";
 import { seg } from "./widgets.js";
 
-interface Phone { id: string; name: string; created: number; last_seen: number; expires: number | null; app_version: string; online: boolean; status: "active" | "expired" }
+interface Phone { id: string; name: string; created: number; last_seen: number; expires: number | null; app_version: string; online: boolean; status: "active" | "expired"; can_send: boolean }
 interface Prefs {
   enabled: boolean; max_devices: number; max_feeds: number; chat_lines: number; peek_seconds: number; font_size: number; hide_seconds: number;
-  hide_bots: boolean; hide_flagged: boolean; only_special: boolean; rotate_days: number; idle_unpair_days: number; track_stats: boolean; download_url: string;
+  hide_bots: boolean; hide_flagged: boolean; only_special: boolean; send_enabled: boolean; rotate_days: number; idle_unpair_days: number; track_stats: boolean; download_url: string;
 }
 interface Overview {
   enabled: boolean; protocol: number; server: string; server_is_public: boolean; devices: Phone[]; connected: number;
@@ -22,6 +22,11 @@ const fail = (e: unknown) => toast(e instanceof Error ? e.message : String(e), "
 const EXPIRY: { id: string; label: string }[] = [{ id: "0", label: "Until I remove it" }, { id: "30", label: "30 days" }, { id: "7", label: "7 days" }, { id: "1", label: "24 hours" }];
 
 const stateWord = (s: Overview["state"]): string => (s.mode === "demo" ? "Demo" : s.live ? "On air" : "Standby");
+
+/** One stat tile: a big value over a short label. Labels are short on purpose so they never wrap in a narrow tile. */
+function stat(label: string, value: string, tone: "" | "ok" = ""): HTMLElement {
+  return h("div", { class: `sl-stat${tone ? " " + tone : ""}` }, h("b", null, value), h("small", null, label));
+}
 
 // ---- small controls ---------------------------------------------------------------------------------------------------------------------------
 function chip(label: string, tone: "" | "ok" | "bad"): HTMLElement {
@@ -126,9 +131,9 @@ export const savahlive: Page = {
           h("div", null, h("h1", null, "Savah", h("b", null, "Live")), h("p", null, "Float your stream's chat, viewers and likes over any game on your Android phone. Pair once, then it just works."))),
         actions,
         h("div", { class: "sl-stats" },
-          h("div", { class: "sl-stat" }, h("small", null, o.devices.length === 1 ? "Phone paired" : "Phones paired"), h("b", null, String(o.devices.length))),
-          h("div", { class: `sl-stat${o.connected ? " ok" : ""}` }, h("small", null, "Connected now"), h("b", null, String(o.connected))),
-          h("div", { class: `sl-stat${o.state.live ? " ok" : ""}` }, h("small", null, "SavahBot is"), h("b", null, stateWord(o.state))))));
+          stat("Paired", String(o.devices.length)),
+          stat("Online now", String(o.connected), o.connected ? "ok" : ""),
+          stat("Stream", stateWord(o.state), o.state.live ? "ok" : ""))));
 
       const warns: HTMLElement[] = [];
       const warn = (text: string, action?: { label: string; patch: Partial<Prefs> }) => {
@@ -147,7 +152,7 @@ export const savahlive: Page = {
     }
 
     // ------------------------------------------------------------------ phones
-    function phoneCard(p: Phone): HTMLElement {
+    function phoneCard(p: Phone, o: Overview): HTMLElement {
       const expired = p.status === "expired";
       const status = expired ? chip("Pairing ended", "bad") : p.online ? chip("Connected", "ok") : chip("Not connected", "");
       const edit = h("button", { type: "button", class: "sl-btn small" }, icon("pencil", 15), "Edit") as HTMLButtonElement;
@@ -156,6 +161,13 @@ export const savahlive: Page = {
         try { await del(`/api/savahlive/devices/${p.id}`); toast(`${p.name} was unpaired`, "ok"); await load(false); } catch (e) { fail(e); }
       });
       const meta = (k: string, v: string) => h("div", null, h("dt", null, k), h("dd", null, v));
+      const sendSwitch = switchEl(p.can_send, `Allow ${p.name} to send chat`, (v) => {
+        void patch(`/api/savahlive/devices/${p.id}`, { can_send: v }).then(
+          () => { p.can_send = v; toast(v ? `${p.name} can now send chat` : `${p.name} can no longer send chat`, "ok"); },
+          (e) => { fail(e); void load(false); });
+      });
+      const sendRow = h("div", { class: "sl-opt sl-send" }, h("div", null, h("b", null, icon("send", 14), "Can send chat"),
+        h("small", null, o.settings.send_enabled ? "Shows a message box on this phone's panel." : "Switched off for every phone below.")), sendSwitch);
       return h("article", { class: "sl-phone" },
         h("div", { class: "sl-phone-top" },
           h("div", { class: "sl-avatar", "aria-hidden": "true" }, icon("smartphone", 22)),
@@ -164,23 +176,25 @@ export const savahlive: Page = {
           meta("Paired", dateTime(p.created)),
           meta("Last seen", p.online ? "now" : ago(p.last_seen)),
           meta(expired ? "Ended" : "Stays paired", p.expires ? dateTime(p.expires) : "Until you remove it")),
+        sendRow,
         h("div", { class: "sl-row-actions" }, edit, remove));
     }
 
     function drawPhones(): void {
       if (!ov) return;
       const o = ov;
-      const pair = h("button", { type: "button", class: "sl-btn primary" }, icon("plus", 18), "Pair a phone") as HTMLButtonElement;
-      pair.onclick = () => openPair();
       mount(phonesBox, h("section", { class: "sl-section" },
         h("header", null, h("h2", null, icon("smartphone", 18), "Phones"), h("small", null, `${o.devices.length} of ${o.settings.max_devices}`)),
         o.devices.length
-          ? h("div", { class: "sl-phones" }, o.devices.map(phoneCard))
+          ? h("div", { class: "sl-phones" }, o.devices.map((p) => phoneCard(p, o)))
           : h("div", { class: "sl-empty" },
             h("div", { class: "sl-avatar", "aria-hidden": "true" }, icon("smartphone", 28)),
             h("h3", null, "No phone paired yet"),
-            h("p", null, "Install SavahLive on your Android phone, then pair it here. You only pair once: after that the phone stays paired until you remove it."),
-            pair)));
+            h("p", null, "You only pair once. After that the phone stays paired until you remove it."),
+            h("ol", { class: "sl-steps" },
+              h("li", null, "Install SavahLive on your Android phone."),
+              h("li", null, "Tap Pair a phone at the top of this page."),
+              h("li", null, "Scan the QR code, or type the code into the app.")))));
     }
 
     // ------------------------------------------------------------------ settings (edited as a draft, saved together)
@@ -202,12 +216,12 @@ export const savahlive: Page = {
             optRow("Hide bot messages", "Leaves out other bots and SavahBot's own replies.", switchEl(d.hide_bots, "Hide bot messages", (v) => { d.hide_bots = v; markDirty(); })),
             optRow("Hide flagged messages", "Leaves out messages moderation flagged or removed.", switchEl(d.hide_flagged, "Hide flagged messages", (v) => { d.hide_flagged = v; markDirty(); })),
             optRow("Members and moderators only", "Useful during a raid: only members, regulars, moderators and you.", switchEl(d.only_special, "Members and moderators only", (v) => { d.only_special = v; markDirty(); })),
+            optRow("Let phones send chat", "Each phone also needs its own switch below. Messages go out as SavahBot's own YouTube account.", switchEl(d.send_enabled, "Let phones send chat", (v) => { d.send_enabled = v; markDirty(); })),
             optRow("Track viewers and likes", `Reads them from YouTube about every ${o.stats_seconds} seconds (about 1 quota unit each time). Off means chat only.`, switchEl(d.track_stats, "Track viewers and likes", (v) => { d.track_stats = v; markDirty(); }))),
           h("div", null,
             rangeRow("Chat lines kept", "How many recent lines each phone keeps. The big panel scrolls through them.", 10, 100, d.chat_lines, (n) => String(n), (n) => { d.chat_lines = n; markDirty(); }),
             rangeRow("Text size", "Chat text size on the phone. Each phone can also adjust it from the panel.", 11, 22, d.font_size, (n) => `${n} px`, (n) => { d.font_size = n; markDirty(); }),
-            rangeRow("Pop-out time", "How long new chat stays out of the tucked-away tab before it slides back.", 2, 15, d.peek_seconds, secs, (n) => { d.peek_seconds = n; markDirty(); }),
-            rangeRow("Tab hides after", "How long the tab waits before sliding almost out of sight. 0 keeps it fully visible.", 0, 30, d.hide_seconds, (n) => (n === 0 ? "never" : secs(n)), (n) => { d.hide_seconds = n; markDirty(); })))));
+            rangeRow("Pop-out time", "How long new chat stays out beside the tucked-away tab before it slides back.", 2, 15, d.peek_seconds, secs, (n) => { d.peek_seconds = n; markDirty(); })))));
       drawPreview();
     }
 
@@ -226,17 +240,19 @@ export const savahlive: Page = {
         h("header", null, h("h2", null, icon("eye", 18), "Preview"), h("small", null, "How the panel reads")),
         h("div", { class: "sl-body" },
           h("div", { class: "sl-preview", style: `font-size:${d.font_size}px` },
-            h("div", { class: "sl-pv-bar" }, icon("expand", 16), icon("dots", 18), icon("x", 16)),
-            h("div", { class: "sl-pv-stats" }, h("span", null, h("i", { class: "dot" })), h("span", null, icon("eye", 16), "1.2K"), h("span", { style: "color:#ff4d55" }, icon("heart", 15), h("span", { style: "color:#f1f2f5" }, "345"))),
-            sample.map((l) => h("div", { class: `sl-pv-line${visible(l.kind) ? "" : " gone"}` }, h("b", { style: `color:${l.color}` }, l.name), l.text))),
-          h("small", { class: "muted" }, "Each phone has its own theme, see-through level and size, set from the three dots on the panel."))));
+            h("div", { class: "sl-pv-head" },
+              h("span", { class: "sl-pv-stats" }, h("span", { class: "live" }, icon("radio", 16)), h("span", null, icon("user", 15), "1.2K"), h("span", { class: "heart" }, icon("heart", 14), h("b", null, "345"))),
+              h("span", { class: "sl-pv-btns" }, h("i", null, icon("expand", 14)), h("i", null, icon("dock", 14)))),
+            h("div", { class: "sl-pv-chat" }, sample.map((l) => h("div", { class: `sl-pv-line${visible(l.kind) ? "" : " gone"}` }, h("b", { style: `color:${l.color}` }, l.name), l.text))),
+            d.send_enabled ? h("div", { class: "sl-pv-send" }, h("span", null, "Message chat"), h("i", null, icon("send", 14))) : null),
+          h("small", { class: "muted" }, "Each phone chooses its own theme, see-through levels, text and pop-out sizes, and whether the tab slides away, in the SavahLive app."))));
     }
 
     function drawConnection(): void {
       if (!draft || !ov) return;
       const d = draft;
       const o = ov;
-      const url = h("input", { class: "sl-input", type: "url", placeholder: "https://github.com/.../SavahLive-1.6.0.apk", value: d.download_url, "aria-label": "App download link" });
+      const url = h("input", { class: "sl-input", type: "url", placeholder: "https://github.com/.../SavahLive-1.6.1.apk", value: d.download_url, "aria-label": "App download link" });
       url.addEventListener("input", () => { d.download_url = url.value.trim(); markDirty(); });
       const removeAll = armButton("Remove all phones", "Tap again to remove all", async () => {
         try { const r = await post<{ removed: number }>("/api/savahlive/devices/revoke-all"); toast(`${r.removed} phone(s) unpaired`, "ok"); await load(true); } catch (e) { fail(e); }
