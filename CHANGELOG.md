@@ -23,7 +23,7 @@
 - A long new chat message only grows the pop-out card; the tab no longer shifts.
 - Slide away now keeps the icons and numbers readable (at most a quarter of the tab slides out of sight).
 - The pop-out card springs out of the tab and tucks back with an animation.
-- The notification now has five icon buttons: hide/show, lock, reset position, open app, stop.
+- The notification is a redesigned card: a status light (green connected, amber connecting, grey otherwise), the full status line, and five labelled icon buttons (hide/show, lock, reset position, open app, stop). A compact version shows when collapsed.
 
 ### Notes
 - The Android code could not be compiled where this was written. Build it and send any compiler errors or `adb logcat -b crash` output.

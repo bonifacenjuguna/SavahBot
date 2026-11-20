@@ -202,22 +202,58 @@ class OverlayService : Service(), Feed.Listener {
         val resetI = PendingIntent.getService(this, 4, Intent(this, OverlayService::class.java).setAction(ACTION_RESET), flags)
         val shown = if (locked) "$text \u00B7 touch locked" else text
 
-        // one row of icon buttons (SVG drawables), tinted to suit a light or dark notification shade
+        // two layouts: a compact row (status light, name, five round icon buttons) and an expanded card (status line, then five labelled buttons)
         val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val ink = if (night) 0xFFE8EAED.toInt() else 0xFF3C4043.toInt()
-        val rv = RemoteViews(packageName, R.layout.notif_controls)
-        rv.setTextViewText(R.id.nc_text, shown)
-        fun button(id: Int, icon: Int, label: String, pi: PendingIntent, tint: Int = ink) {
-            rv.setImageViewResource(id, icon)
-            rv.setInt(id, "setColorFilter", tint)
-            rv.setContentDescription(id, label)
-            rv.setOnClickPendingIntent(id, pi)
+        val red = 0xFFE5242B.toInt()
+        val chip = if (night) R.drawable.nc_chip_dark else R.drawable.nc_chip_light
+        val light = when {
+            text.startsWith("Connected") -> 0xFF2ECC71.toInt()
+            text.startsWith("Demo") -> 0xFF8E9AAF.toInt()
+            text.startsWith("Starting") || text.startsWith("Connecting") || text.startsWith("Reconnect") -> 0xFFF5B301.toInt()
+            else -> 0xFF8E9AAF.toInt()
         }
-        button(R.id.nc_toggle, R.drawable.ic_dock, "Hide or show the panel", toggleI)
-        button(R.id.nc_lock, if (locked) R.drawable.ic_unlock else R.drawable.ic_lock, if (locked) "Unlock touch" else "Lock touch", lockI)
-        button(R.id.nc_reset, R.drawable.ic_move, "Reset position", resetI)
-        button(R.id.nc_open, R.drawable.ic_phone, "Open SavahLive", open)
-        button(R.id.nc_stop, R.drawable.ic_power, "Stop", stopI, 0xFFE5242B.toInt())
+        val lockIcon = if (locked) R.drawable.ic_unlock else R.drawable.ic_lock
+        val lockWord = if (locked) "Unlock" else "Lock"
+
+        val small = RemoteViews(packageName, R.layout.notif_compact)
+        small.setImageViewResource(R.id.nc_dot, R.drawable.ic_dot)
+        small.setInt(R.id.nc_dot, "setColorFilter", light)
+        small.setTextViewText(R.id.nc_text, shown)
+        small.setTextColor(R.id.nc_text, ink)
+        fun round(id: Int, icon: Int, label: String, pi: PendingIntent, red_: Boolean = false) {
+            small.setImageViewResource(id, icon)
+            small.setInt(id, "setColorFilter", if (red_) red else ink)
+            small.setInt(id, "setBackgroundResource", if (red_) R.drawable.nc_chip_red else chip)
+            small.setContentDescription(id, label)
+            small.setOnClickPendingIntent(id, pi)
+        }
+        round(R.id.nc_toggle, R.drawable.ic_dock, "Hide or show the panel", toggleI)
+        round(R.id.nc_lock, lockIcon, "$lockWord touch", lockI)
+        round(R.id.nc_reset, R.drawable.ic_move, "Reset position", resetI)
+        round(R.id.nc_open, R.drawable.ic_phone, "Open SavahLive", open)
+        round(R.id.nc_stop, R.drawable.ic_power, "Stop", stopI, true)
+
+        val big = RemoteViews(packageName, R.layout.notif_big)
+        big.setImageViewResource(R.id.nb_dot, R.drawable.ic_dot)
+        big.setInt(R.id.nb_dot, "setColorFilter", light)
+        big.setTextViewText(R.id.nb_text, shown)
+        big.setTextColor(R.id.nb_text, ink)
+        fun card(id: Int, iconId: Int, labelId: Int, icon: Int, word: String, desc: String, pi: PendingIntent, red_: Boolean = false) {
+            val tint = if (red_) red else ink
+            big.setImageViewResource(iconId, icon)
+            big.setInt(iconId, "setColorFilter", tint)
+            big.setTextViewText(labelId, word)
+            big.setTextColor(labelId, tint)
+            big.setInt(id, "setBackgroundResource", if (red_) R.drawable.nc_chip_red else chip)
+            big.setContentDescription(id, desc)
+            big.setOnClickPendingIntent(id, pi)
+        }
+        card(R.id.nb_toggle, R.id.nbi_toggle, R.id.nbt_toggle, R.drawable.ic_dock, "Hide", "Hide or show the panel", toggleI)
+        card(R.id.nb_lock, R.id.nbi_lock, R.id.nbt_lock, lockIcon, lockWord, "$lockWord touch", lockI)
+        card(R.id.nb_reset, R.id.nbi_reset, R.id.nbt_reset, R.drawable.ic_move, "Reset", "Reset position", resetI)
+        card(R.id.nb_open, R.id.nbi_open, R.id.nbt_open, R.drawable.ic_phone, "Open", "Open SavahLive", open)
+        card(R.id.nb_stop, R.id.nbi_stop, R.id.nbt_stop, R.drawable.ic_power, "Stop", "Stop", stopI, true)
 
         val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat)
@@ -228,8 +264,8 @@ class OverlayService : Service(), Feed.Listener {
             .setOnlyAlertOnce(true)
             .setColor(0xFFE5242B.toInt())
             .setStyle(Notification.DecoratedCustomViewStyle())
-            .setCustomContentView(rv)
-            .setCustomBigContentView(rv)
+            .setCustomContentView(small)
+            .setCustomBigContentView(big)
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         return b.build()
     }

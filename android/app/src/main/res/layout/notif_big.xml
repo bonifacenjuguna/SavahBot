@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Expanded notification: the status on top (never cut short), then five equal icon buttons with a small label each. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:paddingTop="2dp" android:paddingBottom="6dp">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:gravity="center_vertical" android:orientation="horizontal" android:paddingBottom="8dp">
+        <ImageView android:id="@+id/nb_dot" android:layout_width="10dp" android:layout_height="10dp"
+            android:layout_marginRight="8dp" android:src="@drawable/ic_dot" />
+        <TextView android:id="@+id/nb_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="SavahLive" android:maxLines="1"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
+        <TextView android:id="@+id/nb_text" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp" android:maxLines="1" android:ellipsize="end"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <LinearLayout android:id="@+id/nb_toggle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="54dp"
+            android:layout_marginLeft="0dp" android:gravity="center" android:orientation="vertical">
+            <ImageView android:id="@+id/nbi_toggle" android:layout_width="22dp" android:layout_height="22dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/nbt_toggle" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp" android:maxLines="1" android:textSize="10sp" android:text="Hide" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/nb_lock" android:layout_width="0dp" android:layout_weight="1" android:layout_height="54dp"
+            android:layout_marginLeft="6dp" android:gravity="center" android:orientation="vertical">
+            <ImageView android:id="@+id/nbi_lock" android:layout_width="22dp" android:layout_height="22dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/nbt_lock" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp" android:maxLines="1" android:textSize="10sp" android:text="Lock" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/nb_reset" android:layout_width="0dp" android:layout_weight="1" android:layout_height="54dp"
+            android:layout_marginLeft="6dp" android:gravity="center" android:orientation="vertical">
+            <ImageView android:id="@+id/nbi_reset" android:layout_width="22dp" android:layout_height="22dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/nbt_reset" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp" android:maxLines="1" android:textSize="10sp" android:text="Reset" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/nb_open" android:layout_width="0dp" android:layout_weight="1" android:layout_height="54dp"
+            android:layout_marginLeft="6dp" android:gravity="center" android:orientation="vertical">
+            <ImageView android:id="@+id/nbi_open" android:layout_width="22dp" android:layout_height="22dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/nbt_open" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp" android:maxLines="1" android:textSize="10sp" android:text="Open" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/nb_stop" android:layout_width="0dp" android:layout_weight="1" android:layout_height="54dp"
+            android:layout_marginLeft="6dp" android:gravity="center" android:orientation="vertical">
+            <ImageView android:id="@+id/nbi_stop" android:layout_width="22dp" android:layout_height="22dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/nbt_stop" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp" android:maxLines="1" android:textSize="10sp" android:text="Stop" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

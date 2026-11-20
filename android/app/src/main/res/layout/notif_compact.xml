@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Collapsed notification: a status light, the name and state, and five round icon buttons. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:minHeight="48dp" android:gravity="center_vertical" android:orientation="horizontal">
+
+    <ImageView android:id="@+id/nc_dot" android:layout_width="10dp" android:layout_height="10dp"
+        android:layout_marginRight="8dp" android:src="@drawable/ic_dot" />
+
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/nc_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:maxLines="1" android:ellipsize="end" android:text="SavahLive"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
+        <TextView android:id="@+id/nc_text" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:maxLines="1" android:ellipsize="end" android:textSize="12sp"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+    </LinearLayout>
+
+    <ImageView android:id="@+id/nc_toggle" android:layout_width="34dp" android:layout_height="34dp"
+        android:layout_marginLeft="4dp" android:padding="8dp" android:scaleType="fitCenter" />
+    <ImageView android:id="@+id/nc_lock" android:layout_width="34dp" android:layout_height="34dp"
+        android:layout_marginLeft="4dp" android:padding="8dp" android:scaleType="fitCenter" />
+    <ImageView android:id="@+id/nc_reset" android:layout_width="34dp" android:layout_height="34dp"
+        android:layout_marginLeft="4dp" android:padding="8dp" android:scaleType="fitCenter" />
+    <ImageView android:id="@+id/nc_open" android:layout_width="34dp" android:layout_height="34dp"
+        android:layout_marginLeft="4dp" android:padding="8dp" android:scaleType="fitCenter" />
+    <ImageView android:id="@+id/nc_stop" android:layout_width="34dp" android:layout_height="34dp"
+        android:layout_marginLeft="4dp" android:padding="8dp" android:scaleType="fitCenter" />
+</LinearLayout>
