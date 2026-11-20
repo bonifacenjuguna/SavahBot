@@ -88,6 +88,7 @@ class TabView(private val ctx: Context, private val host: Host) {
         val heart = iconView(ctx, R.drawable.ic_heart, theme.heart, 14)
         val viewers = TextView(ctx)
         val likes = TextView(ctx)
+        val note = TextView(ctx)            // shown instead of the numbers when the connection is down
 
         init {
             for (t in listOf(viewers, likes)) {
@@ -96,6 +97,12 @@ class TabView(private val ctx: Context, private val host: Host) {
                 t.setSingleLine(true)
                 t.gravity = Gravity.CENTER
             }
+            note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            note.setTypeface(Typeface.DEFAULT_BOLD)
+            note.setSingleLine(true)
+            note.gravity = Gravity.CENTER
+            note.setTextColor(AMBER)
+            note.visibility = View.GONE
             if (vertical) {
                 box.orientation = LinearLayout.VERTICAL
                 box.gravity = Gravity.CENTER_HORIZONTAL
@@ -105,6 +112,7 @@ class TabView(private val ctx: Context, private val host: Host) {
                 put(viewers, 2, 0)
                 put(heart, 10, 0)
                 put(likes, 2, 0)
+                put(note, 0, 0)
             } else {
                 box.orientation = LinearLayout.HORIZONTAL
                 box.gravity = Gravity.CENTER_VERTICAL
@@ -113,6 +121,7 @@ class TabView(private val ctx: Context, private val host: Host) {
                 put(viewers, 0, 4)
                 put(heart, 0, 10)
                 put(likes, 0, 4)
+                put(note, 0, 0)
             }
         }
 
@@ -134,6 +143,17 @@ class TabView(private val ctx: Context, private val host: Host) {
             user.setColorFilter(theme.muted)
             heart.setColorFilter(theme.heart)
             dot.setColorFilter(dotColor())
+        }
+
+        fun showNote(text: String) {
+            val on = text.isNotEmpty()
+            note.text = text
+            note.visibility = if (on) View.VISIBLE else View.GONE
+            val numbers = if (on) View.GONE else View.VISIBLE
+            user.visibility = numbers
+            viewers.visibility = numbers
+            heart.visibility = numbers
+            likes.visibility = numbers
         }
 
         fun set(v: String, l: String) {
@@ -170,6 +190,28 @@ class TabView(private val ctx: Context, private val host: Host) {
         upright.set(viewers, likes)
         flat.set(viewers, likes)
         return changed
+    }
+
+    private var bannerText = ""
+
+    /** Plain words for a bad connection, in place of the numbers. Returns true when the tab's size may have changed. */
+    fun setBanner(text: String): Boolean {
+        if (text == bannerText) return false
+        bannerText = text
+        upright.showNote(text)
+        flat.showNote(text)
+        return true
+    }
+
+    /** A milestone: the tab shrinks a little and springs back (it never grows past its own window, which would clip). Only its own scale changes. */
+    fun pulse() {
+        val b = active.box
+        b.animate().cancel()
+        b.pivotX = b.width / 2f
+        b.pivotY = b.height / 2f
+        b.scaleX = 0.78f
+        b.scaleY = 0.78f
+        b.animate().scaleX(1f).scaleY(1f).setDuration(420).setInterpolator(OvershootInterpolator(1.6f)).start()
     }
 
     private fun paint() {

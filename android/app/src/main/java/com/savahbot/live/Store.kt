@@ -63,6 +63,49 @@ class Store(context: Context) {
         get() = prefs.getBoolean("sendEnabled", true)
         set(v) { prefs.edit().putBoolean("sendEnabled", v).apply() }
 
+    private fun flag(key: String, def: Boolean): Boolean = prefs.getBoolean(key, def)
+    private fun putFlag(key: String, v: Boolean) { prefs.edit().putBoolean(key, v).apply() }
+    private fun text(key: String): String = prefs.getString(key, "") ?: ""
+    private fun putText(key: String, v: String) { prefs.edit().putString(key, v).apply() }
+
+    // ---- extras, each with its own switch on the app's home screen ----------------------------------------------------------------------------
+    var pinEnabled: Boolean                  // tap a chat line to pin it at the top of the panel
+        get() = flag("pinEnabled", true)
+        set(v) = putFlag("pinEnabled", v)
+    var milestoneStep: Int                   // flash the tab and panel each time viewers or likes pass a multiple of this, 0 = off
+        get() = int("milestoneStep", 100, 0, 1000)
+        set(v) = put("milestoneStep", v)
+    var modEnabled: Boolean                  // long-press a chat line to hide it or time its author out (only if SavahBot allows this phone)
+        get() = flag("modEnabled", true)
+        set(v) = putFlag("modEnabled", v)
+    var statusBanner: Boolean                // say plainly when the connection is down, in the panel and on the tab
+        get() = flag("statusBanner", true)
+        set(v) = putFlag("statusBanner", v)
+    var autoOpen: Boolean                    // start the overlay by itself when the app opens
+        get() = flag("autoOpen", false)
+        set(v) = putFlag("autoOpen", v)
+    var autoStopMin: Int                     // stop the overlay this many minutes after the stream ends, 0 = never
+        get() = int("autoStopMin", 0, 0, 180)
+        set(v) = put("autoStopMin", v)
+    var summaryOn: Boolean                   // keep a short summary of each stream and show it on the home screen
+        get() = flag("summaryOn", true)
+        set(v) = putFlag("summaryOn", v)
+    var updateCheck: Boolean                 // tell me when SavahBot has a newer version of this app
+        get() = flag("updateCheck", true)
+        set(v) = putFlag("updateCheck", v)
+    var presetsJson: String                  // saved layouts and looks, see Presets
+        get() = text("presets")
+        set(v) = putText("presets", v)
+    var presetIndex: Int
+        get() = int("presetIndex", -1, -1, 50)
+        set(v) = put("presetIndex", v)
+    var summaryJson: String                  // the last finished stream, see StreamSummary
+        get() = text("summary")
+        set(v) = putText("summary", v)
+    var updateJson: String                   // {"version","url"} of the newest version SavahBot told us about
+        get() = text("update")
+        set(v) = putText("update", v)
+
     /** The normal panel size in dp, set by dragging its edges; and whether it is currently expanded to the big size. */
     var panelWdp: Int
         get() = int("panelWdp", 270, 180, 700)

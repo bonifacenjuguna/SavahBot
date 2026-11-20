@@ -438,9 +438,9 @@ Signed APKs are filed, checksummed and protected from overwriting by `scripts\re
 
 ---
 
-## 12. First-run checklist for 1.6.1 (rebuilt panel and tab)
+## 12. First-run checklist for 1.6.2 (rebuilt panel and tab, plus the extras)
 
-The 1.6.1 Kotlin was written without a compiler. If `./gradlew assembleDebug` prints errors, send the first few red lines. For a crash, run `adb logcat -b crash` and send the output.
+The 1.6.1 and 1.6.2 Kotlin was written without a compiler. If `./gradlew assembleDebug` prints errors, send the first few red lines. For a crash, run `adb logcat -b crash` and send the output.
 `./gradlew test` runs the theme and geometry unit tests (`src/test`).
 
 1. **Pair and allow:** the three-step flow works.
@@ -453,3 +453,10 @@ The 1.6.1 Kotlin was written without a compiler. If `./gradlew assembleDebug` pr
 8. **Send:** in Manage > SavahLive turn on Let phones send chat and Can send chat for the phone. A message box appears in the panel; send a line and see it on YouTube and as "You".
 9. **Rotate the phone:** panel and tab keep their relative place.
 10. **Lock** from the notification: touches pass through; unlock from the notification.
+11. **Notification:** expanded, it shows a status light, the full status line and labelled buttons (Hide, Lock, Reset, Open, Stop). Every button works. Save a look in the app: a sixth button (the look's name) appears and cycles through your saved looks.
+12. **Pin:** tap a chat line; it pins at the top. Tap the pin to let go. Switch "Pin a message" off in the app: taps do nothing.
+13. **Milestones:** set the step to 50 in the app, then in Demo mode watch the numbers: the panel pulses and says "50 likes". Tucked, the tab pulses and a card says so.
+14. **Moderation:** allow the phone and the global switch in Manage > SavahLive. Hold a chat line: Hide, Time out 5 min, Cancel appear. Hide removes the line here and on every phone.
+15. **Offline:** turn on airplane mode: the panel shows an amber banner, the tab says Retrying and then Offline. Turn it off: the numbers return.
+16. **Automatic:** switch on Start when the app opens, close and reopen the app. Set Stop after the stream ends to 5 min, end the stream, and the overlay stops; start again and the Last stream card shows the summary.
+17. **Update:** with SavahBot on a higher version than the app, a "SavahLive x is available" card with Download appears on the home screen.

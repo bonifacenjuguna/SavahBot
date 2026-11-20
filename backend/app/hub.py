@@ -407,7 +407,7 @@ class Hub:
         The row is looked up here, so the page cannot ask for an action on someone who never wrote in the chat."""
         if action not in ("delete", "timeout", "ban"):
             return {"ok": False, "error": "Unknown action.", "code": 422}
-        row = await self.store.db.fetchone("SELECT platform, msg_id, author_id, author_name, level, demo FROM chat_messages WHERE id = ?", (chat_id,))
+        row = await self.store.db.fetchone("SELECT id, platform, msg_id, author_id, author_name, level, demo FROM chat_messages WHERE id = ?", (chat_id,))
         if not row:
             return {"ok": False, "error": "That message is no longer stored.", "code": 404}
         if row["level"] in ("owner", "bot"):

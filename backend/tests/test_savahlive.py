@@ -113,6 +113,55 @@ def test_sending_chat_needs_both_switches_and_is_rate_limited():
     run(go())
 
 
+class ModHub(SimpleNamespace):
+    async def manual(self, chat_id, action, seconds=300):
+        self.done.append((chat_id, action, seconds))
+        return {"ok": True} if self.ok else {"ok": False, "error": "The owner and the bot cannot be moderated.", "code": 400}
+
+
+def test_moderating_needs_both_switches_is_limited_and_never_bans():
+    async def go():
+        sl, c = await make()
+        c.hub = ModHub(mode="live", stream_live=True, stream_title="x", buffer=deque(), done=[], ok=True)
+        d = await pair(sl)
+        dev = await sl.device(bearer(d["key"]))
+        c.cfg.set("savahlive_mod_enabled", True)
+        await refused(sl.moderate(dev, 5, "delete"), "mod_denied")                   # a new phone cannot moderate until you allow it
+        assert sl._feed_settings(dev)["can_mod"] is False
+        assert await sl.edit(d["device_id"], None, None, can_mod=True)
+        dev = await sl.device(bearer(d["key"]))
+        assert sl._feed_settings(dev)["can_mod"] is True and (await sl.devices())[0]["can_mod"] is True
+        await sl.moderate(dev, 5, "delete", "1.1.1.1")
+        assert c.hub.done == [(5, "delete", 300)]
+        assert c.access.audits[-1][0] == "savahlive_moderated"
+        await refused(sl.moderate(dev, 6, "timeout"), "slow")                        # not twice in a second
+        sl._modded[d["device_id"]].clear()
+        await sl.moderate(dev, 6, "timeout")
+        assert c.hub.done[-1] == (6, "timeout", 300)
+        sl._modded[d["device_id"]].clear()
+        await refused(sl.moderate(dev, 7, "ban"), "bad_action")                      # bans stay on the dashboard
+        c.hub.ok = False
+        await refused(sl.moderate(dev, 8, "delete"), "mod_failed")
+        c.cfg.set("savahlive_mod_enabled", False)                                    # the master switch beats the phone's own permission
+        assert sl._feed_settings(dev)["can_mod"] is False
+        await refused(sl.moderate(dev, 5, "delete"), "mod_off")
+    run(go())
+
+
+def test_the_hello_tells_the_app_which_version_is_current():
+    async def go():
+        sl, c = await make()
+        c.cfg.set("savahlive_download_url", "https://example.com/app.apk")
+        d = await pair(sl)
+        dev = await sl.device(bearer(d["key"]))
+        gen = sl.stream(dev, 0, lambda: asyncio.sleep(0, False))
+        hello = body((await next_events(gen))[0])
+        from app import __version__
+        assert hello["update"] == {"version": __version__, "url": "https://example.com/app.apk"}
+        await gen.aclose()
+    run(go())
+
+
 def test_a_sent_message_shows_on_the_senders_own_feed():
     async def go():
         sl, c = await make()
@@ -362,6 +411,15 @@ async def test_http_pairing_and_feed(api):
     assert st == 200
     st, ov = await api.call("GET", "/api/savahlive")
     assert ov["devices"][0]["can_send"] is True
+    assert ov["devices"][0]["can_mod"] is False and ov["settings"]["mod_enabled"] is False        # moderating from a phone is off until you allow it twice
+    st, denied = await request_json("POST", api.base + "/api/live/mod", json_body={"id": 1, "action": "delete"}, headers=dev_auth)
+    assert st == 403 and denied["code"] == "mod_off"
+    st, _ = await api.call("PATCH", "/api/savahlive/devices/" + ov["devices"][0]["id"], {"can_mod": True})
+    assert st == 200
+    st, _ = await api.call("POST", "/api/savahlive/settings", {"mod_enabled": True})
+    assert st == 200
+    st, denied = await request_json("POST", api.base + "/api/live/mod", json_body={"id": 999999, "action": "ban"}, headers=dev_auth)
+    assert st == 422 and denied["code"] == "bad_action"
     st, _ = await api.call("DELETE", "/api/savahlive/devices/" + ov["devices"][0]["id"])
     assert st == 200
     st, gone = await request_json("GET", api.base + "/api/live/feed", headers=dev_auth)

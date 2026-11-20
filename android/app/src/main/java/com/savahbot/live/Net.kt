@@ -93,4 +93,15 @@ object Net {
         if (reply.status == 200) return null
         return message(reply.body, "Could not send (HTTP ${reply.status}).")
     }
+
+    /** Hides one chat message ("delete") or times its author out for five minutes ("timeout"). Null on success, or a sentence for the screen. Runs on a background thread. */
+    fun moderate(server: String, key: String, id: Long, action: String): String? {
+        val reply = try {
+            call("POST", "$server/api/live/mod", JSONObject().put("id", id).put("action", action).toString(), key)
+        } catch (e: IOException) {
+            return "Could not reach SavahBot."
+        }
+        if (reply.status == 200) return null
+        return message(reply.body, "Could not do that (HTTP ${reply.status}).")
+    }
 }

@@ -14,7 +14,63 @@ data class Stats(val viewers: Long?, val likes: Long?, val likesHidden: Boolean,
 data class State(val mode: String, val live: Boolean, val title: String)
 
 /** What SavahBot tells the phone to do: lines kept, how long new chat stays popped out, text size, the dashboard's tab-hide default, and whether this phone may send chat messages. */
-data class Prefs(val chatLines: Int, val peekSeconds: Int, val fontSize: Int, val hideSeconds: Int = 3, val canSend: Boolean = false)
+data class Prefs(val chatLines: Int, val peekSeconds: Int, val fontSize: Int, val hideSeconds: Int = 3, val canSend: Boolean = false, val canMod: Boolean = false)
+
+/** What SavahBot says is its own version, and where the app can be downloaded (the release script keeps SavahBot's version and the app's equal). */
+data class UpdateInfo(val version: String, val url: String)
+
+object Versions {
+    /** True when [latest] is a higher version number than [mine]. "1.6.10" beats "1.6.9". Anything unreadable counts as not newer. */
+    fun isNewer(latest: String, mine: String): Boolean {
+        fun parts(v: String): List<Int>? {
+            val out = v.trim().removePrefix("v").split('.').map { it.takeWhile { c -> c.isDigit() }.toIntOrNull() ?: return null }
+            return if (out.isEmpty()) null else out
+        }
+        val a = parts(latest) ?: return false
+        val b = parts(mine) ?: return false
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val x = a.getOrElse(i) { 0 }
+            val y = b.getOrElse(i) { 0 }
+            if (x != y) return x > y
+        }
+        return false
+    }
+}
+
+/** The step a counter has just crossed: 99 to 103 with a step of 100 gives 100; 103 to 105 gives null. A step of 0 is off. */
+object Milestones {
+    fun crossed(before: Long?, now: Long?, step: Int): Long? {
+        if (step <= 0 || before == null || now == null || now <= before) return null
+        val reached = (now / step) * step
+        return if (reached > 0 && reached > before) reached else null
+    }
+}
+
+/** What happened on one stream, kept while the overlay runs and summarised when it stops. */
+class StreamTally {
+    var startedAt = 0L
+    var peakViewers = 0L
+    var lastLikes = 0L
+    var messages = 0
+    var sawLive = false
+    private val chatters = HashMap<String, Int>()
+    private val names = HashMap<String, String>()
+
+    fun message(line: Line) {
+        if (line.level == "note" || line.uid.isEmpty() || line.uid == "self") return
+        messages++
+        chatters[line.uid] = (chatters[line.uid] ?: 0) + 1
+        if (line.name.isNotEmpty()) names[line.uid] = line.name
+    }
+
+    fun viewers(v: Long?) { if (v != null && v > peakViewers) peakViewers = v }
+    fun likes(v: Long?) { if (v != null && v > lastLikes) lastLikes = v }
+
+    /** The three people who wrote the most, as "name:count". */
+    fun top(n: Int = 3): List<Pair<String, Int>> = chatters.entries.sortedByDescending { it.value }.take(n).map { Pair(names[it.key] ?: "?", it.value) }
+
+    val hasData: Boolean get() = sawLive || messages > 0 || peakViewers > 0
+}
 
 enum class Link { CONNECTING, ONLINE, RECONNECTING, WAITING, PAUSED, UNPAIRED }
 

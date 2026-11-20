@@ -44,6 +44,8 @@ class MainActivity : Activity() {
     private var messageIsError = true
     private var pairing = false
     private var autoPair: PairInput? = null
+    private var autoOpened = false
+    private var presetName = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,6 +66,11 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // "Start the overlay when this app opens": once per launch of the app, and never behind the person's back after they pressed Stop
+        if (store.autoOpen && !autoOpened && store.isPaired && Settings.canDrawOverlays(this) && !OverlayService.running) {
+            autoOpened = true
+            OverlayService.start(this)
+        }
         render()
     }
 
@@ -275,7 +282,10 @@ class MainActivity : Activity() {
         }
         col.addView(hero)
 
+        updateCard(col)
+        summaryCard(col)
         looksCards(col)
+        extrasCards(col)
 
         val how = ui.card(18)
         how.addView(ui.text("How the panel works", 18f, Ui.INK, true))
@@ -509,6 +519,144 @@ class MainActivity : Activity() {
             render()
         })
         col.addView(resetCard)
+    }
+
+    // ---- extras: each one has its own switch here ---------------------------------------------------------------------------------------------
+    private fun pill(label: String, tint: Int = Ui.INK, onClick: () -> Unit): TextView {
+        val t = ui.text(label, 13f, tint, true)
+        t.setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8))
+        t.background = ui.round(Ui.RAISED, 12)
+        t.isClickable = true
+        t.setOnClickListener { onClick() }
+        return t
+    }
+
+    private fun extrasCards(col: LinearLayout) {
+        val chatCard = ui.card(18)
+        chatCard.addView(sectionHead(R.drawable.ic_chat, "Chat tools", "What a tap or a long press on a chat line does."))
+        chatCard.addView(toggleRow("Pin a message", "Tap a line to pin it at the top of the panel. Tap the pin to let it go.", store.pinEnabled) { store.pinEnabled = it })
+        chatCard.addView(toggleRow("Hide or time out people", "Hold a line to hide it or time its author out for 5 minutes. Needs permission in SavahBot: Manage, SavahLive, then this phone.", store.modEnabled) { store.modEnabled = it })
+        col.addView(chatCard)
+
+        val mileCard = ui.card(18)
+        mileCard.addView(sectionHead(R.drawable.ic_heart, "Milestones", "The panel and tab celebrate when viewers or likes pass a round number."))
+        mileCard.addView(segmented(listOf(Pair("Off", 0), Pair("50", 50), Pair("100", 100), Pair("250", 250), Pair("500", 500), Pair("1000", 1000)), store.milestoneStep) { store.milestoneStep = it })
+        col.addView(mileCard)
+
+        val autoCard = ui.card(18)
+        autoCard.addView(sectionHead(R.drawable.ic_power, "Automatic", "Fewer taps on stream day."))
+        autoCard.addView(toggleRow("Start when the app opens", "Opening SavahLive starts the overlay for you.", store.autoOpen) { store.autoOpen = it })
+        autoCard.addView(ui.text("Stop after the stream ends", 15f, Ui.INK, true).also { it.setPadding(0, ui.dp(12), 0, 0) })
+        autoCard.addView(ui.text("The overlay stops this long after SavahBot says your stream is over. It carries on if you go live again.", 13f, Ui.MUTED))
+        autoCard.addView(segmented(listOf(Pair("Never", 0), Pair("5 min", 5), Pair("15 min", 15), Pair("30 min", 30), Pair("1 hour", 60)), store.autoStopMin) { store.autoStopMin = it })
+        autoCard.addView(toggleRow("Keep a stream summary", "Peak viewers, likes, messages and top chatters, shown here after you stop.", store.summaryOn) { store.summaryOn = it })
+        col.addView(autoCard)
+
+        val linkCard = ui.card(18)
+        linkCard.addView(sectionHead(R.drawable.ic_phone, "Connection", "When something is wrong, say so plainly."))
+        linkCard.addView(toggleRow("Show the connection status", "Offline or retrying appears on the panel and replaces the numbers on the tab.", store.statusBanner) { store.statusBanner = it })
+        linkCard.addView(toggleRow("Tell me about new versions", "Shows a card here when SavahBot has a newer SavahLive.", store.updateCheck) { store.updateCheck = it })
+        col.addView(linkCard)
+
+        val looks = ui.card(18)
+        looks.addView(sectionHead(R.drawable.ic_palette, "Saved looks", "Keep a layout and theme, for example one for PUBG in landscape. The notification can switch to the next one."))
+        val saved = Presets.list(store)
+        for ((i, p) in saved.withIndex()) {
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(0, ui.dp(10), 0, 0)
+            val label = ui.text(if (i == store.presetIndex) p.name + "  (in use)" else p.name, 15f, Ui.INK, i == store.presetIndex)
+            row.addView(label, LinearLayout.LayoutParams(0, wrap, 1f))
+            row.addView(pill("Use") {
+                Presets.apply(store, i)
+                message = "Using \"" + p.name + "\"."
+                render()
+            })
+            row.addView(pill("Delete", Ui.MUTED) {
+                Presets.delete(store, i)
+                render()
+            }, LinearLayout.LayoutParams(wrap, wrap).also { it.leftMargin = ui.dp(6) })
+            looks.addView(row)
+        }
+        looks.addView(ui.space(8))
+        looks.addView(ui.field("Name this look", presetName) { presetName = it })
+        looks.addView(ui.button("Save the current look", R.drawable.ic_check, Ui.SECONDARY) {
+            message = if (Presets.save(store, presetName)) "Saved." else "You can keep up to ${Presets.MAX} looks. Delete one first."
+            presetName = ""
+            render()
+        })
+        col.addView(looks)
+    }
+
+    /** SavahBot keeps the app and itself on the same version number, so a higher number there means a newer app exists. */
+    private fun updateCard(col: LinearLayout) {
+        if (!store.updateCheck) return
+        val info = try {
+            org.json.JSONObject(store.updateJson.ifEmpty { "{}" })
+        } catch (e: Exception) {
+            return
+        }
+        val version = info.optString("version", "")
+        if (version.isEmpty() || !Versions.isNewer(version, BuildConfig.VERSION_NAME)) return
+        val url = info.optString("url", "")
+        val card = ui.card(18)
+        card.addView(sectionHead(R.drawable.ic_check, "SavahLive $version is available", "You have ${BuildConfig.VERSION_NAME}."))
+        if (url.startsWith("https://") || url.startsWith("http://")) {
+            card.addView(ui.button("Download", null, Ui.PRIMARY) {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                } catch (e: Exception) {
+                    message = "Could not open the link."
+                    render()
+                }
+            })
+        } else {
+            card.addView(ui.text("Ask whoever runs SavahBot for the new file.", 13f, Ui.MUTED))
+        }
+        col.addView(card)
+    }
+
+    private fun summaryCard(col: LinearLayout) {
+        if (!store.summaryOn || store.summaryJson.isEmpty()) return
+        val o = try {
+            org.json.JSONObject(store.summaryJson)
+        } catch (e: Exception) {
+            return
+        }
+        val secs = o.optLong("seconds", 0)
+        val duration = if (secs >= 3600) "${secs / 3600} h ${(secs % 3600) / 60} min" else "${maxOf(1L, secs / 60)} min"
+        val card = ui.card(18)
+        card.addView(sectionHead(R.drawable.ic_live, "Last stream", DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(o.optLong("ended", 0))) + "  ·  " + duration))
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.setPadding(0, ui.dp(10), 0, 0)
+        fun stat(label: String, value: String) {
+            val box = LinearLayout(this)
+            box.orientation = LinearLayout.VERTICAL
+            box.addView(ui.text(value, 22f, Ui.INK, true))
+            box.addView(ui.text(label, 12f, Ui.MUTED))
+            row.addView(box, LinearLayout.LayoutParams(0, wrap, 1f))
+        }
+        stat("Peak viewers", Fmt.count(o.optLong("peak", 0)))
+        stat("Likes", Fmt.count(o.optLong("likes", 0)))
+        stat("Messages", Fmt.count(o.optLong("messages", 0)))
+        card.addView(row)
+        val top = o.optJSONArray("top")
+        if (top != null && top.length() > 0) {
+            val names = ArrayList<String>()
+            for (i in 0 until top.length()) {
+                val t = top.optJSONArray(i) ?: continue
+                names.add(t.optString(0) + " (" + t.optInt(1) + ")")
+            }
+            card.addView(ui.space(8))
+            card.addView(ui.text("Top chatters: " + names.joinToString(", "), 13f, Ui.MUTED))
+        }
+        card.addView(ui.button("Clear", null, Ui.QUIET) {
+            store.summaryJson = ""
+            render()
+        })
+        col.addView(card)
     }
 
     // ---- actions ----------------------------------------------------------------------------------------------------------------------------

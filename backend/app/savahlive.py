@@ -44,6 +44,9 @@ CHAT_MAX_AGE = 180                               # history found when the bot co
 SEND_MAX = 200                                   # longest message a phone may send
 SEND_GAP = 2.0                                   # seconds between two messages from one phone
 SEND_PER_MINUTE = 12                             # and no more than this many in a minute
+MOD_GAP = 1.0                                    # seconds between two moderation taps from one phone
+MOD_PER_MINUTE = 20
+MOD_TIMEOUT = 300                                # a phone times someone out for five minutes; bans stay on the dashboard
 
 register_schema([
     """CREATE TABLE IF NOT EXISTS live_devices (
@@ -52,7 +55,7 @@ register_schema([
         revoked_ts {REAL}, revoked_reason TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '', app_version TEXT NOT NULL DEFAULT '')""",
     "CREATE INDEX IF NOT EXISTS idx_live_devices_prev ON live_devices (prev_hash)",
     "CREATE TABLE IF NOT EXISTS live_pair_codes (code_hash TEXT PRIMARY KEY, created {REAL} NOT NULL, expires {REAL} NOT NULL, used_ts {REAL}, expiry_days INTEGER NOT NULL DEFAULT 0)",
-], columns=[("live_devices", "can_send", "INTEGER NOT NULL DEFAULT 0")])
+], columns=[("live_devices", "can_send", "INTEGER NOT NULL DEFAULT 0"), ("live_devices", "can_mod", "INTEGER NOT NULL DEFAULT 0")])
 
 # overlay settings the phone receives: name in the feed -> (setting, kind, low, high)
 OVERLAY: dict[str, tuple[str, str, int, int]] = {
@@ -107,6 +110,7 @@ class SavahLive:
         self.throttle = SharedThrottle(c.shared, 8, 900)          # per address
         self.global_throttle = SharedThrottle(c.shared, 30, 900)  # all addresses together: guessing codes from many places still hits a wall
         self._next_clean = 0.0
+        self._modded: dict[str, collections.deque[float]] = {}   # same idea for moderation taps
         self._sent: dict[str, collections.deque[float]] = {}      # device id -> when its recent messages were sent (for the rate limit)
 
     # ------------------------------------------------------------------ settings
@@ -128,8 +132,17 @@ class SavahLive:
         """Sending chat from a phone needs both: the master switch in Manage > SavahLive, and this phone's own permission (off until you give it)."""
         return bool(self.cfg.get("savahlive_send_enabled")) and bool(row and row.get("can_send"))
 
+    def may_moderate(self, row: dict[str, Any] | None) -> bool:
+        """Hiding messages and timing people out from a phone needs the master switch and this phone's own permission (both off until you turn them on)."""
+        return bool(self.cfg.get("savahlive_mod_enabled")) and bool(row and row.get("can_mod"))
+
     def _feed_settings(self, row: dict[str, Any] | None) -> dict[str, Any]:
-        return {**self.overlay_settings(), "can_send": self.may_send(row)}
+        return {**self.overlay_settings(), "can_send": self.may_send(row), "can_mod": self.may_moderate(row)}
+
+    def update_info(self) -> dict[str, Any]:
+        """What the app needs to say "a newer version exists": the server's own version (kept equal to the app's by the release script) and the download link."""
+        from . import __version__
+        return {"version": __version__, "url": str(self.cfg.get("savahlive_download_url") or "")}
 
     # ------------------------------------------------------------------ pairing
     async def new_code(self, expiry_days: int = 0) -> dict[str, Any]:
@@ -238,11 +251,12 @@ class SavahLive:
     # ------------------------------------------------------------------ managing devices
     async def devices(self) -> list[dict[str, Any]]:
         now = time.time()
-        rows = await self.db.fetchall("SELECT id, name, created, last_seen, expires, ip, app_version, can_send FROM live_devices WHERE revoked_ts IS NULL ORDER BY created DESC")
+        rows = await self.db.fetchall("SELECT id, name, created, last_seen, expires, ip, app_version, can_send, can_mod FROM live_devices WHERE revoked_ts IS NULL ORDER BY created DESC")
         for r in rows:
             r["online"] = r["id"] in self.feeds
             r["status"] = "expired" if r["expires"] is not None and r["expires"] < now else "active"
             r["can_send"] = bool(r["can_send"])
+            r["can_mod"] = bool(r["can_mod"])
         return rows
 
     async def revoke(self, did: str, reason: str = "removed by you") -> bool:
@@ -256,7 +270,7 @@ class SavahLive:
             await self.revoke(r["id"], reason)
         return len(rows)
 
-    async def edit(self, did: str, name: str | None, expiry_days: int | None, can_send: bool | None = None) -> bool:
+    async def edit(self, did: str, name: str | None, expiry_days: int | None, can_send: bool | None = None, can_mod: bool | None = None) -> bool:
         row = await self.db.fetchone("SELECT id FROM live_devices WHERE id = ? AND revoked_ts IS NULL", (did,))
         if not row:
             return False
@@ -271,6 +285,8 @@ class SavahLive:
             await self.db.execute("UPDATE live_devices SET expires = ? WHERE id = ?", (time.time() + expiry_days * 86400 if expiry_days else None, did))
         if can_send is not None:
             await self.db.execute("UPDATE live_devices SET can_send = ? WHERE id = ?", (1 if can_send else 0, did))
+        if can_mod is not None:
+            await self.db.execute("UPDATE live_devices SET can_mod = ? WHERE id = ?", (1 if can_mod else 0, did))
         return True
 
     def kick(self, did: str, reason: str) -> None:
@@ -310,6 +326,28 @@ class SavahLive:
                 q.put_nowait({"type": "chat", "data": {"id": None, "ts": time.time(), "author_id": "self", "author_name": "You", "text": clean, "level": "owner", "verdict": "allow"}})
             except asyncio.QueueFull:
                 pass
+
+    # ------------------------------------------------------------------ moderating from a phone
+    async def moderate(self, dev: dict[str, Any], chat_id: int, action: str, ip: str = "") -> None:
+        """Hide one message ("delete") or time its author out for five minutes. Same checks as choosing it in the dashboard chat (the owner and the bot cannot be moderated)."""
+        if not self.cfg.get("savahlive_mod_enabled"):
+            raise LiveError("Moderating from phones is switched off in SavahBot (Manage > SavahLive).", 403, "mod_off")
+        fresh = await self.db.fetchone("SELECT can_mod FROM live_devices WHERE id = ?", (dev["id"],))
+        if not fresh or not fresh["can_mod"]:
+            raise LiveError("This phone is not allowed to moderate. Allow it in SavahBot (Manage > SavahLive).", 403, "mod_denied")
+        if action not in ("delete", "timeout"):
+            raise LiveError("A phone can hide a message or time someone out.", 422, "bad_action")
+        now = time.monotonic()
+        recent = self._modded.setdefault(dev["id"], collections.deque())
+        while recent and now - recent[0] > 60:
+            recent.popleft()
+        if (recent and now - recent[-1] < MOD_GAP) or len(recent) >= MOD_PER_MINUTE:
+            raise LiveError("Slow down a little.", 429, "slow")
+        result = await self.c.hub.manual(int(chat_id), action, MOD_TIMEOUT)
+        if not result.get("ok"):
+            raise LiveError(str(result.get("error") or "SavahBot could not do that."), int(result.get("code") or 502), "mod_failed")
+        recent.append(now)
+        await self.c.access.audit("savahlive_moderated", None, ip, f"{dev['name']}: {action}")
 
     # ------------------------------------------------------------------ housekeeping (leader, from the scheduler)
     async def tick(self, now: float) -> None:
@@ -381,7 +419,7 @@ class SavahLive:
             stats = self.stats(state)
             yield "retry: 5000\n\n"
             yield sse("hello", {"v": PROTOCOL, "server_time": time.time(), "device": {"id": did, "name": dev["name"], "expires": dev["expires"]},
-                                "rotate": self.wants_rotation(dev), "state": state, "stats": stats, "settings": settings,
+                                "rotate": self.wants_rotation(dev), "update": self.update_info(), "state": state, "stats": stats, "settings": settings,
                                 "chat": self.recent(since, settings)})
             last = {"state": state, "stats": {k: v for k, v in stats.items() if k != "updated"}, "settings": settings}
             sent_at = checked = touched = time.monotonic()

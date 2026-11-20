@@ -185,6 +185,7 @@ Knowledge packs, detectors, learning, live lists.
 |---|---|---|
 | GET | `/api/live/events` |  |
 | GET | `/api/live/feed` | public |
+| POST | `/api/live/mod` | public |
 | POST | `/api/live/pair` | public |
 | GET | `/api/live/pair/open` | public |
 | POST | `/api/live/rotate` | public |

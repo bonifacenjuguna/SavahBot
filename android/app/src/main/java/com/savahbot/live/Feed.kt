@@ -27,6 +27,7 @@ class Feed(private val store: Store, private val ui: Listener) {
         fun onChat(lines: List<Line>, skipped: Int)
         fun onPurge(uids: List<String>, ids: List<Long>)
         fun onUnpaired(code: String)
+        fun onUpdate(info: UpdateInfo)
     }
 
     private enum class Outcome { DROPPED, FAILED, WAIT, UNPAIRED, STOPPED }
@@ -221,8 +222,10 @@ class Feed(private val store: Store, private val ui: Listener) {
                 val stats = parseStats(j.optJSONObject("stats"))
                 val prefs = parsePrefs(j.optJSONObject("settings"))
                 val lines = parseLines(j.optJSONArray("chat"))
+                val update = j.optJSONObject("update")?.let { UpdateInfo(it.optString("version", ""), it.optString("url", "")) }
                 post {
                     ui.onLink(Link.ONLINE, "")
+                    if (update != null && update.version.isNotEmpty()) ui.onUpdate(update)
                     ui.onState(state)
                     ui.onStats(stats)
                     ui.onSettings(prefs)
@@ -305,7 +308,8 @@ class Feed(private val store: Store, private val ui: Listener) {
         (o?.optInt("peek_seconds", 5) ?: 5).coerceIn(2, 15),
         (o?.optInt("font_size", 14) ?: 14).coerceIn(11, 22),
         (o?.optInt("hide_seconds", 3) ?: 3).coerceIn(0, 30),
-        o?.optBoolean("can_send", false) ?: false
+        o?.optBoolean("can_send", false) ?: false,
+        o?.optBoolean("can_mod", false) ?: false
     )
 
     private fun parseLines(arr: JSONArray?): List<Line> {

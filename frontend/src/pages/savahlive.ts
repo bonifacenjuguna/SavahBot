@@ -7,10 +7,10 @@ import { areaNav } from "./kit.js";
 import type { Page } from "./types.js";
 import { seg } from "./widgets.js";
 
-interface Phone { id: string; name: string; created: number; last_seen: number; expires: number | null; app_version: string; online: boolean; status: "active" | "expired"; can_send: boolean }
+interface Phone { id: string; name: string; created: number; last_seen: number; expires: number | null; app_version: string; online: boolean; status: "active" | "expired"; can_send: boolean; can_mod: boolean }
 interface Prefs {
   enabled: boolean; max_devices: number; max_feeds: number; chat_lines: number; peek_seconds: number; font_size: number; hide_seconds: number;
-  hide_bots: boolean; hide_flagged: boolean; only_special: boolean; send_enabled: boolean; rotate_days: number; idle_unpair_days: number; track_stats: boolean; download_url: string;
+  hide_bots: boolean; hide_flagged: boolean; only_special: boolean; send_enabled: boolean; mod_enabled: boolean; rotate_days: number; idle_unpair_days: number; track_stats: boolean; download_url: string;
 }
 interface Overview {
   enabled: boolean; protocol: number; server: string; server_is_public: boolean; devices: Phone[]; connected: number;
@@ -168,6 +168,13 @@ export const savahlive: Page = {
       });
       const sendRow = h("div", { class: "sl-opt sl-send" }, h("div", null, h("b", null, icon("send", 14), "Can send chat"),
         h("small", null, o.settings.send_enabled ? "Shows a message box on this phone's panel." : "Switched off for every phone below.")), sendSwitch);
+      const modSwitch = switchEl(p.can_mod, `Allow ${p.name} to moderate chat`, (v) => {
+        void patch(`/api/savahlive/devices/${p.id}`, { can_mod: v }).then(
+          () => { p.can_mod = v; toast(v ? `${p.name} can now hide messages and time people out` : `${p.name} can no longer moderate`, "ok"); },
+          (e) => { fail(e); void load(false); });
+      });
+      const modRow = h("div", { class: "sl-opt sl-send" }, h("div", null, h("b", null, icon("shield", 14), "Can moderate chat"),
+        h("small", null, o.settings.mod_enabled ? "Hold a message on this phone to hide it or time its author out for 5 minutes. Bans stay here." : "Switched off for every phone below.")), modSwitch);
       return h("article", { class: "sl-phone" },
         h("div", { class: "sl-phone-top" },
           h("div", { class: "sl-avatar", "aria-hidden": "true" }, icon("smartphone", 22)),
@@ -177,6 +184,7 @@ export const savahlive: Page = {
           meta("Last seen", p.online ? "now" : ago(p.last_seen)),
           meta(expired ? "Ended" : "Stays paired", p.expires ? dateTime(p.expires) : "Until you remove it")),
         sendRow,
+        modRow,
         h("div", { class: "sl-row-actions" }, edit, remove));
     }
 
@@ -216,6 +224,7 @@ export const savahlive: Page = {
             optRow("Hide bot messages", "Leaves out other bots and SavahBot's own replies.", switchEl(d.hide_bots, "Hide bot messages", (v) => { d.hide_bots = v; markDirty(); })),
             optRow("Hide flagged messages", "Leaves out messages moderation flagged or removed.", switchEl(d.hide_flagged, "Hide flagged messages", (v) => { d.hide_flagged = v; markDirty(); })),
             optRow("Members and moderators only", "Useful during a raid: only members, regulars, moderators and you.", switchEl(d.only_special, "Members and moderators only", (v) => { d.only_special = v; markDirty(); })),
+            optRow("Let phones moderate chat", "Each phone also needs its own switch below. Off by default. A phone can hide a message or time someone out for 5 minutes; bans stay on this dashboard.", switchEl(d.mod_enabled, "Let phones moderate chat", (v) => { d.mod_enabled = v; markDirty(); })),
             optRow("Let phones send chat", "Each phone also needs its own switch below. Messages go out as SavahBot's own YouTube account.", switchEl(d.send_enabled, "Let phones send chat", (v) => { d.send_enabled = v; markDirty(); })),
             optRow("Track viewers and likes", `Reads them from YouTube about every ${o.stats_seconds} seconds (about 1 quota unit each time). Off means chat only.`, switchEl(d.track_stats, "Track viewers and likes", (v) => { d.track_stats = v; markDirty(); }))),
           h("div", null,

@@ -17,3 +17,6 @@ Panel + edge tab (Panel/Tab/Overlay/PanelView/TabWindow), themes and SVG icons, 
 
 ## 1.6.1 (SavahLive stability rebuild)
 Single-window Overlay with PanelView/TabView, guarded callbacks, edge and corner resizing, in-app settings, separate pop-out controls, send-to-chat (backend + phone + dashboard), web page fixes. Verified here: tsc, SavahLive and config backend tests, Geometry logic executed, Kotlin syntax check (no new unresolved names). NOT verified: any Android compile or run.
+
+## 1.6.2 (SavahLive extras)
+Pin, milestones, phone moderation (backend route + two switches), saved looks, auto-open/auto-stop, stream summary, connection banner, update check, notification card with look button. Verified here: backend tests (SavahLive incl. HTTP), tsc, the plain Kotlin logic (versions, milestones, tally) by running it, Kotlin syntax check. NOT verified: any Android compile or run.

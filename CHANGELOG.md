@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.6.2
+
+### Added: tools and automation for the SavahLive overlay (every one has a switch in the app)
+- **Pin a message** (tap a chat line; tap the pin to let it go).
+- **Milestones:** the tab and panel celebrate when viewers or likes pass a round number (Off, 50, 100, 250, 500 or 1000).
+- **Moderate from the phone:** hold a line to hide it or time its author out for 5 minutes. Off by default and needs two switches in Manage > SavahLive (**Let phones moderate chat**, and **Can moderate chat** on the phone). Bans stay on the dashboard. New route `POST /api/live/mod`, new setting `SAVAHLIVE_MOD_ENABLED`. Hiding a message from the chat now also removes it from every phone at once.
+- **Saved looks:** keep layouts and themes (for example one for PUBG in landscape) and switch to the next one from the notification.
+- **Automatic:** start the overlay when the app opens, stop it some minutes after the stream ends, and keep a **stream summary** (peak viewers, likes, messages, top chatters) on the home screen.
+- **Connection status:** a clear banner on the panel and plain words on the tab ("Offline", "Retrying") instead of dashes.
+- **Update check:** the app shows a Download card when SavahBot's version is newer than the app's.
+
+### Polish after the first phone test
+- Collapsed tab is shorter (the red dot is gone from the tab).
+- A long new chat message only grows the pop-out card; the tab no longer shifts.
+- Slide away now keeps the icons and numbers readable (at most a quarter of the tab slides out of sight).
+- The pop-out card springs out of the tab and tucks back with an animation.
+- The notification is a redesigned card: a status light (green connected, amber connecting, grey otherwise), the full status line, and five labelled icon buttons (hide/show, lock, reset position, open app, stop). A compact version shows when collapsed.
+
 ## 1.6.1
 
 ### Fixed: the SavahLive overlay crashes (see docs/SAVAHLIVE.md)
@@ -17,13 +35,6 @@
 
 ### Fixed: web page
 - One **Pair a phone** button instead of two; the three stat boxes no longer wrap mid-word; the live preview mirrors the new panel.
-
-### Polish after first phone test
-- Collapsed tab is shorter (the red dot is gone from the tab).
-- A long new chat message only grows the pop-out card; the tab no longer shifts.
-- Slide away now keeps the icons and numbers readable (at most a quarter of the tab slides out of sight).
-- The pop-out card springs out of the tab and tucks back with an animation.
-- The notification is a redesigned card: a status light (green connected, amber connecting, grey otherwise), the full status line, and five labelled icon buttons (hide/show, lock, reset position, open app, stop). A compact version shows when collapsed.
 
 ### Notes
 - The Android code could not be compiled where this was written. Build it and send any compiler errors or `adb logcat -b crash` output.

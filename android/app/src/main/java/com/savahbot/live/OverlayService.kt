@@ -33,6 +33,7 @@ class OverlayService : Service(), Feed.Listener {
         const val ACTION_LOCK = "com.savahbot.live.LOCK"
         const val ACTION_TOGGLE = "com.savahbot.live.TOGGLE"
         const val ACTION_RESET = "com.savahbot.live.RESET"
+        const val ACTION_PRESET = "com.savahbot.live.PRESET"
         private const val CHANNEL = "savahlive_overlay"
         private const val NOTE_ID = 1
 
@@ -57,6 +58,10 @@ class OverlayService : Service(), Feed.Listener {
     private var receiver: BroadcastReceiver? = null
     private var netCallback: ConnectivityManager.NetworkCallback? = null
     private var finished = false
+    private val tally = StreamTally()
+    private var lastViewers: Long? = null
+    private var lastLikes: Long? = null
+    private val autoStop = Runnable { shutdown() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -82,6 +87,12 @@ class OverlayService : Service(), Feed.Listener {
                 store.panelFy = 300
                 store.tabEdge = Edge.RIGHT.ordinal
                 store.tabAlong = 400
+                return START_NOT_STICKY
+            }
+            ACTION_PRESET -> {
+                // the next saved look and layout; the open overlay follows the change live, and the notification names it
+                val name = Presets.next(store)
+                if (name != null) note(noteText)
                 return START_NOT_STICKY
             }
             ACTION_TOGGLE -> {
@@ -120,6 +131,7 @@ class OverlayService : Service(), Feed.Listener {
         }
         overlay = o
         running = true
+        tally.startedAt = System.currentTimeMillis()
         status = "Starting\u2026"
         val f = Feed(store, this)
         feed = f
@@ -159,6 +171,7 @@ class OverlayService : Service(), Feed.Listener {
     private fun shutdown() {
         if (finished) return
         finished = true
+        saveSummary()
         main.removeCallbacksAndMessages(null)
         feed?.stop()
         feed = null
@@ -180,6 +193,25 @@ class OverlayService : Service(), Feed.Listener {
         status = ""
         stopForeground(Service.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** One short record of the stream that just ended, for the home screen. Never throws: a summary is not worth a crash. */
+    private fun saveSummary() {
+        try {
+            if (!store.summaryOn || !tally.hasData) return
+            val top = org.json.JSONArray()
+            for ((name, n) in tally.top()) top.put(org.json.JSONArray().put(name).put(n))
+            store.summaryJson = org.json.JSONObject()
+                .put("ended", System.currentTimeMillis())
+                .put("seconds", (System.currentTimeMillis() - tally.startedAt) / 1000)
+                .put("peak", tally.peakViewers)
+                .put("likes", tally.lastLikes)
+                .put("messages", tally.messages)
+                .put("top", top)
+                .toString()
+        } catch (e: Exception) {
+            // keep going: stopping must always work
+        }
     }
 
     override fun onDestroy() {
@@ -253,6 +285,13 @@ class OverlayService : Service(), Feed.Listener {
         card(R.id.nb_lock, R.id.nbi_lock, R.id.nbt_lock, lockIcon, lockWord, "$lockWord touch", lockI)
         card(R.id.nb_reset, R.id.nbi_reset, R.id.nbt_reset, R.drawable.ic_move, "Reset", "Reset position", resetI)
         card(R.id.nb_open, R.id.nbi_open, R.id.nbt_open, R.drawable.ic_phone, "Open", "Open SavahLive", open)
+        val presets = Presets.list(store)
+        if (presets.isNotEmpty()) {
+            val current = presets.getOrNull(store.presetIndex)
+            val presetI = PendingIntent.getService(this, 5, Intent(this, OverlayService::class.java).setAction(ACTION_PRESET), flags)
+            big.setViewVisibility(R.id.nb_preset, android.view.View.VISIBLE)
+            card(R.id.nb_preset, R.id.nbi_preset, R.id.nbt_preset, R.drawable.ic_palette, (current?.name ?: "Look").take(7), "Next saved look: ${current?.name ?: "none yet"}", presetI)
+        }
         card(R.id.nb_stop, R.id.nbi_stop, R.id.nbt_stop, R.drawable.ic_power, "Stop", "Stop", stopI, true)
 
         val b = Notification.Builder(this, CHANNEL)
@@ -295,11 +334,30 @@ class OverlayService : Service(), Feed.Listener {
     }
 
     override fun onState(state: State) {
-        if (!finished) overlay?.setState(state)
+        if (finished) return
+        overlay?.setState(state)
+        if (state.live) {
+            tally.sawLive = true
+            main.removeCallbacks(autoStop)
+        } else if (tally.sawLive && store.autoStopMin > 0) {
+            main.removeCallbacks(autoStop)
+            main.postDelayed(autoStop, store.autoStopMin * 60_000L)       // stops the overlay a while after the stream ends, unless it goes live again
+        }
     }
 
     override fun onStats(stats: Stats) {
-        if (!finished) overlay?.setStats(stats)
+        if (finished) return
+        overlay?.setStats(stats)
+        if (!stats.enabled) return
+        tally.viewers(stats.viewers)
+        tally.likes(if (stats.likesHidden) null else stats.likes)
+        val step = store.milestoneStep
+        val l = if (stats.likesHidden) null else Milestones.crossed(lastLikes, stats.likes, step)
+        val v = Milestones.crossed(lastViewers, stats.viewers, step)
+        if (stats.viewers != null) lastViewers = stats.viewers
+        if (stats.likes != null && !stats.likesHidden) lastLikes = stats.likes
+        if (l != null) overlay?.celebrate("${Fmt.count(l)} likes")
+        else if (v != null) overlay?.celebrate("${Fmt.count(v)} watching")
     }
 
     override fun onSettings(prefs: Prefs) {
@@ -307,7 +365,15 @@ class OverlayService : Service(), Feed.Listener {
     }
 
     override fun onChat(lines: List<Line>, skipped: Int) {
-        if (!finished) overlay?.addChat(lines, skipped)
+        if (finished) return
+        for (l in lines) tally.message(l)
+        overlay?.addChat(lines, skipped)
+    }
+
+    /** SavahBot says which version is current (it is kept equal to this app's version). The home screen compares it with the installed one. */
+    override fun onUpdate(info: UpdateInfo) {
+        if (finished || !store.updateCheck) return
+        store.updateJson = org.json.JSONObject().put("version", info.version).put("url", info.url).toString()
     }
 
     override fun onPurge(uids: List<String>, ids: List<Long>) {

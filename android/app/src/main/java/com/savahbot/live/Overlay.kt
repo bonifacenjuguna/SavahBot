@@ -75,6 +75,8 @@ class Overlay(
     private var notice = ""
     private var locked = false
     private var sending = false
+    private var pinned: Line? = null          // the line pinned at the top of the panel (kept while the panel is tucked)
+    private var modBusy = false
 
     // ---- the one window ------------------------------------------------------------------------------------------------------------------
     private val root = FrameLayout(ctx)
@@ -139,6 +141,7 @@ class Overlay(
         prefsOrLookChanged()
         redrawHeader()
         panel.setLines(lines)
+        panel.setPin(pinned)
         panel.setExpanded(store.expanded)
         applyMode()
         return try {
@@ -355,6 +358,53 @@ class Overlay(
                 guard { panel.sendResult(result) }
             }
         }, "savahlive-send").start()
+    }
+
+    override fun pin(line: Line?) {
+        main.post {
+            guard {
+                pinned = if (line == null || pinned?.id == line.id) null else line     // tapping the pinned line again lets it go
+                panel.setPin(pinned)
+            }
+        }
+    }
+
+    override fun moderate(line: Line, action: String) {
+        if (modBusy) return
+        modBusy = true
+        val server = store.server
+        Thread({
+            var error = "Not paired."
+            try {
+                val key = store.key()
+                if (key != null && server.isNotEmpty()) error = Net.moderate(server, key, line.id, action) ?: ""
+            } catch (e: Exception) {
+                error = "Could not do that."
+            }
+            val result = error
+            main.post {
+                modBusy = false
+                guard {
+                    if (result.isEmpty()) {
+                        panel.showNote(if (action == "delete") "Message hidden." else "${line.name} timed out for 5 minutes.", false)
+                        if (action == "delete") purge(emptyList(), listOf(line.id))
+                    } else {
+                        panel.showNote(result, true)
+                    }
+                }
+            }
+        }, "savahlive-mod").start()
+    }
+
+    /** A milestone from the service (viewers or likes passed a round number): the open form pulses and says so. */
+    fun celebrate(text: String) = guard {
+        if (!added) return@guard
+        if (mode == Mode.PANEL) {
+            panel.celebrate(text)
+        } else if (!tabDragging) {
+            peek(listOf(Line(0, "", "", text, "note")))
+            tab.pulse()
+        }
     }
 
     // ---- lock ----------------------------------------------------------------------------------------------------------------------------
@@ -589,6 +639,12 @@ class Overlay(
         panel.setLook(theme, store.panelOpacity, prefs.fontSize.toFloat(), store.textScale, prefs.chatLines)
         tab.setLook(theme, prefs.fontSize.toFloat(), store.popScale, store.popOpacity)
         panel.setComposer(prefs.canSend && store.sendEnabled)
+        panel.setInteractions(store.pinEnabled, store.modEnabled && prefs.canMod)
+        if (!store.pinEnabled && pinned != null) {
+            pinned = null
+            panel.setPin(null)
+        }
+        redrawHeader()
         if (!added) return
         if (mode == Mode.PANEL) {
             // sizes or positions may have been reset from the app's settings screen
@@ -653,6 +709,11 @@ class Overlay(
     }
 
     fun purge(uids: List<String>, ids: List<Long>) = guard {
+        val p = pinned
+        if (p != null && ((p.id > 0 && ids.contains(p.id)) || (p.uid.isNotEmpty() && uids.contains(p.uid)))) {
+            pinned = null
+            panel.setPin(null)
+        }
         val iter = lines.iterator()
         var changed = false
         while (iter.hasNext()) {
@@ -694,11 +755,24 @@ class Overlay(
                 text = detail
                 alert = true
             }
+            store.statusBanner && link != Link.ONLINE && !fresh -> {
+                text = "Offline. Cannot reach SavahBot, trying again."
+                alert = true
+            }
             link == Link.ONLINE && state.mode == "demo" -> text = "Demo mode"
             link == Link.ONLINE && !state.live -> text = "Waiting for your stream"
             link == Link.ONLINE && state.title.isNotEmpty() -> text = state.title
         }
         panel.setHeader(viewers, likes, dot, text, alert)
-        if (tab.setHeader(viewers, likes, dot) && added && mode == Mode.TAB && !tabDragging) placeTab()
+        val banner = if (!store.statusBanner || link == Link.ONLINE) "" else when {
+            !fresh -> "Offline"
+            link == Link.RECONNECTING -> "Retrying"
+            link == Link.CONNECTING -> "Connecting"
+            link == Link.WAITING -> "Waiting"
+            link == Link.UNPAIRED -> "Unpaired"
+            else -> ""
+        }
+        val bannerChanged = tab.setBanner(banner)
+        if ((tab.setHeader(viewers, likes, dot) || bannerChanged) && added && mode == Mode.TAB && !tabDragging) placeTab()
     }
 }

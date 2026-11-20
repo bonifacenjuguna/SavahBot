@@ -385,6 +385,7 @@ Removed in 1.2.0: `NTFY_URL`, `NTFY_TOPIC` (push now uses Firebase), `WEATHER_AP
 | `SAVAHLIVE_HIDE_FLAGGED` | `True` | Leave messages that moderation flagged out of the overlay chat. |
 | `SAVAHLIVE_ONLY_SPECIAL` | `False` | Show only members, regulars, moderators and you in the overlay chat. |
 | `SAVAHLIVE_SEND_ENABLED` | `True` | Let a paired phone post chat messages (as SavahBot's own account), once you allow that phone in Manage > SavahLive. Turn off to stop all of them at once. |
+| `SAVAHLIVE_MOD_ENABLED` | `False` | Let a paired phone hide chat messages and time people out for five minutes, once you allow that phone in Manage > SavahLive. Off by default; bans always stay on the dashboard. |
 | `SAVAHLIVE_ROTATE_DAYS` | `30` | A paired phone quietly gets a new key this often, in days. 0 turns it off (1 to 365). |
 | `SAVAHLIVE_IDLE_UNPAIR_DAYS` | `0` | Unpair a phone that has not connected for this many days. 0 keeps phones paired until you remove them. |
 | `SAVAHLIVE_DOWNLOAD_URL` | blank | Optional link to the SavahLive APK (for example the GitHub raw link of the release). When set, Manage > SavahLive shows a Download button. |

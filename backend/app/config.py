@@ -363,6 +363,7 @@ _f(G, "savahlive_hide_bots", True, "Leave bot messages (including SavahBot's own
 _f(G, "savahlive_hide_flagged", True, "Leave messages that moderation flagged out of the overlay chat.")
 _f(G, "savahlive_only_special", False, "Show only members, regulars, moderators and you in the overlay chat.")
 _f(G, "savahlive_send_enabled", True, "Let a paired phone post chat messages (as SavahBot's own account), once you allow that phone in Manage > SavahLive. Turn off to stop all of them at once.")
+_f(G, "savahlive_mod_enabled", False, "Let a paired phone hide chat messages and time people out for five minutes, once you allow that phone in Manage > SavahLive. Off by default; bans always stay on the dashboard.")
 _f(G, "savahlive_rotate_days", 30, "A paired phone quietly gets a new key this often, in days. 0 turns it off (1 to 365).")
 _f(G, "savahlive_idle_unpair_days", 0, "Unpair a phone that has not connected for this many days. 0 keeps phones paired until you remove them.")
 _f(G, "savahlive_download_url", "", "Optional link to the SavahLive APK (for example the GitHub raw link of the release). When set, Manage > SavahLive shows a Download button.")

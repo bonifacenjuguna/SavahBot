@@ -13,10 +13,12 @@ import android.text.InputFilter
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.animation.OvershootInterpolator
 import android.view.ViewOutlineProvider
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -98,6 +100,8 @@ class PanelView(private val ctx: Context, private val store: Store, private val 
         fun tuck()
         fun keyboard(on: Boolean)
         fun send(text: String)
+        fun pin(line: Line?)
+        fun moderate(line: Line, action: String)
     }
 
     companion object {
@@ -143,6 +147,21 @@ class PanelView(private val ctx: Context, private val store: Store, private val 
     val view = PanelFrame(ctx, dp(16), dp(8), dp(24), host)
 
     private val hideNote = Runnable { noteTv.visibility = View.GONE }
+
+    // pinned line, and the small bar that offers Hide / Time out for a line you held down
+    private val pinCard = LinearLayout(ctx)
+    private val pinTv = TextView(ctx)
+    private lateinit var pinIv: ImageView
+    private val modBar = LinearLayout(ctx)
+    private val modName = TextView(ctx)
+    private val modChips = ArrayList<TextView>()
+    private var pinOn = true
+    private var modOn = false
+    private var modLine: Line? = null
+    private var pinned: Line? = null
+    private var bannerAlert = false
+    private val endCelebrate = Runnable { statusTv.setTypeface(Typeface.DEFAULT); redrawStatus() }
+    private var statusText = ""
 
     init {
         // ---- header: stats on the left (drag here to move), two round buttons on the right ------------------------------------------------
@@ -237,11 +256,54 @@ class PanelView(private val ctx: Context, private val store: Store, private val 
         composer.addView(sendBtn, LinearLayout.LayoutParams(dp(40), dp(40)).also { it.leftMargin = dp(8) })
         composer.visibility = View.GONE
 
+        // ---- pinned line: tap it to let go ---------------------------------------------------------------------------------------------------
+        pinIv = iconView(ctx, R.drawable.ic_pin, theme.accent, 14)
+        tints.add(Pair(pinIv, 2))
+        pinTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        pinTv.maxLines = 3
+        pinTv.ellipsize = TextUtils.TruncateAt.END
+        pinCard.orientation = LinearLayout.HORIZONTAL
+        pinCard.gravity = Gravity.CENTER_VERTICAL
+        pinCard.setPadding(dp(12), dp(8), dp(12), dp(8))
+        pinCard.addView(pinIv, LinearLayout.LayoutParams(dp(14), dp(14)).also { it.rightMargin = dp(8) })
+        pinCard.addView(pinTv, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        pinCard.contentDescription = "Pinned message. Tap to unpin."
+        pinCard.isClickable = true
+        pinCard.setOnClickListener { host.pin(null) }
+        pinCard.visibility = View.GONE
+
+        // ---- moderation bar: appears after a long press on a line ---------------------------------------------------------------------------------
+        modName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        modName.maxLines = 1
+        modName.ellipsize = TextUtils.TruncateAt.END
+        modBar.orientation = LinearLayout.HORIZONTAL
+        modBar.gravity = Gravity.CENTER_VERTICAL
+        modBar.setPadding(dp(12), dp(6), dp(12), dp(6))
+        modBar.addView(modName, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        fun modChip(label: String, onClick: () -> Unit): TextView {
+            val t = TextView(ctx)
+            t.text = label
+            t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            t.setTypeface(Typeface.DEFAULT_BOLD)
+            t.setPadding(dp(10), dp(6), dp(10), dp(6))
+            t.isClickable = true
+            t.setOnClickListener { onClick() }
+            modChips.add(t)
+            modBar.addView(t, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.leftMargin = dp(6) })
+            return t
+        }
+        modChip("Hide") { modLine?.let { host.moderate(it, "delete") }; closeMod() }
+        modChip("Time out 5 min") { modLine?.let { host.moderate(it, "timeout") }; closeMod() }
+        modChip("Cancel") { closeMod() }
+        modBar.visibility = View.GONE
+
         column.orientation = LinearLayout.VERTICAL
         column.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50)))
         column.addView(divider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1))
         column.addView(statusTv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.topMargin = dp(6) })
+        column.addView(pinCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.leftMargin = dp(12); it.rightMargin = dp(12); it.topMargin = dp(2) })
         column.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        column.addView(modBar)
         column.addView(noteTv)
         column.addView(composer)
 
@@ -356,9 +418,108 @@ class PanelView(private val ctx: Context, private val store: Store, private val 
         likesTv.text = likes
         dotKind = dot
         liveIv.setColorFilter(dotColor())
-        statusTv.text = status
-        statusTv.setTextColor(if (alert) AMBER else theme.muted)
-        statusTv.visibility = if (status.isEmpty()) View.GONE else View.VISIBLE
+        statusText = status
+        bannerAlert = alert
+        redrawStatus()
+    }
+
+    /** The status line: calm grey normally; on a bad connection a clear amber banner you cannot miss. */
+    private fun redrawStatus() {
+        statusTv.text = statusText
+        statusTv.setTextColor(if (bannerAlert) AMBER else theme.muted)
+        statusTv.visibility = if (statusText.isEmpty()) View.GONE else View.VISIBLE
+        if (bannerAlert) {
+            val g = GradientDrawable()
+            g.setCornerRadius(dp(10).toFloat())
+            g.setColor(Themes.withAlpha(AMBER, 36))
+            statusTv.background = g
+            statusTv.setTypeface(Typeface.DEFAULT_BOLD)
+            statusTv.setPadding(dp(12), dp(5), dp(12), dp(5))
+        } else {
+            statusTv.background = null
+            statusTv.setTypeface(Typeface.DEFAULT)
+            statusTv.setPadding(dp(16), 0, dp(16), dp(6))
+        }
+    }
+
+    /** A milestone: the numbers pulse and the status line says what was reached for a few seconds. */
+    fun celebrate(text: String) {
+        main.removeCallbacks(endCelebrate)
+        statusTv.text = text
+        statusTv.setTextColor(theme.accent)
+        statusTv.setTypeface(Typeface.DEFAULT_BOLD)
+        statusTv.background = null
+        statusTv.setPadding(dp(16), 0, dp(16), dp(6))
+        statusTv.visibility = View.VISIBLE
+        stats.pivotX = 0f
+        stats.pivotY = stats.height / 2f
+        stats.animate().cancel()
+        stats.scaleX = 1f
+        stats.scaleY = 1f
+        stats.animate().scaleX(1.18f).scaleY(1.18f).setDuration(160).withEndAction {
+            stats.animate().scaleX(1f).scaleY(1f).setDuration(260).setInterpolator(OvershootInterpolator(2.5f)).start()
+        }.start()
+        main.postDelayed(endCelebrate, 3500)
+    }
+
+    // ---- pin and moderation -----------------------------------------------------------------------------------------------------------------
+    /** Which things a tap or a long press on a chat line may do (each is a switch in the app; moderating also needs SavahBot's permission). */
+    fun setInteractions(pin: Boolean, moderate: Boolean) {
+        if (pin == pinOn && moderate == modOn) return
+        pinOn = pin
+        modOn = moderate
+        if (!moderate) closeMod()
+        for (r in rows) bindRow(r)
+    }
+
+    fun setPin(line: Line?) {
+        pinned = line
+        if (line == null) {
+            pinCard.visibility = View.GONE
+            return
+        }
+        pinTv.text = ChatStyle.render(theme, line)
+        pinCard.visibility = View.VISIBLE
+    }
+
+    private fun realLine(tv: TextView): Line? {
+        val l = tv.tag as? Line ?: return null
+        return if (l.level == "note" || l.id <= 0L) null else l
+    }
+
+    private fun bindRow(tv: TextView) {
+        val line = realLine(tv)
+        if (line != null && pinOn) tv.setOnClickListener { host.pin(line) } else { tv.setOnClickListener(null); tv.isClickable = false }
+        if (line != null && modOn && line.level != "owner") {
+            tv.setOnLongClickListener {
+                tv.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                openMod(line)
+                true
+            }
+        } else {
+            tv.setOnLongClickListener(null)
+            tv.isLongClickable = false
+        }
+    }
+
+    private fun openMod(line: Line) {
+        modLine = line
+        modName.text = line.name
+        modBar.visibility = View.VISIBLE
+    }
+
+    private fun closeMod() {
+        modLine = null
+        modBar.visibility = View.GONE
+    }
+
+    /** A short message under the chat (an answer to a moderation tap, or a send error). */
+    fun showNote(text: String, warn: Boolean) {
+        noteTv.text = text
+        noteTv.setTextColor(if (warn) AMBER else theme.muted)
+        noteTv.visibility = View.VISIBLE
+        main.removeCallbacks(hideNote)
+        main.postDelayed(hideNote, 4000)
     }
 
     private fun dotColor(): Int = when (dotKind) {
@@ -397,8 +558,23 @@ class PanelView(private val ctx: Context, private val store: Store, private val 
         liveIv.setColorFilter(dotColor())
         for (c in chips) paintChip(c)
         divider.setBackgroundColor(Themes.withAlpha(theme.text, 16))
-        statusTv.setTextColor(theme.muted)
+        redrawStatus()
         noteTv.setTextColor(theme.muted)
+        val pg = GradientDrawable()
+        pg.setCornerRadius(dp(12).toFloat())
+        pg.setColor(Themes.withAlpha(theme.accent, 30))
+        pg.setStroke(dp(1), Themes.withAlpha(theme.accent, 90))
+        pinCard.background = pg
+        pinTv.setTextColor(theme.text)
+        pinned?.let { pinTv.text = ChatStyle.render(theme, it) }
+        modName.setTextColor(theme.muted)
+        for (m in modChips) {
+            val mg = GradientDrawable()
+            mg.setCornerRadius(dp(12).toFloat())
+            mg.setColor(Themes.withAlpha(theme.accent, 34))
+            m.background = mg
+            m.setTextColor(theme.text)
+        }
         val field = GradientDrawable()
         field.setCornerRadius(dp(20).toFloat())
         field.setColor(Themes.withAlpha(theme.text, 12))
@@ -435,6 +611,7 @@ class PanelView(private val ctx: Context, private val store: Store, private val 
         tv.setLineSpacing(0f, 1.08f)
         styleRow(tv)
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSp * textScale / 100f)
+        bindRow(tv)
         return tv
     }
 
@@ -491,11 +668,7 @@ class PanelView(private val ctx: Context, private val store: Store, private val 
             input.setText("")
             return
         }
-        noteTv.text = error
-        noteTv.setTextColor(AMBER)
-        noteTv.visibility = View.VISIBLE
-        main.removeCallbacks(hideNote)
-        main.postDelayed(hideNote, 4000)
+        showNote(error, true)
     }
 
     fun focusInput() {
