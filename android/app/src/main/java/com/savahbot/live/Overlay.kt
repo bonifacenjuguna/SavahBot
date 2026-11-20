@@ -372,6 +372,11 @@ class Overlay(
     }
 
     // ---- tucking into a tab and opening again --------------------------------------------------------------------------------------------
+    /** From the notification: panel to tab, or tab to panel. Runs on the next main-loop turn, like every other mode change. */
+    fun togglePanel() {
+        main.post { guard { if (mode == Mode.PANEL) tuckNow() else openPanelNow() } }
+    }
+
     override fun tuck() {
         // not inside the button's own click handling: the next turn of the main loop
         main.post { guard { tuckNow() } }
@@ -431,28 +436,16 @@ class Overlay(
         val s = tab.measure(sw, sh)
         val vertical = edge == Edge.LEFT || edge == Edge.RIGHT
         val extent = if (vertical) s.boxW else s.boxH
-        val hidden = maxOf(0, ((extent - dp(SLIVER)) * hiddenF).toInt())
+        // slides away by a quarter of its thickness at most (about its own padding), so the icons and numbers always stay fully readable
+        val hidden = maxOf(0, (extent * 0.25f * hiddenF).toInt())
         val alongBox = Geo.alongPx(edge, along, s.boxW, s.boxH, sw, sh)
-        when (edge) {
-            Edge.LEFT -> {
-                params.x = -hidden
-                params.y = Geo.clampI(alongBox - (s.winH - s.boxH) / 2, 0, sh - s.winH)
-            }
-            Edge.RIGHT -> {
-                params.x = sw - s.winW + hidden
-                params.y = Geo.clampI(alongBox - (s.winH - s.boxH) / 2, 0, sh - s.winH)
-            }
-            Edge.TOP -> {
-                params.x = Geo.clampI(alongBox - (s.winW - s.boxW) / 2, 0, sw - s.winW)
-                params.y = -hidden
-            }
-            Edge.BOTTOM -> {
-                params.x = Geo.clampI(alongBox - (s.winW - s.boxW) / 2, 0, sw - s.winW)
-                params.y = sh - s.winH + hidden
-            }
-        }
-        params.width = s.winW
-        params.height = s.winH
+        // the strip's own screen position: flush to its edge and along it. A pop-out card is placed around it and never moves it.
+        val f = Geo.flush(edge, alongBox, s.boxW, s.boxH, sw, sh, hidden)
+        val win = tab.place(sw, sh, f.first, f.second)
+        params.x = win[0]
+        params.y = win[1]
+        params.width = win[2]
+        params.height = win[3]
         tab.view.alpha = tabAlpha()
         push()
     }
@@ -571,21 +564,22 @@ class Overlay(
     /** New chat while the tab is showing: slide out if it was tucked, show the newest line or two, then go back after the pop-out time. */
     private fun peek(fresh: List<Line>) {
         if (!added || mode != Mode.TAB || tabDragging) return
+        val wasShowing = tab.cardShowing
         tab.pop(fresh)
         main.removeCallbacks(hideRun)
         slide?.cancel()
         slide = null
         hiddenF = 0f
         placeTab()
+        if (!wasShowing) tab.animateIn() else tab.bump()
         main.removeCallbacks(cardRun)
         main.postDelayed(cardRun, prefs.peekSeconds * 1000L)
     }
 
     private fun endPeek() {
         main.removeCallbacks(cardRun)
-        tab.clearCard()
-        placeTab()
-        scheduleHide()
+        // the card tucks back into the tab first; only then does the window shrink, so the animation is never cut
+        tab.animateOut { guard { tab.clearCard(); placeTab(); scheduleHide() } }
     }
 
     // ---- look and settings ---------------------------------------------------------------------------------------------------------------

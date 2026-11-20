@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The notification's one row: the status on the left, five icon buttons on the right. Tinted in code to suit light or dark notifications. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/nc_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+
+    <ImageView android:id="@+id/nc_toggle" android:layout_width="38dp" android:layout_height="40dp"
+        android:padding="8dp" android:scaleType="fitCenter"
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
+    <ImageView android:id="@+id/nc_lock" android:layout_width="38dp" android:layout_height="40dp"
+        android:padding="8dp" android:scaleType="fitCenter"
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
+    <ImageView android:id="@+id/nc_reset" android:layout_width="38dp" android:layout_height="40dp"
+        android:padding="8dp" android:scaleType="fitCenter"
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
+    <ImageView android:id="@+id/nc_open" android:layout_width="38dp" android:layout_height="40dp"
+        android:padding="8dp" android:scaleType="fitCenter"
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
+    <ImageView android:id="@+id/nc_stop" android:layout_width="38dp" android:layout_height="40dp"
+        android:padding="8dp" android:scaleType="fitCenter"
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
+</LinearLayout>

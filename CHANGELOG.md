@@ -18,6 +18,13 @@
 ### Fixed: web page
 - One **Pair a phone** button instead of two; the three stat boxes no longer wrap mid-word; the live preview mirrors the new panel.
 
+### Polish after first phone test
+- Collapsed tab is shorter (the red dot is gone from the tab).
+- A long new chat message only grows the pop-out card; the tab no longer shifts.
+- Slide away now keeps the icons and numbers readable (at most a quarter of the tab slides out of sight).
+- The pop-out card springs out of the tab and tucks back with an animation.
+- The notification now has five icon buttons: hide/show, lock, reset position, open app, stop.
+
 ### Notes
 - The Android code could not be compiled where this was written. Build it and send any compiler errors or `adb logcat -b crash` output.
 - `SAVAHLIVE_HIDE_SECONDS` is no longer used by the app (the phone's Slide away setting replaces it).

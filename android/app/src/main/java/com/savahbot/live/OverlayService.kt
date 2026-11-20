@@ -19,6 +19,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
+import android.widget.RemoteViews
 
 /**
  * Keeps the connection and the floating window alive while the overlay is open, and nothing else.
@@ -30,6 +31,8 @@ class OverlayService : Service(), Feed.Listener {
         const val ACTION_START = "com.savahbot.live.START"
         const val ACTION_STOP = "com.savahbot.live.STOP"
         const val ACTION_LOCK = "com.savahbot.live.LOCK"
+        const val ACTION_TOGGLE = "com.savahbot.live.TOGGLE"
+        const val ACTION_RESET = "com.savahbot.live.RESET"
         private const val CHANNEL = "savahlive_overlay"
         private const val NOTE_ID = 1
 
@@ -68,6 +71,21 @@ class OverlayService : Service(), Feed.Listener {
         when (intent?.action) {
             ACTION_STOP -> {
                 shutdown()
+                return START_NOT_STICKY
+            }
+            ACTION_RESET -> {
+                // same values as the app's "Reset size and position"; the open overlay follows the change live
+                store.panelWdp = 270
+                store.panelHdp = 300
+                store.expanded = false
+                store.panelFx = 500
+                store.panelFy = 300
+                store.tabEdge = Edge.RIGHT.ordinal
+                store.tabAlong = 400
+                return START_NOT_STICKY
+            }
+            ACTION_TOGGLE -> {
+                overlay?.togglePanel()
                 return START_NOT_STICKY
             }
             ACTION_LOCK -> {
@@ -180,17 +198,38 @@ class OverlayService : Service(), Feed.Listener {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), flags)
         val stopI = PendingIntent.getService(this, 1, Intent(this, OverlayService::class.java).setAction(ACTION_STOP), flags)
         val lockI = PendingIntent.getService(this, 2, Intent(this, OverlayService::class.java).setAction(ACTION_LOCK), flags)
-        val icon = Icon.createWithResource(this, R.drawable.ic_stat)
+        val toggleI = PendingIntent.getService(this, 3, Intent(this, OverlayService::class.java).setAction(ACTION_TOGGLE), flags)
+        val resetI = PendingIntent.getService(this, 4, Intent(this, OverlayService::class.java).setAction(ACTION_RESET), flags)
+        val shown = if (locked) "$text \u00B7 touch locked" else text
+
+        // one row of icon buttons (SVG drawables), tinted to suit a light or dark notification shade
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val ink = if (night) 0xFFE8EAED.toInt() else 0xFF3C4043.toInt()
+        val rv = RemoteViews(packageName, R.layout.notif_controls)
+        rv.setTextViewText(R.id.nc_text, shown)
+        fun button(id: Int, icon: Int, label: String, pi: PendingIntent, tint: Int = ink) {
+            rv.setImageViewResource(id, icon)
+            rv.setInt(id, "setColorFilter", tint)
+            rv.setContentDescription(id, label)
+            rv.setOnClickPendingIntent(id, pi)
+        }
+        button(R.id.nc_toggle, R.drawable.ic_dock, "Hide or show the panel", toggleI)
+        button(R.id.nc_lock, if (locked) R.drawable.ic_unlock else R.drawable.ic_lock, if (locked) "Unlock touch" else "Lock touch", lockI)
+        button(R.id.nc_reset, R.drawable.ic_move, "Reset position", resetI)
+        button(R.id.nc_open, R.drawable.ic_phone, "Open SavahLive", open)
+        button(R.id.nc_stop, R.drawable.ic_power, "Stop", stopI, 0xFFE5242B.toInt())
+
         val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle("SavahLive")
-            .setContentText(if (locked) "$text \u00B7 touch locked" else text)
+            .setContentText(shown)
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setColor(0xFFE5242B.toInt())
-            .addAction(Notification.Action.Builder(icon, "Stop", stopI).build())
-            .addAction(Notification.Action.Builder(icon, if (locked) "Unlock touch" else "Lock touch", lockI).build())
+            .setStyle(Notification.DecoratedCustomViewStyle())
+            .setCustomContentView(rv)
+            .setCustomBigContentView(rv)
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         return b.build()
     }

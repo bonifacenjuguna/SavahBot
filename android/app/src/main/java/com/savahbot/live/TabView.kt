@@ -9,6 +9,8 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -99,19 +101,17 @@ class TabView(private val ctx: Context, private val host: Host) {
                 box.gravity = Gravity.CENTER_HORIZONTAL
                 box.setPadding(dp(8), dp(12), dp(8), dp(12))
                 box.minimumWidth = dp(48)
-                put(dot, 0, 0)
-                put(user, 10, 0)
+                put(user, 0, 0)
                 put(viewers, 2, 0)
                 put(heart, 10, 0)
                 put(likes, 2, 0)
             } else {
                 box.orientation = LinearLayout.HORIZONTAL
                 box.gravity = Gravity.CENTER_VERTICAL
-                box.setPadding(dp(14), dp(8), dp(14), dp(8))
-                put(dot, 0, 0)
-                put(user, 0, 10)
+                box.setPadding(dp(12), dp(7), dp(12), dp(7))
+                put(user, 0, 0)
                 put(viewers, 0, 4)
-                put(heart, 0, 12)
+                put(heart, 0, 10)
                 put(likes, 0, 4)
             }
         }
@@ -201,36 +201,55 @@ class TabView(private val ctx: Context, private val host: Host) {
         arrange()
     }
 
-    private fun arrange() {
+    /** Layout is done in [place], from screen positions, so the strip and the card never depend on each other's size. */
+    private fun arrange() {}
+
+    /**
+     * Positions the strip at the screen spot ([bx], [by]) and the card (if showing) beside it on the inner side, then returns the window
+     * that holds both as [x, y, w, h]. The strip's screen position never depends on the card, so a long message only makes the card grow.
+     */
+    fun place(sw: Int, sh: Int, bx: Int, by: Int): IntArray {
         val s = active.box
-        s.measure(View.MeasureSpec.makeMeasureSpec(ctx.resources.displayMetrics.widthPixels, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(ctx.resources.displayMetrics.heightPixels, View.MeasureSpec.AT_MOST))
-        val gap = dp(6)
-        val boxLp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT)
-        val cardLp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT)
-        when (edge) {
-            Edge.RIGHT -> {
-                boxLp.gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-                cardLp.gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-                cardLp.rightMargin = s.measuredWidth + gap
+        s.measure(View.MeasureSpec.makeMeasureSpec(sw, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(sh, View.MeasureSpec.AT_MOST))
+        val bw = s.measuredWidth
+        val bh = s.measuredHeight
+        var wx = bx
+        var wy = by
+        var wr = bx + bw
+        var wb = by + bh
+        var cx = 0
+        var cy = 0
+        var cw = 0
+        var ch = 0
+        if (cardShowing) {
+            card.measure(View.MeasureSpec.makeMeasureSpec(sw, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(sh, View.MeasureSpec.AT_MOST))
+            cw = card.measuredWidth
+            ch = card.measuredHeight
+            val gap = dp(6)
+            when (edge) {
+                Edge.RIGHT -> { cx = bx - gap - cw; cy = Geo.clampI(by + bh / 2 - ch / 2, 0, sh - ch) }
+                Edge.LEFT -> { cx = bx + bw + gap; cy = Geo.clampI(by + bh / 2 - ch / 2, 0, sh - ch) }
+                Edge.TOP -> { cy = by + bh + gap; cx = Geo.clampI(bx + bw / 2 - cw / 2, 0, sw - cw) }
+                Edge.BOTTOM -> { cy = by - gap - ch; cx = Geo.clampI(bx + bw / 2 - cw / 2, 0, sw - cw) }
             }
-            Edge.LEFT -> {
-                boxLp.gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-                cardLp.gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-                cardLp.leftMargin = s.measuredWidth + gap
-            }
-            Edge.TOP -> {
-                boxLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                cardLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                cardLp.topMargin = s.measuredHeight + gap
-            }
-            Edge.BOTTOM -> {
-                boxLp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                cardLp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                cardLp.bottomMargin = s.measuredHeight + gap
-            }
+            wx = minOf(wx, cx)
+            wy = minOf(wy, cy)
+            wr = maxOf(wr, cx + cw)
+            wb = maxOf(wb, cy + ch)
         }
-        s.layoutParams = boxLp
-        card.layoutParams = cardLp
+        val sl = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        sl.gravity = Gravity.TOP or Gravity.LEFT
+        sl.leftMargin = bx - wx
+        sl.topMargin = by - wy
+        s.layoutParams = sl
+        if (cardShowing) {
+            val cl = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+            cl.gravity = Gravity.TOP or Gravity.LEFT
+            cl.leftMargin = cx - wx
+            cl.topMargin = cy - wy
+            card.layoutParams = cl
+        }
+        return intArrayOf(wx, wy, wr - wx, wb - wy)
     }
 
     /** The size the window needs now: the strip, plus the card if one is showing. */
@@ -278,7 +297,71 @@ class TabView(private val ctx: Context, private val host: Host) {
         arrange()
     }
 
+    private var cardToken = 0
+
+    /** Springs the card out of the tab: it grows from the strip's side, slides outward and fades in, with a small overshoot. Call after the window was sized for it. */
+    fun animateIn() {
+        if (!cardShowing) return
+        cardToken++
+        card.animate().cancel()
+        val w = card.measuredWidth.toFloat()
+        val h = card.measuredHeight.toFloat()
+        val d = dp(28).toFloat()
+        var tx = 0f
+        var ty = 0f
+        when (edge) {
+            Edge.RIGHT -> { card.pivotX = w; card.pivotY = h / 2f; tx = d }
+            Edge.LEFT -> { card.pivotX = 0f; card.pivotY = h / 2f; tx = -d }
+            Edge.TOP -> { card.pivotX = w / 2f; card.pivotY = 0f; ty = -d }
+            Edge.BOTTOM -> { card.pivotX = w / 2f; card.pivotY = h; ty = d }
+        }
+        card.alpha = 0f
+        card.scaleX = 0.5f
+        card.scaleY = 0.5f
+        card.translationX = tx
+        card.translationY = ty
+        card.animate().alpha(1f).scaleX(1f).scaleY(1f).translationX(0f).translationY(0f)
+            .setDuration(320).setInterpolator(OvershootInterpolator(1.1f)).start()
+    }
+
+    /** Tucks the card back into the tab, then runs [done] (which removes it from the window's size). Cancelled cleanly if anything else touches the card first. */
+    fun animateOut(done: () -> Unit) {
+        if (!cardShowing) { done(); return }
+        val token = ++cardToken
+        val d = dp(16).toFloat()
+        val tx = when (edge) { Edge.RIGHT -> d; Edge.LEFT -> -d; else -> 0f }
+        val ty = when (edge) { Edge.TOP -> -d; Edge.BOTTOM -> d; else -> 0f }
+        card.animate().cancel()
+        card.animate().alpha(0f).scaleX(0.7f).scaleY(0.7f).translationX(tx).translationY(ty)
+            .setDuration(180).setInterpolator(AccelerateInterpolator())
+            .withEndAction { if (token == cardToken) done() }.start()
+    }
+
+    /** A new line arrived while the card is already out: a small pulse instead of a second entrance. */
+    fun bump() {
+        if (!cardShowing) return
+        cardToken++
+        card.animate().cancel()
+        card.alpha = 1f
+        card.translationX = 0f
+        card.translationY = 0f
+        card.scaleX = 0.94f
+        card.scaleY = 0.94f
+        card.animate().scaleX(1f).scaleY(1f).setDuration(200).setInterpolator(OvershootInterpolator(2f)).start()
+    }
+
+    private fun resetCardLook() {
+        card.animate().cancel()
+        card.alpha = 1f
+        card.scaleX = 1f
+        card.scaleY = 1f
+        card.translationX = 0f
+        card.translationY = 0f
+    }
+
     fun clearCard() {
+        cardToken++
+        resetCardLook()
         card.visibility = View.GONE
         for (t in listOf(line1, line2)) {
             t.tag = null
