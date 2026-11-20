@@ -17,10 +17,12 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.text.DateFormat
 import java.util.Date
 
@@ -46,6 +48,10 @@ class MainActivity : Activity() {
     private var autoPair: PairInput? = null
     private var autoOpened = false
     private var presetName = ""
+    private var tab = 0
+    private var showHow = false
+    private var scrollKeep = 0
+    private var scrollView: ScrollView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,26 +110,49 @@ class MainActivity : Activity() {
     // ---------------------------------------------------------------------------------------------------------------------------------------
     private fun render() {
         val stage = stage()
+        scrollView?.let { scrollKeep = it.scrollY }
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
-        col.setPadding(ui.dp(22), ui.dp(30), ui.dp(22), ui.dp(26))
+        col.setPadding(ui.dp(20), ui.dp(if (stage == 2) 18 else 30), ui.dp(20), ui.dp(24))
 
-        brand(col, stage != 2)
-        if (stage < 2) col.addView(ui.stepBar(stage))
-        when (stage) {
-            0 -> pairStage(col)
-            1 -> allowStage(col)
-            else -> homeStage(col)
+        if (stage == 2) {
+            appBar(col)
+            when (tab) {
+                1 -> lookTab(col)
+                2 -> chatTab(col)
+                3 -> moreTab(col)
+                else -> homeTab(col)
+            }
+        } else {
+            brand(col, true)
+            col.addView(ui.stepBar(stage))
+            if (stage == 0) pairStage(col) else allowStage(col)
         }
-        col.addView(ui.space(6))
-        col.addView(ui.text("SavahLive " + BuildConfig.VERSION_NAME + "  \u00B7  SavahBot does the work, SavahLive shows the results.", 12f, Ui.MUTED))
+        if (stage < 2 || tab == 3) {
+            col.addView(ui.space(6))
+            col.addView(ui.text("SavahLive " + BuildConfig.VERSION_NAME + "  \u00B7  SavahBot does the work, SavahLive shows the results.", 12f, Ui.MUTED))
+        }
 
         val scroll = ScrollView(this)
         scroll.setBackgroundColor(Ui.BG)
         scroll.isFillViewport = true
         scroll.isVerticalScrollBarEnabled = false
         scroll.addView(col)
-        setContentView(scroll)
+        scrollView = scroll
+        if (stage == 2) {
+            val root = LinearLayout(this)
+            root.orientation = LinearLayout.VERTICAL
+            root.setBackgroundColor(Ui.BG)
+            root.addView(scroll, LinearLayout.LayoutParams(matchWidth, 0, 1f))
+            root.addView(bottomNav())
+            setContentView(root)
+            window.navigationBarColor = Ui.CARD
+        } else {
+            setContentView(scroll)
+            window.navigationBarColor = Ui.BG
+        }
+        val keep = scrollKeep
+        scroll.post { scroll.scrollTo(0, keep) }
 
         val auto = autoPair
         if (auto != null) {
@@ -132,27 +161,108 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun brand(col: LinearLayout, big: Boolean) {
-        if (big) {
-            val logo = ImageView(this)
-            logo.setImageResource(R.drawable.logo_icon)
-            col.addView(logo, LinearLayout.LayoutParams(ui.dp(72), ui.dp(72)))
-            col.addView(ui.space(16))
-            col.addView(ui.wordmark(36f))
-            col.addView(ui.space(6))
-            col.addView(ui.text("Your stream chat, viewers and likes, floating over any game.", 16f, Ui.MUTED))
-            col.addView(ui.space(24))
-        } else {
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER_VERTICAL
-            val logo = ImageView(this)
-            logo.setImageResource(R.drawable.logo_icon)
-            row.addView(logo, LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)))
-            row.addView(ui.wordmark(26f), LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.leftMargin = ui.dp(12) })
-            row.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = ui.dp(20) }
-            col.addView(row)
+    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+
+    // ---- the frame of the main screen: a slim top bar and a bottom bar with four tabs -------------------------------------------------------
+    private fun appBar(col: LinearLayout) {
+        val running = OverlayService.running
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val logo = ImageView(this)
+        logo.setImageResource(R.drawable.logo_icon)
+        row.addView(logo, LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)))
+        row.addView(ui.wordmark(22f), LinearLayout.LayoutParams(0, wrap, 1f).also { it.leftMargin = ui.dp(10) })
+        row.addView(ui.chip(if (running) "On air" else "Ready", if (running) Ui.GREEN else Ui.MUTED))
+        row.layoutParams = LinearLayout.LayoutParams(matchWidth, wrap).also { it.bottomMargin = ui.dp(14) }
+        col.addView(row)
+    }
+
+    private fun bottomNav(): LinearLayout {
+        val bar = LinearLayout(this)
+        bar.orientation = LinearLayout.HORIZONTAL
+        bar.background = ui.round(Ui.CARD, 0, Ui.LINE, 1)
+        val items = listOf(Triple("Home", R.drawable.ic_live, 0), Triple("Look", R.drawable.ic_palette, 1), Triple("Chat", R.drawable.ic_chat, 2), Triple("More", R.drawable.ic_dots, 3))
+        for ((label, res, index) in items) {
+            val on = index == tab
+            val tint = if (on) Ui.RED else Ui.MUTED
+            val cell = LinearLayout(this)
+            cell.orientation = LinearLayout.VERTICAL
+            cell.gravity = Gravity.CENTER
+            cell.setPadding(0, ui.dp(8), 0, ui.dp(8))
+            cell.addView(ui.icon(res, tint, 24))
+            cell.addView(ui.text(label, 11f, if (on) Ui.INK else Ui.MUTED, on), LinearLayout.LayoutParams(wrap, wrap).also { it.topMargin = ui.dp(3) })
+            cell.isClickable = true
+            cell.isFocusable = true
+            cell.contentDescription = label
+            cell.setOnClickListener {
+                if (tab != index) {
+                    tab = index
+                    scrollKeep = 0
+                    render()
+                }
+            }
+            bar.addView(cell, LinearLayout.LayoutParams(0, ui.dp(64), 1f))
         }
+        return bar
+    }
+
+    /** A small caps label above a group, with an optional line of help under it. */
+    private fun sectionLabel(col: LinearLayout, title: String, hint: String = "") {
+        val t = ui.text(title.uppercase(), 12f, Ui.MUTED, true)
+        t.letterSpacing = 0.08f
+        t.setPadding(ui.dp(6), ui.dp(12), 0, ui.dp(if (hint.isEmpty()) 8 else 2))
+        col.addView(t)
+        if (hint.isNotEmpty()) {
+            val h = ui.text(hint, 13f, Ui.MUTED)
+            h.setPadding(ui.dp(6), 0, ui.dp(6), ui.dp(8))
+            col.addView(h)
+        }
+    }
+
+    /** Related settings share one card, separated by hairlines, instead of one card each. */
+    private fun group(col: LinearLayout, vararg rows: View) {
+        val g = ui.card(16)
+        g.setPadding(ui.dp(16), ui.dp(2), ui.dp(16), ui.dp(2))
+        for ((i, r) in rows.withIndex()) {
+            if (i > 0) {
+                val line = View(this)
+                line.setBackgroundColor(Ui.LINE)
+                g.addView(line, LinearLayout.LayoutParams(matchWidth, ui.dp(1)))
+            }
+            g.addView(r)
+        }
+        col.addView(g)
+    }
+
+    private fun choiceRow(title: String, body: String, options: List<Pair<String, Int>>, current: Int, onPick: (Int) -> Unit): LinearLayout {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(0, ui.dp(12), 0, ui.dp(6))
+        box.addView(ui.text(title, 15f, Ui.INK, true))
+        if (body.isNotEmpty()) box.addView(ui.text(body, 13f, Ui.MUTED))
+        box.addView(segmented(options, current, onPick))
+        return box
+    }
+
+    private fun labelRow(title: String, content: View): LinearLayout {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(0, ui.dp(12), 0, ui.dp(8))
+        box.addView(ui.text(title, 15f, Ui.INK, true))
+        box.addView(content)
+        return box
+    }
+
+    private fun brand(col: LinearLayout, big: Boolean) {
+        val logo = ImageView(this)
+        logo.setImageResource(R.drawable.logo_icon)
+        col.addView(logo, LinearLayout.LayoutParams(ui.dp(72), ui.dp(72)))
+        col.addView(ui.space(16))
+        col.addView(ui.wordmark(36f))
+        col.addView(ui.space(6))
+        col.addView(ui.text("Your stream chat, viewers and likes, floating over any game.", 16f, Ui.MUTED))
+        col.addView(ui.space(24))
     }
 
     // ---- stage 0: pair ----------------------------------------------------------------------------------------------------------------------
@@ -246,23 +356,17 @@ class MainActivity : Activity() {
         }
     }
 
-    // ---- stage 2: go ------------------------------------------------------------------------------------------------------------------------
-    private fun homeStage(col: LinearLayout) {
+    // ---- stage 2: four tabs. Home = run it. Look = how it looks. Chat = what you can do with chat. More = automation, connection, help ----------
+    private val matchWidth = LinearLayout.LayoutParams.MATCH_PARENT
+    private val wrap = LinearLayout.LayoutParams.WRAP_CONTENT
+
+    private fun homeTab(col: LinearLayout) {
         val running = OverlayService.running
         val hero = ui.card(22)
         hero.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(if (running) 0xFF0F3D2E.toInt() else 0xFF2A1114.toInt(), Ui.CARD)).also {
             it.setCornerRadius(ui.dp(26).toFloat())
             it.setStroke(ui.dp(1), Ui.LINE)
         }
-        val status = LinearLayout(this)
-        status.orientation = LinearLayout.HORIZONTAL
-        status.gravity = Gravity.CENTER_VERTICAL
-        val dot = View(this)
-        dot.background = ui.round(if (running) Ui.GREEN else Ui.MUTED, 6)
-        status.addView(dot, LinearLayout.LayoutParams(ui.dp(12), ui.dp(12)))
-        status.addView(ui.text(if (running) "On air" else "Ready", 14f, if (running) Ui.GREEN else Ui.MUTED, true), LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.leftMargin = ui.dp(8) })
-        hero.addView(status)
-        hero.addView(ui.space(10))
         hero.addView(ui.text(if (running) "Overlay is floating" else "Start the overlay", 26f, Ui.INK, true))
         hero.addView(ui.space(6))
         val sub = if (running && OverlayService.status.isNotEmpty()) OverlayService.status else "Then open PUBG Mobile or any app. SavahLive stays on top."
@@ -284,21 +388,144 @@ class MainActivity : Activity() {
 
         updateCard(col)
         summaryCard(col)
-        looksCards(col)
-        extrasCards(col)
+        optionalCards(col)
+    }
 
-        val how = ui.card(18)
-        how.addView(ui.text("How the panel works", 18f, Ui.INK, true))
-        how.addView(ui.space(6))
-        how.addView(ui.infoRow(R.drawable.ic_move, Ui.RED, "Move it", "Drag the top row, where the viewers and likes are."))
-        how.addView(ui.infoRow(R.drawable.ic_expand, Ui.RED, "Resize it", "Drag any edge or corner. The chat gets longer or wider."))
-        how.addView(ui.infoRow(R.drawable.ic_collapse, Ui.RED, "Make it big", "Tap the expand button for a big window. Tap it again to go back."))
-        how.addView(ui.infoRow(R.drawable.ic_dock, Ui.RED, "Tuck it away", "Tap the tuck button. It becomes a small tab on the screen edge. Tap the tab to open the panel, or drag it to another edge."))
-        col.addView(how)
+    private fun lookTab(col: LinearLayout) {
+        sectionLabel(col, "Panel", "The window with the chat.")
+        group(col,
+            sliderRow("Opacity", "How see-through the background is. Text stays clear.", 20, 100, store.panelOpacity, "%") { store.panelOpacity = it },
+            sliderRow("Chat text size", "", 80, 140, store.textScale, "%") { store.textScale = it },
+            labelRow("Theme", themeChooser())
+        )
 
-        val info = ui.card(18)
-        info.addView(ui.text("This phone", 18f, Ui.INK, true))
-        info.addView(ui.space(8))
+        sectionLabel(col, "Tab", "The small box on the screen edge.")
+        group(col,
+            sliderRow("Opacity", "Never fainter than 40%, so you can always find it.", 40, 100, store.tabOpacity, "%") { store.tabOpacity = it },
+            choiceRow("Slide away", "Tucks the tab mostly off screen when idle. It slides back for new chat.", listOf(Pair("Never", 0), Pair("3 s", 3), Pair("5 s", 5), Pair("10 s", 10), Pair("20 s", 20)), store.tabHide) { store.tabHide = it }
+        )
+
+        sectionLabel(col, "Chat pop-outs", "New messages that slide out beside the tab.")
+        group(col,
+            sliderRow("Size", "", 70, 170, store.popScale, "%") { store.popScale = it },
+            sliderRow("Opacity", "", 30, 100, store.popOpacity, "%") { store.popOpacity = it }
+        )
+
+        sectionLabel(col, "Saved looks", "Keep a layout and theme, for example one for PUBG in landscape. The notification can switch to the next one.")
+        val rows = ArrayList<View>()
+        val saved = Presets.list(store)
+        if (saved.isEmpty()) {
+            rows.add(ui.text("Nothing saved yet. Set things up above, name it below, and save.", 13f, Ui.MUTED).also { it.setPadding(0, ui.dp(14), 0, ui.dp(14)) })
+        }
+        for ((i, p) in saved.withIndex()) {
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(0, ui.dp(10), 0, ui.dp(10))
+            val inUse = i == store.presetIndex
+            row.addView(ui.text(p.name, 15f, Ui.INK, inUse), LinearLayout.LayoutParams(0, wrap, 1f))
+            if (inUse) row.addView(ui.chip("In use", Ui.GREEN), LinearLayout.LayoutParams(wrap, wrap).also { it.rightMargin = ui.dp(6) })
+            row.addView(pill("Use") {
+                Presets.apply(store, i)
+                toast("Using \"" + p.name + "\".")
+                render()
+            })
+            row.addView(pill("Delete", Ui.MUTED) {
+                Presets.delete(store, i)
+                render()
+            }, LinearLayout.LayoutParams(wrap, wrap).also { it.leftMargin = ui.dp(6) })
+            rows.add(row)
+        }
+        val save = LinearLayout(this)
+        save.orientation = LinearLayout.VERTICAL
+        save.setPadding(0, ui.dp(12), 0, ui.dp(8))
+        save.addView(ui.field("Name this look", presetName) { presetName = it })
+        save.addView(ui.button("Save the current look", R.drawable.ic_check, Ui.SECONDARY) {
+            toast(if (Presets.save(store, presetName)) "Saved." else "You can keep up to ${Presets.MAX} looks. Delete one first.")
+            presetName = ""
+            render()
+        })
+        rows.add(save)
+        group(col, *rows.toTypedArray())
+
+        sectionLabel(col, "Panel in the wrong place?")
+        val reset = LinearLayout(this)
+        reset.orientation = LinearLayout.VERTICAL
+        reset.setPadding(0, ui.dp(12), 0, ui.dp(6))
+        reset.addView(ui.text("Puts the panel and the tab back where they start.", 13f, Ui.MUTED))
+        reset.addView(ui.button("Reset size and position", null, Ui.SECONDARY) {
+            store.panelWdp = 270
+            store.panelHdp = 300
+            store.expanded = false
+            store.panelFx = 500
+            store.panelFy = 300
+            store.tabEdge = Edge.RIGHT.ordinal
+            store.tabAlong = 400
+            toast("Reset. The panel is back in the middle.")
+        })
+        group(col, reset)
+    }
+
+    private fun chatTab(col: LinearLayout) {
+        sectionLabel(col, "Talk to your chat", "Sending, hiding and timing people out need permission in SavahBot: Manage, SavahLive, then this phone.")
+        group(col,
+            toggleRow("Show the message box", "Type to your chat from the panel.", store.sendEnabled) { store.sendEnabled = it }
+        )
+
+        sectionLabel(col, "Tapping chat lines")
+        group(col,
+            toggleRow("Pin a message", "Tap a line to pin it at the top of the panel. Tap the pin to let it go.", store.pinEnabled) { store.pinEnabled = it },
+            toggleRow("Hide or time out people", "Hold a line to hide it, or time its author out for 5 minutes.", store.modEnabled) { store.modEnabled = it }
+        )
+
+        sectionLabel(col, "Celebrations", "The panel and tab celebrate when viewers or likes pass a round number.")
+        group(col,
+            choiceRow("Celebrate every", "", listOf(Pair("Off", 0), Pair("50", 50), Pair("100", 100), Pair("250", 250), Pair("500", 500), Pair("1000", 1000)), store.milestoneStep) { store.milestoneStep = it }
+        )
+    }
+
+    private fun moreTab(col: LinearLayout) {
+        sectionLabel(col, "Automatic", "Fewer taps on stream day.")
+        group(col,
+            toggleRow("Start when the app opens", "Opening SavahLive starts the overlay for you.", store.autoOpen) { store.autoOpen = it },
+            choiceRow("Stop after the stream ends", "Stops this long after SavahBot says your stream is over. Carries on if you go live again.", listOf(Pair("Never", 0), Pair("5 min", 5), Pair("15 min", 15), Pair("30 min", 30), Pair("1 hour", 60)), store.autoStopMin) { store.autoStopMin = it },
+            toggleRow("Keep a stream summary", "Peak viewers, likes, messages and top chatters, shown on Home after you stop.", store.summaryOn) { store.summaryOn = it }
+        )
+
+        sectionLabel(col, "Connection", "When something is wrong, say so plainly.")
+        group(col,
+            toggleRow("Show the connection status", "Offline or retrying appears on the panel and replaces the numbers on the tab.", store.statusBanner) { store.statusBanner = it },
+            toggleRow("Tell me about new versions", "Shows a card on Home when SavahBot has a newer SavahLive.", store.updateCheck) { store.updateCheck = it }
+        )
+
+        sectionLabel(col, "Help")
+        val head = LinearLayout(this)
+        head.orientation = LinearLayout.HORIZONTAL
+        head.gravity = Gravity.CENTER_VERTICAL
+        head.setPadding(0, ui.dp(14), 0, ui.dp(14))
+        head.addView(ui.text("How the panel works", 15f, Ui.INK, true), LinearLayout.LayoutParams(0, wrap, 1f))
+        head.addView(ui.text(if (showHow) "Hide" else "Show", 13f, Ui.RED, true))
+        head.isClickable = true
+        head.setOnClickListener {
+            showHow = !showHow
+            render()
+        }
+        if (showHow) {
+            val how = LinearLayout(this)
+            how.orientation = LinearLayout.VERTICAL
+            how.addView(ui.infoRow(R.drawable.ic_move, Ui.RED, "Move it", "Drag the top row, where the viewers and likes are."))
+            how.addView(ui.infoRow(R.drawable.ic_expand, Ui.RED, "Resize it", "Drag any edge or corner. The chat gets longer or wider."))
+            how.addView(ui.infoRow(R.drawable.ic_collapse, Ui.RED, "Make it big", "Tap the expand button for a big window. Tap it again to go back."))
+            how.addView(ui.infoRow(R.drawable.ic_dock, Ui.RED, "Tuck it away", "Tap the tuck button. It becomes a small tab on the screen edge. Tap the tab to open the panel, or drag it to another edge."))
+            group(col, head, how)
+        } else {
+            group(col, head)
+        }
+
+        sectionLabel(col, "This phone")
+        val info = LinearLayout(this)
+        info.orientation = LinearLayout.VERTICAL
+        info.setPadding(0, ui.dp(14), 0, ui.dp(6))
         val host = Uri.parse(store.server).host ?: store.server
         val chips = LinearLayout(this)
         chips.orientation = LinearLayout.HORIZONTAL
@@ -312,18 +539,14 @@ class MainActivity : Activity() {
             13f, Ui.MUTED
         ))
         info.addView(ui.button("Unpair this phone", null, Ui.QUIET) { confirmUnpair() })
-        col.addView(info)
-        optionalCards(col)
+        group(col, info)
     }
 
     // ---- how the overlay looks: sliders, switches and choices that apply to the open overlay at once ------------------------------------------
-    private val matchWidth = LinearLayout.LayoutParams.MATCH_PARENT
-    private val wrap = LinearLayout.LayoutParams.WRAP_CONTENT
-
     private fun sliderRow(title: String, body: String, min: Int, max: Int, value: Int, suffix: String, onChange: (Int) -> Unit): LinearLayout {
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
-        col.setPadding(0, ui.dp(10), 0, ui.dp(2))
+        col.setPadding(0, ui.dp(12), 0, ui.dp(6))
         val top = LinearLayout(this)
         top.orientation = LinearLayout.HORIZONTAL
         top.gravity = Gravity.CENTER_VERTICAL
@@ -352,7 +575,7 @@ class MainActivity : Activity() {
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = Gravity.CENTER_VERTICAL
-        row.setPadding(0, ui.dp(10), 0, ui.dp(6))
+        row.setPadding(0, ui.dp(12), 0, ui.dp(12))
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
         col.addView(ui.text(title, 15f, Ui.INK, true))
@@ -456,11 +679,13 @@ class MainActivity : Activity() {
                 val v = View(this)
                 v.background = g
                 v.contentDescription = if (id == Themes.CUSTOM) "Custom colour" else Themes.byId(id, 0, 0).name
-                v.setOnClickListener {
+                val cell = FrameLayout(this)
+                cell.addView(v, FrameLayout.LayoutParams(ui.dp(34), ui.dp(34), Gravity.CENTER))
+                cell.setOnClickListener {
                     store.themeId = id
                     draw()
                 }
-                row.addView(v, LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)).also { it.rightMargin = ui.dp(10) })
+                row.addView(cell, LinearLayout.LayoutParams(0, ui.dp(44), 1f))
             }
             custom.visibility = if (current == Themes.CUSTOM) View.VISIBLE else View.GONE
         }
@@ -476,51 +701,6 @@ class MainActivity : Activity() {
         return row
     }
 
-    private fun looksCards(col: LinearLayout) {
-        val panelCard = ui.card(18)
-        panelCard.addView(sectionHead(R.drawable.ic_layers, "Panel", "The window with the chat."))
-        panelCard.addView(sliderRow("Opacity", "How see-through the panel background is. Text stays clear.", 20, 100, store.panelOpacity, "%") { store.panelOpacity = it })
-        panelCard.addView(sliderRow("Chat text size", "", 80, 140, store.textScale, "%") { store.textScale = it })
-        panelCard.addView(ui.text("Theme", 15f, Ui.INK, true).also { it.setPadding(0, ui.dp(12), 0, 0) })
-        panelCard.addView(themeChooser())
-        col.addView(panelCard)
-
-        val tabCard = ui.card(18)
-        tabCard.addView(sectionHead(R.drawable.ic_tab, "Tab", "The small box on the screen edge."))
-        tabCard.addView(sliderRow("Opacity", "It never gets fainter than 40%, so you can always find it.", 40, 100, store.tabOpacity, "%") { store.tabOpacity = it })
-        tabCard.addView(ui.text("Slide away", 15f, Ui.INK, true).also { it.setPadding(0, ui.dp(12), 0, 0) })
-        tabCard.addView(ui.text("Tuck the tab mostly off screen when you are not touching it. It slides back out for new chat.", 13f, Ui.MUTED))
-        tabCard.addView(segmented(listOf(Pair("Never", 0), Pair("3 s", 3), Pair("5 s", 5), Pair("10 s", 10), Pair("20 s", 20)), store.tabHide) { store.tabHide = it })
-        col.addView(tabCard)
-
-        val popCard = ui.card(18)
-        popCard.addView(sectionHead(R.drawable.ic_chat, "Chat pop-outs", "The new messages that slide out beside the tab. Separate from the panel."))
-        popCard.addView(sliderRow("Size", "", 70, 170, store.popScale, "%") { store.popScale = it })
-        popCard.addView(sliderRow("Opacity", "", 30, 100, store.popOpacity, "%") { store.popOpacity = it })
-        col.addView(popCard)
-
-        val sendCard = ui.card(18)
-        sendCard.addView(sectionHead(R.drawable.ic_send, "Send messages", "Type to your chat from the panel."))
-        sendCard.addView(toggleRow("Show the message box", "Needs permission in SavahBot: Manage, SavahLive, then this phone.", store.sendEnabled) { store.sendEnabled = it })
-        col.addView(sendCard)
-
-        val resetCard = ui.card(18)
-        resetCard.addView(ui.text("Panel in the wrong place?", 16f, Ui.INK, true))
-        resetCard.addView(ui.text("Puts the panel and the tab back to where they start.", 13f, Ui.MUTED))
-        resetCard.addView(ui.button("Reset size and position", null, Ui.SECONDARY) {
-            store.panelWdp = 270
-            store.panelHdp = 300
-            store.expanded = false
-            store.panelFx = 500
-            store.panelFy = 300
-            store.tabEdge = Edge.RIGHT.ordinal
-            store.tabAlong = 400
-            message = "Reset. The panel is back in the middle."
-            render()
-        })
-        col.addView(resetCard)
-    }
-
     // ---- extras: each one has its own switch here ---------------------------------------------------------------------------------------------
     private fun pill(label: String, tint: Int = Ui.INK, onClick: () -> Unit): TextView {
         val t = ui.text(label, 13f, tint, true)
@@ -529,64 +709,6 @@ class MainActivity : Activity() {
         t.isClickable = true
         t.setOnClickListener { onClick() }
         return t
-    }
-
-    private fun extrasCards(col: LinearLayout) {
-        val chatCard = ui.card(18)
-        chatCard.addView(sectionHead(R.drawable.ic_chat, "Chat tools", "What a tap or a long press on a chat line does."))
-        chatCard.addView(toggleRow("Pin a message", "Tap a line to pin it at the top of the panel. Tap the pin to let it go.", store.pinEnabled) { store.pinEnabled = it })
-        chatCard.addView(toggleRow("Hide or time out people", "Hold a line to hide it or time its author out for 5 minutes. Needs permission in SavahBot: Manage, SavahLive, then this phone.", store.modEnabled) { store.modEnabled = it })
-        col.addView(chatCard)
-
-        val mileCard = ui.card(18)
-        mileCard.addView(sectionHead(R.drawable.ic_heart, "Milestones", "The panel and tab celebrate when viewers or likes pass a round number."))
-        mileCard.addView(segmented(listOf(Pair("Off", 0), Pair("50", 50), Pair("100", 100), Pair("250", 250), Pair("500", 500), Pair("1000", 1000)), store.milestoneStep) { store.milestoneStep = it })
-        col.addView(mileCard)
-
-        val autoCard = ui.card(18)
-        autoCard.addView(sectionHead(R.drawable.ic_power, "Automatic", "Fewer taps on stream day."))
-        autoCard.addView(toggleRow("Start when the app opens", "Opening SavahLive starts the overlay for you.", store.autoOpen) { store.autoOpen = it })
-        autoCard.addView(ui.text("Stop after the stream ends", 15f, Ui.INK, true).also { it.setPadding(0, ui.dp(12), 0, 0) })
-        autoCard.addView(ui.text("The overlay stops this long after SavahBot says your stream is over. It carries on if you go live again.", 13f, Ui.MUTED))
-        autoCard.addView(segmented(listOf(Pair("Never", 0), Pair("5 min", 5), Pair("15 min", 15), Pair("30 min", 30), Pair("1 hour", 60)), store.autoStopMin) { store.autoStopMin = it })
-        autoCard.addView(toggleRow("Keep a stream summary", "Peak viewers, likes, messages and top chatters, shown here after you stop.", store.summaryOn) { store.summaryOn = it })
-        col.addView(autoCard)
-
-        val linkCard = ui.card(18)
-        linkCard.addView(sectionHead(R.drawable.ic_phone, "Connection", "When something is wrong, say so plainly."))
-        linkCard.addView(toggleRow("Show the connection status", "Offline or retrying appears on the panel and replaces the numbers on the tab.", store.statusBanner) { store.statusBanner = it })
-        linkCard.addView(toggleRow("Tell me about new versions", "Shows a card here when SavahBot has a newer SavahLive.", store.updateCheck) { store.updateCheck = it })
-        col.addView(linkCard)
-
-        val looks = ui.card(18)
-        looks.addView(sectionHead(R.drawable.ic_palette, "Saved looks", "Keep a layout and theme, for example one for PUBG in landscape. The notification can switch to the next one."))
-        val saved = Presets.list(store)
-        for ((i, p) in saved.withIndex()) {
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(0, ui.dp(10), 0, 0)
-            val label = ui.text(if (i == store.presetIndex) p.name + "  (in use)" else p.name, 15f, Ui.INK, i == store.presetIndex)
-            row.addView(label, LinearLayout.LayoutParams(0, wrap, 1f))
-            row.addView(pill("Use") {
-                Presets.apply(store, i)
-                message = "Using \"" + p.name + "\"."
-                render()
-            })
-            row.addView(pill("Delete", Ui.MUTED) {
-                Presets.delete(store, i)
-                render()
-            }, LinearLayout.LayoutParams(wrap, wrap).also { it.leftMargin = ui.dp(6) })
-            looks.addView(row)
-        }
-        looks.addView(ui.space(8))
-        looks.addView(ui.field("Name this look", presetName) { presetName = it })
-        looks.addView(ui.button("Save the current look", R.drawable.ic_check, Ui.SECONDARY) {
-            message = if (Presets.save(store, presetName)) "Saved." else "You can keep up to ${Presets.MAX} looks. Delete one first."
-            presetName = ""
-            render()
-        })
-        col.addView(looks)
     }
 
     /** SavahBot keeps the app and itself on the same version number, so a higher number there means a newer app exists. */
